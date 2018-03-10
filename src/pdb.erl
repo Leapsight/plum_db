@@ -307,6 +307,7 @@ to_list(FullPrefix, Opts) ->
 iterator(FullPrefix) ->
     iterator(FullPrefix, []).
 
+
 %% -----------------------------------------------------------------------------
 %% @doc Return an iterator pointing to the first key stored under a prefix
 %%

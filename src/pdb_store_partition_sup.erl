@@ -56,12 +56,12 @@ name(Id) ->
 
 init([Id]) ->
     Opts = application:get_env(pdb, leveldb_opts, []),
-    RestartStrategy = {all_for_one, 5, 1},
+    RestartStrategy = {one_for_all, 5, 1},
     Children = [
         #{
             id => pdb_store_server:name(Id),
             start => {
-                pdb_store,
+                pdb_store_server,
                 start_link,
                 [Id, Opts]
             },

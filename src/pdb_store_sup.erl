@@ -14,7 +14,7 @@
 %%    limitations under the License.
 %% -----------------------------------------------------------------------------
 
--module(pdb_sup).
+-module(pdb_store_sup).
 -behaviour(supervisor).
 
 -define(CHILD(Id, Mod, Type, Args, Timeout),
@@ -59,6 +59,6 @@ init([]) ->
             type => supervisor,
             modules => [pdb_store_partition_sup]
         }
-        || Id <- lists:seq(0, pdb_store_server:partitions())
+        || Id <- pdb:partitions()
     ],
     {ok, {RestartStrategy, Children}}.

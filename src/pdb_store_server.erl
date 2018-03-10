@@ -28,6 +28,7 @@
 -define(KEY_SEPARATOR, <<0, $\31, 0>>).
 
 -record(state, {
+    partition                           ::  non_neg_integer(),
     db_ref 								::	eleveldb:db_ref(),
 	config = []							::	opts(),
 	data_root							::	file:filename(),
@@ -222,13 +223,13 @@ init([Partition, Opts]) ->
 
     DataRoot = filename:join([
         app_helper:get_prop_or_env(data_dir, Opts, pdb),
-        "db",
+        "leveldb",
         integer_to_list(Partition)
     ]),
 
 	case filelib:ensure_dir(DataRoot) of
         ok ->
-            case open_db(init_state(Partition, Opts)) of
+            case open_db(init_state(Partition, DataRoot, Opts)) of
                 {ok, State} ->
                     process_flag(trap_exit, true),
                     {ok, State};
@@ -327,7 +328,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
-init_state(DataRoot, Config) ->
+init_state(Partition, DataRoot, Config) ->
     %% Merge the proplist passed in from Config with any values specified by the
     %% eleveldb app level; precedence is given to the Config.
     MergedConfig = orddict:merge(
@@ -378,6 +379,7 @@ init_state(DataRoot, Config) ->
     end,
 
     #state {
+        partition = Partition,
 		config = FinalConfig,
         data_root = DataRoot,
 		open_opts = OpenOpts,
@@ -410,7 +412,7 @@ open_db(_State0, 0, LastError) ->
 open_db(State0, RetriesLeft, _) ->
     case eleveldb:open(State0#state.data_root, State0#state.open_opts) of
         {ok, Ref} ->
-            {ok, State0#state { db_ref = Ref }};
+            {ok, State0#state{db_ref = Ref}};
         %% Check specifically for lock error, this can be caused if
         %% a crashed vnode takes some time to flush leveldb information
         %% out to disk.  The process is gone, but the NIF resource cleanup
