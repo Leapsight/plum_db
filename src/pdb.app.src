@@ -1,0 +1,20 @@
+{application, pdb, [
+    {description, "Key Value store fully replicated using Partisan and Plumtree (Epidemic Broadcast Trees)"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {mod, {pdb_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        lager,
+        partisan,
+        plumtree
+    ]},
+    {env, [
+        {data_dir, "data"}
+    ]},
+    {modules, []},
+    {maintainers, ["Alejandro M. Ramallo"]},
+    {licenses, ["Apache 2.0"]},
+    {links, []}
+]}.

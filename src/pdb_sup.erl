@@ -1,0 +1,69 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2015 Helium Systems, Inc.  All Rights Reserved.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% -------------------------------------------------------------------
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-module(pdb_sup).
+-behaviour(supervisor).
+
+-define(CHILD(I, Type, Args, Timeout), #{
+    id => I,
+    start => {I, start_link, Args},
+    restart => permanent,
+    shutdown => Timeout,
+    type => Type,
+    modules => [I]
+}).
+
+-define(CHILD(I, Type, Args), ?CHILD(I, Type, Args, 5000)).
+
+
+-export([start_link/0]).
+-export([init/1]).
+
+
+
+%% =============================================================================
+%% API
+%% =============================================================================
+
+
+
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+
+
+%% =============================================================================
+%% SUPERVISOR CALLBACKS
+%% =============================================================================
+
+
+
+init([]) ->
+    RestartStrategy = {one_for_one, 10, 10},
+    Children = [
+        ?CHILD(pdb_manager, worker, []),
+        ?CHILD(pdb_store_sup, supervisor, [])
+        %% ?CHILD(pdb_events, worker),
+    ],
+    {ok, {RestartStrategy, Children}}.
