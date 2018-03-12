@@ -81,10 +81,11 @@
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec start_link(Id :: non_neg_integer(), Opts :: opts()) -> any().
+-spec start_link(Partition :: non_neg_integer(), Opts :: opts()) -> any().
 
-start_link(Id, Opts) ->
-    gen_server:start_link({local, name(Id)}, ?MODULE, [Id, Opts], []).
+start_link(Partition, Opts) ->
+    Name = name(Partition),
+    gen_server:start_link({local, Name}, ?MODULE, [Partition, Opts], []).
 
 
 %% -----------------------------------------------------------------------------
@@ -92,8 +93,8 @@ start_link(Id, Opts) ->
 %% @end
 %% -----------------------------------------------------------------------------
 %% @private
-name(Id) ->
-    list_to_atom("pdb_store_server_" ++ integer_to_list(Id)).
+name(Partition) ->
+    list_to_atom("pdb_store_server_" ++ integer_to_list(Partition)).
 
 
 
@@ -449,7 +450,8 @@ open_db(State0, RetriesLeft, _) ->
 %% @end
 %% -----------------------------------------------------------------------------
 valid_partition(Id) ->
-   pdb:is_partition(Id) orelse error(invalid_store_id).
+   pdb:is_partition(Id) orelse error(invalid_store_id),
+   Id.
 
 
 %% @private
@@ -461,7 +463,7 @@ add_iterator(Ref, Iter, #state{iterators = Map} = State) ->
 take_iterator(Ref, State) when is_reference(Ref) ->
     case maps:take(Ref, State#state.iterators) of
         {Iter, Map0} ->
-            Map1 = maps:without(Iter, Map0),
+            Map1 = maps:without([Iter], Map0),
             {{Ref, Iter}, State#state{iterators = Map1}};
         false ->
             {false, State}
@@ -470,7 +472,7 @@ take_iterator(Ref, State) when is_reference(Ref) ->
 take_iterator(Iter, State) ->
     case maps:take(Iter, State#state.iterators) of
         {Ref, Map0} ->
-            Map1 = maps:without(Ref, Map0),
+            Map1 = maps:without([Ref], Map0),
             {{Ref, Iter}, State#state{iterators = Map1}};
         false ->
             {false, State}

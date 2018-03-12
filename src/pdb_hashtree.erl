@@ -26,6 +26,7 @@
 -export([get_bucket/5]).
 -export([insert/2]).
 -export([insert/3]).
+-export([insert/4]).
 -export([key_hashes/4]).
 -export([lock/1]).
 -export([lock/2]).
@@ -82,7 +83,8 @@
 start_link(Partition) ->
     PRoot = app_helper:get_env(pdb, data_dir),
     DataRoot = filename:join([PRoot, "trees", integer_to_list(Partition)]),
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [Partition, DataRoot], []).
+    Name = name(Partition),
+    gen_server:start_link({local, Name}, ?MODULE, [Partition, DataRoot], []).
 
 
 %% -----------------------------------------------------------------------------
@@ -114,15 +116,26 @@ insert(PKey, Hash, IfMissing) ->
     gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
 
 
+-spec insert(pbd:partition(), pdb_pkey(), binary(), boolean()) -> ok.
+insert(Partition, PKey, Hash, IfMissing) ->
+    Name = name(Partition),
+    gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
+
+
+
 %% -----------------------------------------------------------------------------
 %% @doc Return the hash for the given prefix or full-prefix
 %% @end
 %% -----------------------------------------------------------------------------
--spec prefix_hash(non_neg_integer(), pdb_prefix() | binary() | atom()) ->
+-spec prefix_hash(
+    pdb:partition() | pid() | atom(), pdb_prefix() | binary() | atom()) ->
     undefined | binary().
 
 prefix_hash(Partition, Prefix) when is_integer(Partition) ->
-    gen_server:call(name(Partition), {prefix_hash, Prefix}, infinity).
+    prefix_hash(name(Partition), Prefix);
+
+prefix_hash(Server, Prefix) when is_pid(Server); is_atom(Server) ->
+    gen_server:call(Server, {prefix_hash, Prefix}, infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -137,7 +150,7 @@ prefix_hash(Partition, Prefix) when is_integer(Partition) ->
     non_neg_integer(),
     non_neg_integer()) -> orddict:orddict().
 
-get_bucket(Partition, Node, Prefixes, Level, Bucket) ->
+get_bucket(Node, Partition, Prefixes, Level, Bucket) ->
     gen_server:call(
         {name(Partition), Node},
         {get_bucket, Prefixes, Level, Bucket},
@@ -164,7 +177,7 @@ key_hashes(Node, Partition, Prefixes, Segment) ->
 %% @see lock/3
 %% @end
 %% -----------------------------------------------------------------------------
--spec lock(non_neg_integer()) -> ok | not_built | locked.
+-spec lock(pdb:partition()) -> ok | not_built | locked.
 lock(Partition) ->
     lock(node(), Partition).
 
@@ -175,7 +188,7 @@ lock(Partition) ->
 %% @see lock/3
 %% @end
 %% -----------------------------------------------------------------------------
--spec lock(node(), non_neg_integer()) -> ok | not_built | locked.
+-spec lock(node(), pdb:partition()) -> ok | not_built | locked.
 
 lock(Node, Partition) ->
     lock(Node, Partition, self()).
@@ -189,7 +202,7 @@ lock(Node, Partition) ->
 %% aqcuiring the lock succeeds and `ok' is returned.
 %% @end
 %% -----------------------------------------------------------------------------
--spec lock(node(), non_neg_integer(), pid()) -> ok | not_built | locked.
+-spec lock(node(), pdb:partition(), pid()) -> ok | not_built | locked.
 
 lock(Node, Partition, Pid) ->
     gen_server:call({name(Partition), Node}, {lock, Pid}, infinity).
@@ -200,7 +213,7 @@ lock(Node, Partition, Pid) ->
 %% @see update/2
 %% @end
 %% -----------------------------------------------------------------------------
--spec update(non_neg_integer()) -> ok | not_locked | not_built | ongoing_update.
+-spec update(pdb:partition()) -> ok | not_locked | not_built | ongoing_update.
 update(Partition) ->
     update(node(), Partition).
 
@@ -217,7 +230,7 @@ update(Partition) ->
 %% the process that manages the tree (e.g. future inserts).
 %% @end
 %% -----------------------------------------------------------------------------
--spec update(node(), non_neg_integer()) ->
+-spec update(node(), pdb:partition()) ->
     ok | not_locked | not_built | ongoing_update.
 
 update(Node, Partition) ->
@@ -238,7 +251,7 @@ update(Node, Partition) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec compare(
-    non_neg_integer(),
+    pdb:partition(),
     hashtree_tree:remote_fun(),
     hashtree_tree:handler_fun(X),
     X) -> X.
@@ -392,12 +405,12 @@ update_async(State) ->
 update_async(From, Lock, State=#state{tree = Tree}) ->
     Tree2 = hashtree_tree:update_snapshot(Tree),
     Pid = spawn_link(fun() ->
-                             hashtree_tree:update_perform(Tree2),
-                             case From of
-                                 undefined -> ok;
-                                 _ -> gen_server:reply(From, ok)
-                             end
-                     end),
+        hashtree_tree:update_perform(Tree2),
+        case From of
+            undefined -> ok;
+            _ -> gen_server:reply(From, ok)
+        end
+    end),
     State1 = case Lock of
                  true -> do_lock(Pid, internal, State);
                  false -> State
@@ -414,41 +427,40 @@ maybe_build_async(State) ->
 
 %% @private
 build_async(State) ->
-    {_Pid, Ref} = spawn_monitor(fun build/0),
+    {_Pid, Ref} = spawn_monitor(fun() ->
+        Partition = State#state.partition,
+        PrefixIt = pdb:base_iterator(undefined, undefined, Partition),
+        build(Partition, PrefixIt)
+    end),
     State#state{built=Ref}.
 
 
-%% @private
-build() ->
-    PrefixIt = pdb_store_worker:iterator(),
-    build(PrefixIt).
-
 
 %% @private
-build(PrefixIt) ->
-    case pdb_store_worker:iterator_done(PrefixIt) of
+build(Partition, PrefixIt) ->
+    case pdb:iterator_done(PrefixIt) of
         true ->
-            pdb_store_worker:iterator_close(PrefixIt);
+            pdb:iterator_close(PrefixIt);
         false ->
-            Prefix = pdb_store_worker:iterator_value(PrefixIt),
-            ObjIt = pdb_store_worker:iterator(Prefix, undefined),
-            build(PrefixIt, ObjIt)
+            Prefix = pdb:iterator_value(PrefixIt),
+            ObjIt = pdb:base_iterator(Prefix, undefined, Partition),
+            build(Partition, PrefixIt, ObjIt)
     end.
 
 
 %% @private
-build(PrefixIt, ObjIt) ->
-    case pdb_store_worker:iterator_done(ObjIt) of
+build(Partition, PrefixIt, ObjIt) ->
+    case pdb:iterator_done(ObjIt) of
         true ->
-            pdb_store_worker:iterator_close(ObjIt),
-            build(pdb_store_worker:iterate(PrefixIt));
+            pdb:iterator_close(ObjIt),
+            build(Partition, pdb:iterate(PrefixIt));
         false ->
-            FullPrefix = pdb_store_worker:iterator_prefix(ObjIt),
-            {Key, Obj} = pdb_store_worker:iterator_value(ObjIt),
+            FullPrefix = pdb:base_iterator_prefix(ObjIt),
+            {Key, Obj} = pdb:iterator_value(ObjIt),
             Hash = pdb_object:hash(Obj),
             %% insert only if missing to not clash w/ newer writes during build
             ?MODULE:insert({FullPrefix, Key}, Hash, true),
-            build(PrefixIt, pdb_store_worker:iterate(ObjIt))
+            build(Partition, PrefixIt, pdb:iterate(ObjIt))
     end.
 
 %% @private

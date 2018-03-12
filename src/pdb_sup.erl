@@ -62,7 +62,7 @@ start_link() ->
 init([]) ->
     RestartStrategy = {one_for_one, 10, 10},
     Children = [
-        ?CHILD(pdb_manager, worker, []),
+        ?CHILD(pdb, worker, []),
         ?CHILD(pdb_store_sup, supervisor, [])
         %% ?CHILD(pdb_events, worker),
     ],

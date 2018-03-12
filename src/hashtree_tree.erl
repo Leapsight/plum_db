@@ -527,7 +527,7 @@ node_key_to_name({_TreeId, NodeName}) ->
 node_id(?ROOT, #hashtree_tree{id=TreeId}) ->
     {TreeId, <<0:176/integer>>};
 node_id(NodeName, #hashtree_tree{id=TreeId}) ->
-    <<NodeMD5:128/integer>> = plumtree_util:md5(term_to_binary(NodeName)),
+    <<NodeMD5:128/integer>> = crypto:hash(md5, term_to_binary(NodeName)),
     {TreeId, <<NodeMD5:176/integer>>}.
 
 %% @private
@@ -565,7 +565,8 @@ data_root(Opts) ->
     case proplists:get_value(data_dir, Opts) of
         undefined ->
             Base = "/tmp/hashtree_tree",
-            <<P:128/integer>> = plumtree_util:md5(term_to_binary(erlang:monotonic_time())),
-            filename:join(Base, plumtree_util:integer_to_list(P, 16));
+            <<P:128/integer>> = crypto:hash(
+                md5, term_to_binary(erlang:monotonic_time())),
+            filename:join(Base, integer_to_list(P, 16));
         Root -> Root
     end.

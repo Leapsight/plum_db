@@ -715,7 +715,10 @@ new_segment_store(Opts, State) ->
     %% flushed to disk at once when under a heavy uniform load.
     WriteBufferMin = proplists:get_value(write_buffer_size_min, Config, DefaultWriteBufferMin),
     WriteBufferMax = proplists:get_value(write_buffer_size_max, Config, DefaultWriteBufferMax),
-    {Offset, _} = plumtree_rand:uniform_s(1 + WriteBufferMax - WriteBufferMin, erlang:timestamp()),
+    {Offset, _} = rand:uniform_s(
+        1 + WriteBufferMax - WriteBufferMin,
+        rand:seed(exsplus, erlang:timestamp())
+    ),
     WriteBufferSize = WriteBufferMin + Offset,
     Config2 = orddict:store(write_buffer_size, WriteBufferSize, Config),
     Config3 = orddict:erase(write_buffer_size_min, Config2),
@@ -1130,7 +1133,7 @@ exchange_level(Level, Buckets, Local, Remote, _Opts) ->
     lists:flatmap(fun(Bucket) ->
                           A = Local(get_bucket, {Level, Bucket}),
                           B = Remote(get_bucket, {Level, Bucket}),
-                          Delta = plumtree_util:orddict_delta(lists:keysort(1, A),
+                          Delta = orddict_delta(lists:keysort(1, A),
                                                                lists:keysort(1, B)),
                           lager:debug("Exchange Level ~p Bucket ~p\nA=~p\nB=~p\nD=~p\n",
                                       [Level, Bucket, A, B, Delta]),
@@ -1144,7 +1147,7 @@ exchange_final(_Level, Segments, Local, Remote, AccFun, Acc0, _Opts) ->
     lists:foldl(fun(Segment, Acc) ->
                         A = Local(key_hashes, Segment),
                         B = Remote(key_hashes, Segment),
-                        Delta = plumtree_util:orddict_delta(lists:keysort(1, A),
+                        Delta = orddict_delta(lists:keysort(1, A),
                                                              lists:keysort(1, B)),
                         lager:debug("Exchange Final\nA=~p\nB=~p\nD=~p\n",
                                     [A, B, Delta]),
@@ -1183,7 +1186,7 @@ compare_segments(Segment, Tree=#state{id=Id}, Remote) ->
     KeyHashes2 = Remote(key_hashes, Segment),
     HL1 = orddict:from_list(KeyHashes1),
     HL2 = orddict:from_list(KeyHashes2),
-    Delta = plumtree_util:orddict_delta(HL1, HL2),
+    Delta = orddict_delta(HL1, HL2),
     lager:debug("Tree ~p segment ~p diff ~p\n",
                 [Tree, Segment, Delta]),
     Keys = [begin
@@ -1206,6 +1209,31 @@ key_diff_type({_, '$none'}) ->
     remote_missing;
 key_diff_type(_) ->
     different.
+
+
+orddict_delta(D1, D2) ->
+    orddict_delta(D1, D2, []).
+
+orddict_delta([{K1,V1}|D1], [{K2,_}=E2|D2], Acc) when K1 < K2 ->
+    Acc2 = [{K1,{V1,'$none'}} | Acc],
+    orddict_delta(D1, [E2|D2], Acc2);
+orddict_delta([{K1,_}=E1|D1], [{K2,V2}|D2], Acc) when K1 > K2 ->
+    Acc2 = [{K2,{'$none',V2}} | Acc],
+    orddict_delta([E1|D1], D2, Acc2);
+orddict_delta([{K1,V1}|D1], [{_K2,V2}|D2], Acc) -> %K1 == K2
+    case V1 of
+        V2 ->
+            orddict_delta(D1, D2, Acc);
+        _ ->
+            Acc2 = [{K1,{V1,V2}} | Acc],
+            orddict_delta(D1, D2, Acc2)
+    end;
+orddict_delta([], D2, Acc) ->
+    L = [{K2,{'$none',V2}} || {K2,V2} <- D2],
+    L ++ Acc;
+orddict_delta(D1, [], Acc) ->
+    L = [{K1,{V1,'$none'}} || {K1,V1} <- D1],
+    L ++ Acc.
 
 %%%===================================================================
 %%% bitarray

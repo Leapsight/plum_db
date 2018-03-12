@@ -1,12 +1,13 @@
 {"1.1.0",
 [{<<"acceptor_pool">>,{pkg,<<"acceptor_pool">>,<<"1.0.0-rc.0">>},1},
  {<<"eleveldb">>,{pkg,<<"eleveldb">>,<<"2.2.20">>},0},
- {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},2},
- {<<"lager">>,{pkg,<<"lager">>,<<"3.6.1">>},1},
+ {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},1},
+ {<<"lager">>,{pkg,<<"lager">>,<<"3.6.1">>},0},
  {<<"lasp_support">>,{pkg,<<"lasp_support">>,<<"0.0.3">>},1},
  {<<"partisan">>,{pkg,<<"partisan">>,<<"2.0.0">>},0},
  {<<"plumtree">>,{pkg,<<"plumtree">>,<<"0.5.0">>},0},
  {<<"rand_compat">>,{pkg,<<"rand_compat">>,<<"0.0.3">>},1},
+ {<<"sext">>,{pkg,<<"sext">>,<<"1.4.1">>},0},
  {<<"time_compat">>,{pkg,<<"time_compat">>,<<"0.0.1">>},1},
  {<<"types">>,{pkg,<<"types">>,<<"0.1.8">>},1}]}.
 [
@@ -19,6 +20,7 @@
  {<<"partisan">>, <<"CE8C7C3E72EBB38AFE7775066CBDC552B241B012B72DD735EED251E31112A8A3">>},
  {<<"plumtree">>, <<"F3521CE631AD22AC00635E79C7F046A163BD1135889CDC1D0B18AB577F76EC70">>},
  {<<"rand_compat">>, <<"011646BC1F0B0C432FE101B816F25B9BBB74A085713CEE1DAFD2D62E9415EAD3">>},
+ {<<"sext">>, <<"14559B219FAF11F9EBA7A350DFFC69C966C668439C54947A42D67167002798C4">>},
  {<<"time_compat">>, <<"23FE0AD1FDF3B5B88821B2D04B4B5E865BF587AE66056D671FE0F53514ED8139">>},
  {<<"types">>, <<"5782B67231E8C174FE2835395E71E669FE0121076779D2A09F1C0D58EE0E2F13">>}]}
 ].

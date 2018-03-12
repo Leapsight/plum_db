@@ -172,7 +172,7 @@ get_object(PKey, State) ->
 %% @private
 store({_FullPrefix, _Key} = PKey, Metadata, State) ->
     Hash = pdb_object:hash(Metadata),
-    _ = pdb_hashtree:insert(State#state.partition, PKey, Hash),
+    _ = pdb_hashtree:insert(State#state.partition, PKey, Hash, false),
     ok = pdb_store_server:put(State#state.partition, PKey, Metadata),
-    pdb_events:update(Metadata),
+    %% pdb_events:update(Metadata),
     {Metadata, State}.

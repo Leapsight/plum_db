@@ -18,8 +18,44 @@
 %%
 %% -------------------------------------------------------------------
 -module(pdb).
+-behaviour(gen_server).
 -behaviour(plumtree_broadcast_handler).
 -include("pdb.hrl").
+
+-define(TOMBSTONE, '$deleted').
+
+-record(state, {
+    %% an ets table to hold iterators opened
+    %% by other nodes
+    iterators  :: ets:tab()
+}).
+
+-record(iterator, {
+    base_iterator           ::  base_iterator(),
+    opts                    ::  it_opts()
+}).
+
+-record(base_iterator, {
+    prefix                  ::  pdb_prefix() | undefined,
+    match                   ::  term() | undefined,
+    keys_only = false       ::  boolean(),
+    obj                     ::  {pdb_key(), pdb_object()}
+                                | pdb_key()
+                                | undefined,
+    ref                     ::  pdb_store_server:iterator(),
+    partitions              ::  [non_neg_integer()]
+}).
+
+-record(remote_base_iterator, {
+    node   :: node(),
+    ref    :: reference(),
+    prefix :: pdb_prefix() | atom() | binary()
+}).
+
+-type state()               ::  #state{}.
+-type remote_base_iterator()     ::  #remote_base_iterator{}.
+-opaque base_iterator()      ::  #base_iterator{}.
+
 
 
 %% Get Option Types
@@ -46,7 +82,8 @@
                                 | it_opt_keymatch().
 -type it_opts()             ::  [it_opt()].
 -type fold_opts()           ::  it_opts().
--type iterator()            ::  {pdb_store_server:iterator(), it_opts()}.
+-type iterator()            ::  #iterator{}.
+-type partition()           ::  non_neg_integer().
 
 %% Put Option Types
 -type put_opts()            :: [].
@@ -54,8 +91,9 @@
 %% Delete Option types
 -type delete_opts()         :: [].
 
--define(TOMBSTONE, '$deleted').
 
+-export_type([partition/0]).
+-export_type([base_iterator/0]).
 -export_type([iterator/0]).
 
 -export([decode_key/1]).
@@ -69,14 +107,21 @@
 -export([get_object/2]).
 -export([iterator/1]).
 -export([iterator/2]).
--export([itr_close/1]).
--export([itr_default/1]).
--export([itr_done/1]).
--export([itr_key/1]).
--export([itr_key_values/1]).
--export([itr_next/1]).
--export([itr_value/1]).
--export([itr_values/1]).
+-export([iterator_close/1]).
+-export([iterator_default/1]).
+-export([iterator_done/1]).
+-export([iterator_key/1]).
+-export([iterator_key_values/1]).
+-export([iterate/1]).
+-export([iterator_value/1]).
+-export([iterator_values/1]).
+-export([base_iterator/0]).
+-export([base_iterator/1]).
+-export([base_iterator/2]).
+-export([base_iterator/3]).
+-export([base_iterator_prefix/1]).
+-export([remote_base_iterator/1]).
+-export([remote_base_iterator/2]).
 -export([prefix_hash/1]).
 -export([put/3]).
 -export([put/4]).
@@ -88,6 +133,18 @@
 -export([is_partition/1]).
 -export([merge/3]).
 
+
+-export([start_link/0]).
+
+%% gen_server callbacks
+-export([init/1]).
+-export([handle_call/3]).
+-export([handle_cast/2]).
+-export([handle_info/2]).
+-export([terminate/2]).
+-export([code_change/3]).
+
+%% plumtree_broadcast_handler callbacks
 -export([broadcast_data/1]).
 -export([exchange/1]).
 -export([graft/1]).
@@ -103,6 +160,16 @@
 %% API
 %% =============================================================================
 
+
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Start plumtree_metadadata_manager and link to calling process.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec start_link() -> {ok, pid()} | ignore | {error, term()}.
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 
 %% -----------------------------------------------------------------------------
@@ -184,7 +251,8 @@ get(FullPrefix, Key) ->
 -spec get(pdb_prefix(), pdb_key(), get_opts()) -> pdb_value() | undefined.
 
 get({Prefix, SubPrefix} = FullPrefix, Key, Opts)
-when is_binary(Prefix) andalso is_binary(SubPrefix) ->
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     PKey = prefixed_key(FullPrefix, Key),
     Default = get_option(default, Opts, undefined),
     ResolveMethod = get_option(resolver, Opts, lww),
@@ -192,7 +260,7 @@ when is_binary(Prefix) andalso is_binary(SubPrefix) ->
     case get_object(PKey) of
         undefined ->
             Default;
-        {ok, Existing} ->
+        Existing ->
             %% Aa Dotted Version Vector Set is returned.
             %% When reading the value for a subsequent call to put/3 the
             %% context can be obtained using pdb_object:context/1. Values can
@@ -210,7 +278,8 @@ when is_binary(Prefix) andalso is_binary(SubPrefix) ->
 %% @end
 %% -----------------------------------------------------------------------------
 get_object({{Prefix, SubPrefix}, _Key} = PKey)
-when is_binary(Prefix) andalso is_binary(SubPrefix) ->
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     case pdb_store_server:get(PKey) of
         {error, not_found} ->
             undefined;
@@ -263,17 +332,17 @@ fold(Fun, Acc0, FullPrefix, Opts) ->
     catch
         {break, Result} -> Result
     after
-        ok = itr_close(It)
+        ok = iterator_close(It)
     end.
 
 %% @private
 fold_it(Fun, Acc, It) ->
-    case itr_done(It) of
+    case iterator_done(It) of
         true ->
             Acc;
         false ->
-            Next = Fun(itr_key_values(It), Acc),
-            fold_it(Fun, Next, itr_next(It))
+            Next = Fun(iterator_key_values(It), Acc),
+            fold_it(Fun, Next, iterate(It))
     end.
 
 
@@ -315,7 +384,7 @@ iterator(FullPrefix) ->
 %%
 %% * resolver: either the atom `lww' or a function that resolves conflicts if
 %% they are encounted (see get/3 for more details). Conflict resolution is
-%% performed when values are retrieved (see itr_value/1 and itr_key_values/1).
+%% performed when values are retrieved (see iterator_value/1 and iterator_key_values/1).
 %% If no resolver is provided no resolution is performed. The default is to not
 %% provide a resolver.
 %% * allow_put: whether or not to write and broadcast a resolved value.
@@ -325,7 +394,7 @@ iterator(FullPrefix) ->
 %% iterator points to is passed as the argument and the result is returned in
 %% place of the tombstone. If default is a value, the value is returned in
 %% place of the tombstone. This applies when using functions such as
-%% itr_values/1 and itr_key_values/1.
+%% iterator_values/1 and iterator_key_values/1.
 %% * match: A tuple containing erlang terms and '_'s. Match can be used to
 %% iterate over a subset of keys -- assuming the keys stored are tuples
 %%
@@ -334,43 +403,120 @@ iterator(FullPrefix) ->
 -spec iterator(pdb_prefix(), it_opts()) -> iterator().
 
 iterator({Prefix, SubPrefix} = FullPrefix, Opts)
-when is_binary(Prefix) andalso is_binary(SubPrefix) ->
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     KeyMatch = proplists:get_value(match, Opts),
-    It = pdb_manager:iterator(FullPrefix, KeyMatch),
-    {It, Opts}.
+    Base = base_iterator(FullPrefix, KeyMatch),
+    #iterator{base_iterator = Base, opts = Opts}.
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Advances the iterator
+%% @doc Advances the iterator by one key, full-prefix or sub-prefix
 %% @end
 %% -----------------------------------------------------------------------------
--spec itr_next(iterator()) -> iterator().
-itr_next({It, Opts}) ->
-    It1 = pdb_manager:iterate(It),
-    {It1, Opts}.
+-spec iterate
+    (iterator()) ->
+        iterator();
+    (base_iterator() | remote_base_iterator()) ->
+        base_iterator() | remote_base_iterator().
+
+iterate(#iterator{base_iterator = Base0} = I) ->
+    I#iterator{base_iterator = iterate(Base0)};
+
+iterate(#remote_base_iterator{ref = Ref, node = Node} = I) ->
+    _ = gen_server:call({?MODULE, Node}, {iterate, Ref}, infinity),
+    I;
+
+iterate(#base_iterator{ref = undefined, partitions = []} = I) ->
+    %% We are done
+    %% '$end_of_table';
+    I;
+
+iterate(#base_iterator{ref = undefined, partitions = [H|_]} = I0) ->
+    %% We finished with the previous partition and we have
+    %% more partitions to cover
+    First = first_key(I0#base_iterator.prefix),
+    Ref = case I0#base_iterator.keys_only of
+        true ->
+            pdb_store_server:key_iterator(H);
+        false ->
+            pdb_store_server:iterator(H)
+    end,
+    iterate(eleveldb:iterator_move(Ref, First), I0#base_iterator{ref = Ref});
+
+iterate(#base_iterator{ref = Ref} = I) ->
+    iterate(eleveldb:iterator_move(Ref, prefetch), I).
+
+
+iterate({error, _}, #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
+    %% There are no more elements in the partition
+    ok = pdb_store_server:iterator_close(H, Ref),
+    iterate(I#base_iterator{ref = undefined, partitions = T});
+
+iterate({ok, K}, #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
+    PKey = pdb:decode_key(K),
+    case prefixed_key_matches(PKey, I) of
+        true ->
+            I#base_iterator{obj = PKey};
+        false ->
+            ok = pdb_store_server:iterator_close(H, Ref),
+            iterate(I#base_iterator{ref = undefined, partitions = T})
+    end;
+
+iterate({ok, K, V},  #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
+    PKey = pdb:decode_key(K),
+    case prefixed_key_matches(PKey, I) of
+        true ->
+            I#base_iterator{obj = {PKey, binary_to_term(V)}};
+        false ->
+            ok = pdb_store_server:iterator_close(H, Ref),
+            iterate(I#base_iterator{ref = undefined, partitions = T})
+    end.
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Closes the iterator
+%% @doc Closes the iterator. This function must be called on all open iterators
 %% @end
 %% -----------------------------------------------------------------------------
--spec itr_close(iterator()) -> ok.
-itr_close({It, _Ots}) ->
-    pdb_manager:iterator_close(It).
+-spec iterator_close(iterator() | base_iterator() | remote_base_iterator()) ->
+    ok.
+
+iterator_close(#iterator{base_iterator = Base}) ->
+    iterator_close(Base);
+
+iterator_close(#remote_base_iterator{ref = Ref, node = Node}) ->
+    gen_server:call({?MODULE, Node}, {iterator_close, Ref}, infinity);
+
+iterator_close(#base_iterator{ref = undefined}) ->
+    ok;
+
+iterator_close(#base_iterator{ref = Ref}) ->
+    pdb_store_server:iterator_close(Ref).
 
 
 %% -----------------------------------------------------------------------------
 %% @doc Returns true if there is nothing more to iterate over
 %% @end
 %% -----------------------------------------------------------------------------
--spec itr_done(iterator()) -> boolean().
-itr_done({It, _Opts}) ->
-    pdb_manager:iterator_done(It).
+-spec iterator_done(iterator() | base_iterator() | remote_base_iterator()) ->
+    boolean().
+
+iterator_done(#iterator{base_iterator = Base}) ->
+    iterator_done(Base);
+
+iterator_done(#remote_base_iterator{ref = Ref, node = Node}) ->
+    gen_server:call({?MODULE, Node}, {iterator_done, Ref}, infinity);
+
+iterator_done(#base_iterator{ref = undefined, partitions = []}) ->
+    true;
+
+iterator_done(#base_iterator{}) ->
+    false.
 
 
 %% -----------------------------------------------------------------------------
 %% @doc Return the key and value(s) pointed at by the iterator. Before calling
-%% this function, check the iterator is not complete w/ itr_done/1. If a
+%% this function, check the iterator is not complete w/ iterator_done/1. If a
 %% resolver was passed to iterator/0 when creating the given iterator, siblings
 %% will be resolved using the given function or last-write-wins (if `lww' is
 %% passed as the resolver). If no resolver was used then no conflict resolution
@@ -383,21 +529,21 @@ itr_done({It, _Opts}) ->
 %% element (even if there is only a single sibling).
 %%
 %% NOTE: if resolution may be performed this function must be called at most
-%% once before calling itr_next/1 on the iterator (at which point the function
+%% once before calling iterate/1 on the iterator (at which point the function
 %% can be called once more).
 %% @end
 %% -----------------------------------------------------------------------------
--spec itr_key_values(iterator()) -> {pdb_key(), value_or_values()}.
+-spec iterator_key_values(iterator()) -> {pdb_key(), value_or_values()}.
 
-itr_key_values({It, Opts}) ->
-    Default = itr_default({It, Opts}),
-    {Key, Obj} = pdb_manager:iterator_value(It),
+iterator_key_values(#iterator{base_iterator = Base, opts = Opts} = I) ->
+    Default = iterator_default(I),
+    {Key, Obj} = iterator_value(Base),
     AllowPut = get_option(allow_put, Opts, true),
     case get_option(resolver, Opts, undefined) of
         undefined ->
             {Key, maybe_tombstones(pdb_object:values(Obj), Default)};
         Resolver ->
-            Prefix = pdb_manager:iterator_prefix(It),
+            Prefix = base_iterator_prefix(Base),
             PKey = prefixed_key(Prefix, Key),
             Value = maybe_tombstone(maybe_resolve(PKey, Obj, Resolver, AllowPut), Default),
             {Key, Value}
@@ -406,50 +552,58 @@ itr_key_values({It, Opts}) ->
 
 %% -----------------------------------------------------------------------------
 %% @doc Return the key pointed at by the iterator. Before calling this function,
-%%  check the iterator is not complete w/ itr_done/1. No conflict resolution
+%%  check the iterator is not complete w/ iterator_done/1. No conflict resolution
 %% will be performed as a result of calling this function.
 %% @end
 %% -----------------------------------------------------------------------------
--spec itr_key(iterator()) -> pdb_key().
-itr_key({It, _Opts}) ->
-    {Key, _} = pdb_manager:iterator_value(It),
+-spec iterator_key(iterator()) -> pdb_key().
+iterator_key(#iterator{base_iterator = Base}) ->
+    {Key, _} = iterator_value(Base),
     Key.
 
 
 %% -----------------------------------------------------------------------------
 %% @doc Return all sibling values pointed at by the iterator. Before
-%% calling this function, check the iterator is not complete w/ itr_done/1.
+%% calling this function, check the iterator is not complete w/ iterator_done/1.
 %% No conflict resolution will be performed as a result of calling this
 %% function.
 %% @end
 %% -----------------------------------------------------------------------------
--spec itr_values(iterator()) -> [pdb_value() | pdb_tombstone()].
-itr_values({It, Opts}) ->
-    Default = itr_default({It, Opts}),
-    {_, Obj} = pdb_manager:iterator_value(It),
+-spec iterator_values(iterator()) -> [pdb_value() | pdb_tombstone()].
+iterator_values(#iterator{base_iterator = Base} = I) ->
+    Default = iterator_default(I),
+    {_, Obj} = iterator_value(Base),
     maybe_tombstones(pdb_object:values(Obj), Default).
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Return a single value pointed at by the iterator. If there are
-%% conflicts and a resolver was specified in the options when creating this
-%% iterator, they will be resolved. Otherwise, and error is returned. If
-%% conflicts are resolved, the resolved value is written locally and a
+%% @doc In case of an iterator(), returns a single value pointed at by the
+%% iterator. In case of a base_iterator() returns the key and object or the
+%% prefix pointed to by the iterator.
+%%
+%% In case of an iterator(), if there are conflicts and a resolver was
+%% specified in the options when creating this iterator, they will be resolved.
+%% Otherwise, and error is returned.
+%% If conflicts are resolved, the resolved value is written locally and a
 %% broadcast is performed to update other nodes
 %% in the cluster if `allow_put' is `true' (the default value). If `allow_put'
 %% is `false', values are resolved but not written or broadcast.
 %%
 %% NOTE: if resolution may be performed this function must be called at most
-%% once before calling itr_next/1 on the iterator (at which point the function
+%% once before calling iterate/1 on the iterator (at which point the function
 %% can be called once more).
 %% @end
 %% -----------------------------------------------------------------------------
--spec itr_value(iterator()) ->
-    pdb_value() | pdb_tombstone() | {error, conflict}.
+-spec iterator_value
+    (iterator()) ->
+        pdb_value() | pdb_tombstone() | {error, conflict};
+    (base_iterator() | remote_base_iterator()) ->
+        {pdb_key(), pdb_object()} | pdb_prefix() | binary() | atom().
 
-itr_value({It, Opts}) ->
-    Default = itr_default({It, Opts}),
-    {Key, Obj} = pdb_manager:iterator_value(It),
+
+iterator_value(#iterator{base_iterator = Base, opts = Opts} = I) ->
+    Default = iterator_default(I),
+    {Key, Obj} = iterator_value(Base),
     AllowPut = get_option(allow_put, Opts, true),
     case get_option(resolver, Opts, undefined) of
         undefined ->
@@ -460,10 +614,16 @@ itr_value({It, Opts}) ->
                     {error, conflict}
             end;
         Resolver ->
-            Prefix = pdb_manager:iterator_prefix(It),
+            Prefix = base_iterator_prefix(Base),
             PKey = prefixed_key(Prefix, Key),
             maybe_tombstone(maybe_resolve(PKey, Obj, Resolver, AllowPut), Default)
-    end.
+    end;
+
+iterator_value(#remote_base_iterator{ref = Ref, node = Node}) ->
+    gen_server:call({?MODULE, Node}, {iterator_value, Ref}, infinity);
+
+iterator_value(#base_iterator{obj = Obj}) ->
+    Obj.
 
 
 %% -----------------------------------------------------------------------------
@@ -471,14 +631,16 @@ itr_value({It, Opts}) ->
 %% the default used when creating the given iterator is a function it will be
 %% applied to the current key the iterator points at. If no default was
 %% provided the tombstone value was returned.
-%% This function should only be called after checking itr_done/1.
+%% This function should only be called after checking iterator_done/1.
 %% @end
 %% -----------------------------------------------------------------------------
--spec itr_default(iterator()) -> pdb_tombstone() | pdb_value() | it_opt_default_fun().
-itr_default({_, Opts}=It) ->
+-spec iterator_default(iterator()) ->
+    pdb_tombstone() | pdb_value() | it_opt_default_fun().
+
+iterator_default(#iterator{opts = Opts} = I) ->
     case proplists:get_value(default, Opts, ?TOMBSTONE) of
         Fun when is_function(Fun) ->
-            Fun(itr_key(It));
+            Fun(iterator_key(I));
         Val -> Val
     end.
 
@@ -522,7 +684,8 @@ put(FullPrefix, Key, ValueOrFun) ->
     ok.
 
 put({Prefix, SubPrefix} = FullPrefix, Key, ValueOrFun, _Opts)
-when is_binary(Prefix) andalso is_binary(SubPrefix) ->
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     PKey = prefixed_key(FullPrefix, Key),
     Context = current_context(PKey),
     Updated = put_with_context(PKey, Context, ValueOrFun),
@@ -568,8 +731,275 @@ delete(FullPrefix, Key, _Opts) ->
     boolean().
 
 merge(Node, {PKey, _Context}, Obj) ->
-    gen_server:call({?MODULE, Node}, {merge, PKey, Obj}, infinity).
+    Partition = get_partition(PKey),
+    %% Merge is implemented by the worker as an atomic read-merge-write op
+    %% TODO: Evaluate using the merge operation in RocksDB whcn available
+    gen_server:call(
+        {pdb_store_worker:name(Partition), Node},
+        {merge, PKey, Obj},
+        infinity
+    ).
 
+
+
+
+
+%% =============================================================================
+%% BASE (former plumtree_manager)
+%% =============================================================================
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Returns a full-prefix iterator: an iterator for all full-prefixes that
+%% have keys stored under them.
+%% When done with the iterator, iterator_close/1 must be called.
+%% This iterator works across all existing store partitions, treating the set
+%% of partitions as a single logical database. As a result, ordering is partial
+%% per partition and not global across them.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec base_iterator() -> base_iterator().
+base_iterator() ->
+    base_iterator(undefined).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Returns a sub-prefix iterator for a given prefix.
+%% When done with the iterator, iterator_close/1 must be called
+%% @end
+%% -----------------------------------------------------------------------------
+-spec base_iterator(binary() | atom()) -> base_iterator().
+base_iterator(Prefix) when is_binary(Prefix) or is_atom(Prefix) ->
+    new_base_iterator(undefined, Prefix).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Return an iterator for keys stored under a prefix. If KeyMatch is
+%% undefined then all keys will may be visted by the iterator. Otherwise only
+%% keys matching KeyMatch will be visited.
+%%
+%% KeyMatch can be either:
+%%
+%% * an erlang term - which will be matched exactly against a key
+%% * '_' - which is equivalent to undefined
+%% * an erlang tuple containing terms and '_' - if tuples are used as keys
+%% * this can be used to iterate over some subset of keys
+%%
+%% When done with the iterator, iterator_close/1 must be called.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec base_iterator(pdb_prefix(), term()) -> base_iterator().
+
+base_iterator({Prefix, SubPrefix} = FullPrefix, KeyMatch)
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
+    new_base_iterator(FullPrefix, KeyMatch).
+
+
+-spec base_iterator(undefined | pdb_prefix(), term(), non_neg_integer()) ->
+    base_iterator().
+
+base_iterator(undefined, KeyMatch, Partition) when is_integer(Partition) ->
+    new_base_iterator(undefined, KeyMatch, Partition);
+
+base_iterator({Prefix, SubPrefix} = FullPrefix, KeyMatch, Partition)
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix))
+andalso is_integer(Partition) ->
+    new_base_iterator(FullPrefix, KeyMatch, Partition).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Create an iterator on `Node'. This allows for remote iteration by having
+%% the worker keep track of the actual iterator (since ets
+%% continuations cannot cross node boundaries). The iterator created iterates
+%% all full-prefixes.
+%% Once created the rest of the iterator API may be used as usual. When done
+%% with the iterator, iterator_close/1 must be called
+%% @end
+%% -----------------------------------------------------------------------------
+-spec remote_base_iterator(node()) -> remote_base_iterator().
+remote_base_iterator(Node) ->
+    remote_base_iterator(Node, undefined).
+
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Create an iterator on `Node'. This allows for remote iteration
+%% by having the worker keep track of the actual iterator
+%% (since ets continuations cannot cross node boundaries). When
+%% `Perfix' is not a full prefix, the iterator created iterates all
+%% sub-prefixes under `Prefix'. Otherse, the iterator iterates all keys
+%% under a prefix. Once created the rest of the iterator API may be used as
+%% usual.
+%% When done with the iterator, iterator_close/1 must be called
+%% @end
+%% -----------------------------------------------------------------------------
+-spec remote_base_iterator(
+    node(), pdb_prefix() | binary() | atom() | undefined) ->
+    remote_base_iterator().
+
+remote_base_iterator(Node, Prefix) when is_atom(Prefix); is_binary(Prefix) ->
+    Ref = gen_server:call(
+        {?MODULE, Node},
+        {open_remote_base_iterator, self(), undefined, Prefix},
+        infinity
+    ),
+    #remote_base_iterator{ref = Ref, prefix = Prefix, node = Node};
+
+remote_base_iterator(Node, FullPrefix) when is_tuple(FullPrefix) ->
+    Ref = gen_server:call(
+        {?MODULE, Node},
+        {open_remote_base_iterator, self(), FullPrefix, undefined},
+        infinity
+    ),
+    #remote_base_iterator{ref = Ref, prefix = FullPrefix, node = Node}.
+
+
+
+
+
+
+prefixed_key_matches(PKey, #base_iterator{prefix = P, match = M}) ->
+    prefixed_key_matches(PKey, P, M).
+
+%% @private
+prefixed_key_matches({_, _}, {undefined, undefined}, undefined) ->
+    true;
+prefixed_key_matches({_, Key}, {undefined, undefined}, Fun) ->
+    Fun(Key);
+
+prefixed_key_matches({{Prefix, _}, _}, {Prefix, undefined}, undefined) ->
+    true;
+prefixed_key_matches({{Prefix, _}, Key}, {Prefix, undefined}, Fun) ->
+    Fun(Key);
+
+prefixed_key_matches({{_, SubPrefix}, _}, {undefined, SubPrefix}, undefined) ->
+    true;
+prefixed_key_matches({{_, SubPrefix}, Key}, {undefined, SubPrefix}, Fun) ->
+    Fun(Key);
+
+prefixed_key_matches({FullPrefix, _}, FullPrefix, undefined) ->
+    true;
+prefixed_key_matches({{_, SubPrefix}, Key}, {undefined, SubPrefix}, Fun) ->
+    Fun(Key);
+
+prefixed_key_matches(_, _, _) ->
+    false.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Returns the full-prefix or prefix being iterated by this iterator. If
+%% the iterator is a full-prefix iterator undefined is returned.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec base_iterator_prefix(base_iterator() | remote_base_iterator()) ->
+    pdb_prefix() | undefined | binary() | atom().
+
+base_iterator_prefix(#remote_base_iterator{prefix = Prefix}) ->
+    Prefix;
+base_iterator_prefix(#base_iterator{prefix = undefined, match = undefined}) ->
+    undefined;
+base_iterator_prefix(#base_iterator{prefix = undefined, match = Prefix}) ->
+    Prefix;
+base_iterator_prefix(#base_iterator{prefix = Prefix}) ->
+    Prefix.
+
+
+
+
+
+
+
+
+
+
+
+%% =============================================================================
+%% GEN_SERVER_ CALLBACKS
+%% =============================================================================
+
+
+%% @private
+-spec init([]) ->
+    {ok, state()}
+    | {ok, state(), non_neg_integer() | infinity}
+    | ignore
+    | {stop, term()}.
+
+init([]) ->
+    ?MODULE = ets:new(
+        ?MODULE,
+        [named_table, {read_concurrency, true}, {write_concurrency, true}]
+    ),
+    {ok, #state{iterators = ?MODULE}}.
+
+%% @private
+-spec handle_call(term(), {pid(), term()}, state()) ->
+    {reply, term(), state()}
+    | {reply, term(), state(), non_neg_integer()}
+    | {noreply, state()}
+    | {noreply, state(), non_neg_integer()}
+    | {stop, term(), term(), state()}
+    | {stop, term(), state()}.
+
+handle_call({open_remote_base_iterator, Pid, FullPrefix, KeyMatch}, _From, State) ->
+    Iterator = new_remote_base_iterator(Pid, FullPrefix, KeyMatch, State),
+    {reply, Iterator, State};
+
+handle_call({iterate, RemoteRef}, _From, State) ->
+    Next = iterate(RemoteRef, State),
+    {reply, Next, State};
+
+handle_call({iterator_value, RemoteRef}, _From, State) ->
+    Res = from_remote_base_iterator(fun iterator_value/1, RemoteRef, State),
+    {reply, Res, State};
+
+handle_call({iterator_done, RemoteRef}, _From, State) ->
+    Res = case from_remote_base_iterator(fun iterator_done/1, RemoteRef, State) of
+              undefined -> true; %% if we don't know about iterator, treat it as done
+              Other -> Other
+          end,
+    {reply, Res, State};
+
+handle_call({iterator_close, RemoteRef}, _From, State) ->
+    close_remote_base_iterator(RemoteRef, State),
+    {reply, ok, State}.
+
+
+%% @private
+-spec handle_cast(term(), state()) ->
+    {noreply, state()}
+    | {noreply, state(), non_neg_integer()}
+    | {stop, term(), state()}.
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+
+%% @private
+-spec handle_info(term(), state()) ->
+    {noreply, state()}
+    | {noreply, state(), non_neg_integer()}
+    | {stop, term(), state()}.
+
+handle_info({'DOWN', ItRef, process, _Pid, _Reason}, State) ->
+    close_remote_base_iterator(ItRef, State),
+    {noreply, State}.
+
+
+%% @private
+-spec terminate(term(), state()) -> term().
+
+terminate(_Reason, _State) ->
+    ok.
+
+
+%% @private
+-spec code_change(term() | {down, term()}, state(), term()) -> {ok, state()}.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
 
 %% =============================================================================
@@ -684,6 +1114,8 @@ exchange(Peer) ->
     end.
 
 
+
+
 %% =============================================================================
 %% PRIVATE
 %% =============================================================================
@@ -711,7 +1143,8 @@ put_with_context(PKey, undefined, ValueOrFun) ->
     put_with_context(PKey, [], ValueOrFun);
 
 put_with_context({{Prefix, SubPrefix}, _Key} = PKey, Context, ValueOrFun)
-when is_binary(Prefix) andalso is_binary(SubPrefix) ->
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     gen_server:call(
         pdb_store_worker:name(get_partition(PKey)),
         {put, PKey, Context, ValueOrFun},
@@ -772,3 +1205,67 @@ get_option(Key, Opts, Default) ->
         _ ->
             Default
     end.
+
+
+
+
+
+%% =============================================================================
+%% PRIVATE: BASE
+%% =============================================================================
+
+
+
+%% =============================================================================
+%% PRIVATE
+%% =============================================================================
+
+first_key(undefined) -> first;
+first_key({undefined, undefined}) -> first;
+first_key({Prefix, undefined}) -> sext:encode({{Prefix, ''}, ''});
+first_key({_, _} = FullPrefix) -> sext:encode({FullPrefix, ''}).
+
+
+%% @private
+new_remote_base_iterator(
+    Pid, FullPrefix, KeyMatch, #state{iterators = Iterators}) ->
+    Ref = monitor(process, Pid),
+    Iterator = new_base_iterator(FullPrefix, KeyMatch),
+    ets:insert(Iterators, [{Ref, Iterator}]),
+    Ref.
+
+
+%% @private
+from_remote_base_iterator(Fun, Ref, State) ->
+    case ets:lookup(State#state.iterators, Ref) of
+        [] -> undefined;
+        [{Ref, It}] -> Fun(It)
+    end.
+
+
+%% @private
+close_remote_base_iterator(Ref, #state{iterators = Iterators} = State) ->
+    from_remote_base_iterator(fun iterator_close/1, Ref, State),
+    ets:delete(Iterators, Ref).
+
+
+%% @private
+new_base_iterator(FullPrefix, KeyMatch) ->
+    new_base_iterator(FullPrefix, KeyMatch, pdb:partitions(), false).
+
+%% @private
+new_base_iterator(FullPrefix, KeyMatch, Partition) ->
+    new_base_iterator(FullPrefix, KeyMatch, [Partition], false).
+
+%% @private
+new_base_iterator(FullPrefix, KeyMatch, Partitions, KeysOnly) ->
+    I = #base_iterator{
+        prefix = FullPrefix,
+        match = KeyMatch,
+        keys_only = KeysOnly,
+        obj = undefined,
+        ref = undefined,
+        partitions = Partitions
+    },
+    %% We fetch the first key
+    iterate(I).

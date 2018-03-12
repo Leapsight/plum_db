@@ -250,31 +250,29 @@ repair_prefix(Peer, Type, [Prefix, SubPrefix]) ->
 
 %% @private
 repair_sub_prefixes(Type, Peer, Prefix, It) ->
-    case pdb_manager:iterator_done(It) of
+    case pdb:iterator_done(It) of
         true ->
-            pdb_manager:iterator_close(It);
+            pdb:iterator_close(It);
         false ->
-            SubPrefix = pdb_manager:iterator_value(It),
+            SubPrefix = pdb:iterator_value(It),
             FullPrefix = {Prefix, SubPrefix},
 
             ItType = repair_iterator_type(Type),
             ObjIt = repair_iterator(ItType, Peer, FullPrefix),
             repair_full_prefix(Type, Peer, FullPrefix, ObjIt),
-            repair_sub_prefixes(Type, Peer, Prefix,
-                                pdb_manager:iterate(It))
+            repair_sub_prefixes(Type, Peer, Prefix, pdb:iterate(It))
     end.
 
 
 %% @private
 repair_full_prefix(Type, Peer, FullPrefix, ObjIt) ->
-    case pdb_manager:iterator_done(ObjIt) of
+    case pdb:iterator_done(ObjIt) of
         true ->
-            pdb_manager:iterator_close(ObjIt);
+            pdb:iterator_close(ObjIt);
         false ->
-            {Key, Obj} = pdb_manager:iterator_value(ObjIt),
+            {Key, Obj} = pdb:iterator_value(ObjIt),
             repair_other(Type, Peer, {FullPrefix, Key}, Obj),
-            repair_full_prefix(Type, Peer, FullPrefix,
-                               pdb_manager:iterate(ObjIt))
+            repair_full_prefix(Type, Peer, FullPrefix, pdb:iterate(ObjIt))
     end.
 
 
@@ -292,8 +290,8 @@ repair_keys(Peer, PrefixList, {_Type, KeyBin}) ->
     Key = binary_to_term(KeyBin),
     Prefix = list_to_tuple(PrefixList),
     PKey = {Prefix, Key},
-    LocalObj = pdb_manager:get(PKey),
-    RemoteObj = pdb_manager:get(Peer, PKey),
+    LocalObj = pdb:get(PKey),
+    RemoteObj = pdb:get(Peer, PKey),
     merge(undefined, PKey, RemoteObj),
     merge(Peer, PKey, LocalObj),
     ok.
@@ -302,19 +300,19 @@ repair_keys(Peer, PrefixList, {_Type, KeyBin}) ->
 %% @private
 %% context is ignored since its in object, so pass undefined
 merge(undefined, PKey, RemoteObj) ->
-    pdb_manager:merge({PKey, undefined}, RemoteObj);
+    pdb:merge({PKey, undefined}, RemoteObj);
 merge(Peer, PKey, LocalObj) ->
-    pdb_manager:merge(Peer, {PKey, undefined}, LocalObj).
+    pdb:merge(Peer, {PKey, undefined}, LocalObj).
 
 
 %% @private
 repair_iterator(local, _, Prefix)
 when is_atom(Prefix) orelse is_binary(Prefix) ->
-    pdb_manager:iterator(Prefix);
+    pdb:iterator(Prefix);
 repair_iterator(local, _, Prefix) when is_tuple(Prefix) ->
-    pdb_manager:iterator(Prefix, undefined);
+    pdb:iterator(Prefix, undefined);
 repair_iterator(remote, Peer, PrefixOrFull) ->
-    pdb_manager:remote_iterator(Peer, PrefixOrFull).
+    pdb:remote_iterator(Peer, PrefixOrFull).
 
 
 %% @private
@@ -341,21 +339,21 @@ track_repair({key_diffs, _, Diffs}, Acc=#exchange{keys=Keys}) ->
 remote_lock_request(Peer) ->
     Self = self(),
     as_event(fun() ->
-                     Res = pdb_hashtree:lock(Peer, Self),
-                     {remote_lock, Res}
-             end).
+        Res = pdb_hashtree:lock(Peer, Self),
+        {remote_lock, Res}
+    end).
 
 
 %% @private
 update_request(Node) ->
     as_event(fun() ->
-                     %% acquired lock so we know there is no other update
-                     %% and tree is built
-                     case pdb_hashtree:update(Node) of
-                         ok -> tree_updated;
-                         Error -> {update_error, Error}
-                     end
-             end).
+        %% acquired lock so we know there is no other update
+        %% and tree is built
+        case pdb_hashtree:update(Node) of
+            ok -> tree_updated;
+            Error -> {update_error, Error}
+        end
+    end).
 
 
 %% @private
@@ -363,7 +361,7 @@ update_request(Node) ->
 as_event(F) ->
     Self = self(),
     spawn_link(fun() ->
-                       Result = F(),
-                       gen_fsm:send_event(Self, Result)
-               end),
+        Result = F(),
+        gen_fsm:send_event(Self, Result)
+    end),
     ok.

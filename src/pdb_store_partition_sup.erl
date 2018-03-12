@@ -34,8 +34,9 @@
 
 
 
-start_link(PartitionId) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [PartitionId]).
+start_link(Partition) ->
+    Name = name(Partition),
+    supervisor:start_link({local, Name}, ?MODULE, [Partition]).
 
 
 
