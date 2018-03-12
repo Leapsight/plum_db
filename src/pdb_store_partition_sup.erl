@@ -44,7 +44,7 @@ start_link(PartitionId) ->
 %% @end
 %% -----------------------------------------------------------------------------
 %% @private
-name(Id) ->
+name(Id) when is_integer(Id) ->
     list_to_atom("pdb_store_partition_sup_" ++ integer_to_list(Id)).
 
 
