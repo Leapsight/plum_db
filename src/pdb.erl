@@ -490,8 +490,8 @@ iterator_close(#remote_base_iterator{ref = Ref, node = Node}) ->
 iterator_close(#base_iterator{ref = undefined}) ->
     ok;
 
-iterator_close(#base_iterator{ref = Ref}) ->
-    pdb_store_server:iterator_close(Ref).
+iterator_close(#base_iterator{partitions = [H|_], ref = Ref}) ->
+    pdb_store_server:iterator_close(H, Ref).
 
 
 %% -----------------------------------------------------------------------------
@@ -733,7 +733,7 @@ delete(FullPrefix, Key, _Opts) ->
 merge(Node, {PKey, _Context}, Obj) ->
     Partition = get_partition(PKey),
     %% Merge is implemented by the worker as an atomic read-merge-write op
-    %% TODO: Evaluate using the merge operation in RocksDB whcn available
+    %% TODO: Evaluate using the merge operation in RocksDB when available
     gen_server:call(
         {pdb_store_worker:name(Partition), Node},
         {merge, PKey, Obj},

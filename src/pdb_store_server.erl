@@ -25,7 +25,7 @@
 %% leveldb uses $\0 but since external term format will contain nulls
 %% we need an additional separator. We use the ASCII unit separator
 %% ($\31) that was design to separate fields of a record.
--define(KEY_SEPARATOR, <<0, $\31, 0>>).
+%% -define(KEY_SEPARATOR, <<0, $\31, 0>>).
 
 -record(state, {
     partition                           ::  non_neg_integer(),
@@ -290,9 +290,13 @@ handle_call({key_iterator, Pid}, _From, State) ->
     {reply, Iter, add_iterator(Ref, Iter, State)};
 
 handle_call({iterator_close, Iter}, _From, State0) ->
-    {{Ref, Iter}, State1} = take_iterator(Iter, State0),
-    _ = demonitor(Ref, [flush]),
-    {reply, ok, State1}.
+    case take_iterator(Iter, State0) of
+        {{Ref, Iter}, State1} ->
+            _ = demonitor(Ref, [flush]),
+            {reply, ok, State1};
+        error ->
+            {reply, ok, State0}
+    end.
 
 
 handle_cast(_Msg, State) ->
@@ -304,7 +308,7 @@ handle_info({'DOWN', Ref, process, _, _}, State0) ->
         {{Ref, Iter}, State1} ->
             _ = eleveldb:iterator_close(Iter),
             {noreply, State1};
-        false ->
+        error ->
             {noreply, State0}
     end;
 
@@ -465,8 +469,8 @@ take_iterator(Ref, State) when is_reference(Ref) ->
         {Iter, Map0} ->
             Map1 = maps:without([Iter], Map0),
             {{Ref, Iter}, State#state{iterators = Map1}};
-        false ->
-            {false, State}
+        error ->
+            error
     end;
 
 take_iterator(Iter, State) ->
@@ -474,8 +478,8 @@ take_iterator(Iter, State) ->
         {Ref, Map0} ->
             Map1 = maps:without([Ref], Map0),
             {{Ref, Iter}, State#state{iterators = Map1}};
-        false ->
-            {false, State}
+        error ->
+            error
     end.
 
 
