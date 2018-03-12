@@ -1104,7 +1104,7 @@ graft(Context, Obj) ->
 
 exchange(Peer) ->
     Timeout = app_helper:get_env(pdb, metadata_exchange_timeout, 60000),
-    case pdb_exchange_fsm:start(Peer, Timeout) of
+    case pdb_exchange_fsm:start(Peer, Timeout * partition_count()) of
         {ok, Pid} ->
             {ok, Pid};
         {error, Reason} ->

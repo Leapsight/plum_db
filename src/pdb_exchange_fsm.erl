@@ -27,6 +27,9 @@
     %% node the exchange is taking place with
     peer          :: node(),
 
+    %%  the partitions left
+    partitions    :: [pdb:partition()],
+
     %% count of trees that have been buit
     built         :: non_neg_integer(),
 
@@ -86,8 +89,8 @@
 
 %% -----------------------------------------------------------------------------
 %% @doc Start an exchange of Cluster Metadata hashtrees between this node
-%% and `Peer'. `Timeout' is the number of milliseconds the process will wait
-%% to aqcuire the remote lock or to upate both trees.
+%% and `Peer' for a given `Partition'. `Timeout' is the number of milliseconds
+%% the process will wait to aqcuire the remote lock or to upate both trees.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec start(node(), pos_integer()) -> {ok, pid()} | ignore | {error, term()}.
@@ -105,7 +108,13 @@ start(Peer, Timeout) ->
 
 init([Peer, Timeout]) ->
     gen_fsm:send_event(self(), start),
-    {ok, prepare, #state{peer = Peer, built = 0, timeout = Timeout}}.
+    State = #state{
+        peer = Peer,
+        partitions = pdb:partitions(),
+        built = 0,
+        timeout = Timeout
+    },
+    {ok, prepare, State}.
 
 
 handle_event(_Event, StateName, State) ->
@@ -136,20 +145,23 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 
 
 
-prepare(start, State) ->
+prepare(start, #state{partitions = [H|_]} = State) ->
     %% get local lock
-    case pdb_hashtree:lock() of
+    case pdb_hashtree:lock(H) of
         ok ->
             %% get remote lock
-            remote_lock_request(State#state.peer),
+            remote_lock_request(State#state.peer, H),
             {next_state, prepare, State, State#state.timeout};
         _Error ->
             {stop, normal, State}
     end;
 
-prepare(timeout, State=#state{peer=Peer}) ->
+prepare(timeout, State=#state{partitions = [Partition|_], peer = Peer}) ->
     %% getting remote lock timed out
-    lager:error("metadata exchange with ~p timed out acquiring locks", [Peer]),
+    _ = lager:error(
+        "Exchange with peer timed out acquiring locks; peer=~p, partition=~p",
+        [Peer, Partition]
+    ),
     {stop, normal, State};
 
 prepare({remote_lock, ok}, State) ->
@@ -162,8 +174,8 @@ prepare({remote_lock, _Error}, State) ->
 
 
 update(start, State) ->
-    update_request(node()),
-    update_request(State#state.peer),
+    update_request(node(), hd(State#state.partitions)),
+    update_request(State#state.peer, hd(State#state.partitions)),
     {next_state, update, State, State#state.timeout};
 
 update(timeout, State=#state{peer=Peer}) ->
@@ -183,21 +195,27 @@ update({update_error, _Error}, State) ->
     {stop, normal, State}.
 
 
-exchange(timeout, State=#state{peer=Peer}) ->
-    RemoteFun = fun(Prefixes, {get_bucket, {Level, Bucket}}) ->
-                        pdb_hashtree:get_bucket(Peer, Prefixes, Level, Bucket);
-                   (Prefixes, {key_hashes, Segment}) ->
-                        pdb_hashtree:key_hashes(Peer, Prefixes, Segment)
-                end,
+exchange(timeout, #state{peer = Peer, partitions = [Partition|_]} = State) ->
+    RemoteFun = fun
+        (Prefixes, {get_bucket, {Level, Bucket}}) ->
+            pdb_hashtree:get_bucket(Peer, Partition, Prefixes, Level, Bucket);
+        (Prefixes, {key_hashes, Segment}) ->
+            pdb_hashtree:key_hashes(Peer, Partition, Prefixes, Segment)
+    end,
     HandlerFun = fun(Diff, Acc) ->
-                         repair(Peer, Diff),
-                         track_repair(Diff, Acc)
-                 end,
-    Res = pdb_hashtree:compare(RemoteFun, HandlerFun,
-                                              #exchange{local=0,remote=0,keys=0}),
-    #exchange{local=LocalPrefixes,
-              remote=RemotePrefixes,
-              keys=Keys} = Res,
+        repair(Peer, Diff),
+        track_repair(Diff, Acc)
+    end,
+    Res = pdb_hashtree:compare(
+        Partition,
+        RemoteFun,
+        HandlerFun,
+        #exchange{local = 0, remote = 0, keys = 0}
+    ),
+    #exchange{
+        local = LocalPrefixes,
+        remote = RemotePrefixes,
+        keys = Keys} = Res,
     Total = LocalPrefixes + RemotePrefixes + Keys,
     case Total > 0 of
         true ->
@@ -206,7 +224,14 @@ exchange(timeout, State=#state{peer=Peer}) ->
         false ->
             lager:debug("completed metadata exchange with ~p. nothing repaired", [Peer])
     end,
-    {stop, normal, State}.
+    case State#state.partitions of
+        [_] ->
+            {stop, normal, State};
+        [_|T] ->
+            %% We remove the covered partition and start again
+            {next_state, prepare, State#state{partitions = T}}
+    end.
+
 
 
 prepare(_Event, _From, State) ->
@@ -336,20 +361,20 @@ track_repair({key_diffs, _, Diffs}, Acc=#exchange{keys=Keys}) ->
 
 
 %% @private
-remote_lock_request(Peer) ->
+remote_lock_request(Peer, Partition) ->
     Self = self(),
     as_event(fun() ->
-        Res = pdb_hashtree:lock(Peer, Self),
+        Res = pdb_hashtree:lock(Peer, Partition, Self),
         {remote_lock, Res}
     end).
 
 
 %% @private
-update_request(Node) ->
+update_request(Node, Partition) ->
     as_event(fun() ->
         %% acquired lock so we know there is no other update
         %% and tree is built
-        case pdb_hashtree:update(Node) of
+        case pdb_hashtree:update(Node, Partition) of
             ok -> tree_updated;
             Error -> {update_error, Error}
         end

@@ -763,8 +763,7 @@ sha(Chunk, Bin, Ctx) ->
     end.
 
 get_env(Key, Default) ->
-    CoreEnv = app_helper:get_env(plumtree, Key, Default),
-    app_helper:get_env(riak_kv, Key, CoreEnv).
+    app_helper:get_env(pdb, Key, Default).
 
 -spec update_levels(integer(),
                     [{integer(), [{integer(), binary()}]}],
