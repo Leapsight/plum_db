@@ -249,7 +249,7 @@ exchanging_data(timeout, _, State) ->
                 [Peer, LocalPrefixes, RemotePrefixes, Keys]
             );
         false ->
-            _ = lager:debug(
+            _ = lager:info(
                 "Completed metadata exchange with ~p. nothing repaired", [Peer])
     end,
     ok = release_locks(State),
