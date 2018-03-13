@@ -305,7 +305,10 @@ update(Node, Partition) ->
     X) -> X.
 
 compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
-    gen_server:call(name(Partition), {compare, RemoteFun, HandlerFun, HandlerAcc}, infinity).
+    gen_server:call(
+        name(Partition),
+        {compare, RemoteFun, HandlerFun, HandlerAcc},
+        infinity).
 
 
 
@@ -317,7 +320,8 @@ compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
 
 init([Partition, DataRoot]) ->
     schedule_tick(),
-    Tree = hashtree_tree:new(plumtree, [{data_dir, DataRoot}, {num_levels, 2}]),
+    TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
+    Tree = hashtree_tree:new(TreeId, [{data_dir, DataRoot}, {num_levels, 2}]),
     State = #state{
         partition = Partition,
         tree = Tree,
