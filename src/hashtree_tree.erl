@@ -187,7 +187,7 @@ new(TreeId, Opts) ->
                           data_root = DataRoot,
                           num_levels = NumLevels,
                           %% table needs to be public to allow async update
-                          nodes = ets:new(undefined, [public]),
+                          nodes = ets:new(TreeId, [public]),
                           snapshot = undefined,
                           dirty = gb_sets:new()},
     get_node(?ROOT, Tree),

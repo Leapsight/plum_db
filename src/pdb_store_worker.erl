@@ -113,6 +113,7 @@ handle_call({put, PKey, Context, ValueOrFun}, _From, State) ->
 handle_call({merge, PKey, Obj}, _From, State0) ->
     %% We implement puts here since we need to do a read followed by a write
     %% atomically, and we need to serialise them.
+    _ = lager:info("Merging ~p", [{PKey, Obj}]),
     Existing = get_object(PKey, State0),
     case pdb_object:reconcile(Obj, Existing) of
         false ->
@@ -172,7 +173,7 @@ get_object(PKey, State) ->
 %% @private
 store({_FullPrefix, _Key} = PKey, Metadata, State) ->
     Hash = pdb_object:hash(Metadata),
-    _ = pdb_hashtree:insert(State#state.partition, PKey, Hash, false),
+    ok = pdb_hashtree:insert(State#state.partition, PKey, Hash, false),
     ok = pdb_store_server:put(State#state.partition, PKey, Metadata),
     %% pdb_events:update(Metadata),
     {Metadata, State}.

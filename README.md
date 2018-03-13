@@ -19,8 +19,7 @@ pdb:put({bar, foo}, bar, 10).
 pdb:get({bar, foo}, bar).
 
 application:ensure_all_started(pdb).
-pdb:fold(fun({K, V}, Acc) -> [{K, V}|Acc] end, [], {foo, bar}).
-pdb:fold(fun({K, V}, Acc) -> [{K, V}|Acc] end, [], {bar, foo}).
+pdb:fold(fun({K, V}, Acc) -> [{K, V}|Acc] end, [], {undefined, undefined}).
 ```
 
 ## Cluster

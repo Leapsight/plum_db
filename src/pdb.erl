@@ -114,6 +114,8 @@
 -export([iterator_key_values/1]).
 -export([iterate/1]).
 -export([iterator_value/1]).
+-export([iterator_object/1]).
+-export([iterator_prefix/1]).
 -export([iterator_values/1]).
 -export([base_iterator/0]).
 -export([base_iterator/1]).
@@ -299,7 +301,8 @@ get_object(Node, PKey) when node() =:= Node ->
     get_object(PKey);
 
 get_object(Node, {{Prefix, SubPrefix}, _Key} = PKey)
-when is_binary(Prefix) andalso is_binary(SubPrefix) ->
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     %% We call the corresponding pdb_store_worker instance
     %% in the remote node.
     %% This assumes all nodes have the same number of pdb partitions.
@@ -622,7 +625,30 @@ iterator_value(#iterator{base_iterator = Base, opts = Opts} = I) ->
 iterator_value(#remote_base_iterator{ref = Ref, node = Node}) ->
     gen_server:call({?MODULE, Node}, {iterator_value, Ref}, infinity);
 
-iterator_value(#base_iterator{obj = Obj}) ->
+iterator_value(#base_iterator{obj = {{_Prefix, K}, V}}) ->
+    {K, V}.
+
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+iterator_prefix(#remote_base_iterator{ref = Ref, node = Node}) ->
+    gen_server:call({?MODULE, Node}, {iterator_prefix, Ref}, infinity);
+
+iterator_prefix(#base_iterator{obj = {{Prefix, _}, _}}) ->
+    Prefix.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+iterator_object(#remote_base_iterator{ref = Ref, node = Node}) ->
+    gen_server:call({?MODULE, Node}, {iterator_object, Ref}, infinity);
+
+iterator_object(#base_iterator{obj = Obj}) ->
     Obj.
 
 
@@ -721,24 +747,6 @@ delete(FullPrefix, Key) ->
 -spec delete(pdb_prefix(), pdb_key(), delete_opts()) -> ok.
 delete(FullPrefix, Key, _Opts) ->
     put(FullPrefix, Key, ?TOMBSTONE, []).
-
-
-%% -----------------------------------------------------------------------------
-%% @doc Same as merge/2 but merges the object on `Node'
-%% @end
-%% -----------------------------------------------------------------------------
--spec merge(node(), {pdb_pkey(), undefined | pdb_context()}, pdb_object()) ->
-    boolean().
-
-merge(Node, {PKey, _Context}, Obj) ->
-    Partition = get_partition(PKey),
-    %% Merge is implemented by the worker as an atomic read-merge-write op
-    %% TODO: Evaluate using the merge operation in RocksDB when available
-    gen_server:call(
-        {pdb_store_worker:name(Partition), Node},
-        {merge, PKey, Obj},
-        infinity
-    ).
 
 
 
@@ -930,7 +938,11 @@ base_iterator_prefix(#base_iterator{prefix = Prefix}) ->
 init([]) ->
     ?MODULE = ets:new(
         ?MODULE,
-        [named_table, {read_concurrency, true}, {write_concurrency, true}]
+        [
+            named_table,
+            {keypos, 1},
+            {read_concurrency, true},
+            {write_concurrency, true}]
     ),
     {ok, #state{iterators = ?MODULE}}.
 
@@ -953,6 +965,14 @@ handle_call({iterate, RemoteRef}, _From, State) ->
 
 handle_call({iterator_value, RemoteRef}, _From, State) ->
     Res = from_remote_base_iterator(fun iterator_value/1, RemoteRef, State),
+    {reply, Res, State};
+
+handle_call({iterator_object, RemoteRef}, _From, State) ->
+    Res = from_remote_base_iterator(fun iterator_object/1, RemoteRef, State),
+    {reply, Res, State};
+
+handle_call({iterator_prefix, RemoteRef}, _From, State) ->
+    Res = from_remote_base_iterator(fun iterator_prefix/1, RemoteRef, State),
     {reply, Res, State};
 
 handle_call({iterator_done, RemoteRef}, _From, State) ->
@@ -1037,6 +1057,24 @@ broadcast_data(#pdb_broadcast{pkey=Key, obj=Obj}) ->
 merge({PKey, _Context}, Obj) ->
     gen_server:call(
         pdb_store_worker:name(get_partition(PKey)),
+        {merge, PKey, Obj},
+        infinity
+    ).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Same as merge/2 but merges the object on `Node'
+%% @end
+%% -----------------------------------------------------------------------------
+-spec merge(node(), {pdb_pkey(), undefined | pdb_context()}, pdb_object()) ->
+    boolean().
+
+merge(Node, {PKey, _Context}, Obj) ->
+    Partition = get_partition(PKey),
+    %% Merge is implemented by the worker as an atomic read-merge-write op
+    %% TODO: Evaluate using the merge operation in RocksDB when available
+    gen_server:call(
+        {pdb_store_worker:name(Partition), Node},
         {merge, PKey, Obj},
         infinity
     ).

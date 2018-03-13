@@ -487,7 +487,8 @@ maybe_build_async(State) ->
 build_async(State) ->
     {_Pid, Ref} = spawn_monitor(fun() ->
         Partition = State#state.partition,
-        PrefixIt = pdb:base_iterator(undefined, undefined, Partition),
+        PrefixIt = pdb:base_iterator(
+            {undefined, undefined}, undefined, Partition),
         build(Partition, PrefixIt)
     end),
     State#state{built=Ref}.
@@ -500,7 +501,7 @@ build(Partition, PrefixIt) ->
         true ->
             pdb:iterator_close(PrefixIt);
         false ->
-            Prefix = pdb:iterator_value(PrefixIt),
+            Prefix = pdb:iterator_prefix(PrefixIt),
             ObjIt = pdb:base_iterator(Prefix, undefined, Partition),
             build(Partition, PrefixIt, ObjIt)
     end.

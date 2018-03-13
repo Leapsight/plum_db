@@ -126,10 +126,6 @@ acquiring_locks(
     {next_state, acquiring_locks, NewState, [{next_event, internal, start}]};
 
 acquiring_locks(cast, {remote_lock, ok}, State) ->
-    _ = lager:info(
-        "Acquired remote lock; peer=~p, partition=~p",
-        [State#state.peer, hd(State#state.partitions)]
-    ),
     {next_state, updating_hashtrees, State, [{next_event, internal, start}]};
 
 acquiring_locks(cast, {remote_lock, Reason}, State) ->
@@ -153,7 +149,6 @@ acquiring_locks(Type, Content, State) ->
 %% @end
 %% -----------------------------------------------------------------------------
 updating_hashtrees(internal, start, State) ->
-    _ = lager:info("Transitioned to updating_hashtrees", []),
     Partition = hd(State#state.partitions),
     %% Update local hastree
     ok = update_request(node(), Partition),
@@ -172,7 +167,6 @@ updating_hashtrees(
     {next_state, acquiring_locks, NewState, [{next_event, internal, start}]};
 
 updating_hashtrees(cast, local_tree_updated, State0) ->
-    _ = lager:info("updating_hashtrees; event=~p", [local_tree_updated]),
     State1 = State0#state{local_tree_updated = true},
     case State1#state.remote_tree_updated of
         true ->
@@ -182,7 +176,6 @@ updating_hashtrees(cast, local_tree_updated, State0) ->
     end;
 
 updating_hashtrees(cast, remote_tree_updated, State0) ->
-    _ = lager:info("updating_hashtrees; event=~p", [remote_tree_updated]),
     State1 = State0#state{remote_tree_updated = true},
     case State1#state.local_tree_updated of
         true ->
@@ -212,7 +205,6 @@ updating_hashtrees(Type, Content, State) ->
 %% @end
 %% -----------------------------------------------------------------------------
 exchanging_data(timeout, _, State) ->
-    _ = lager:info("Transitioned to exchanging_data", []),
     Peer = State#state.peer,
     Partition = hd(State#state.partitions),
 
@@ -243,14 +235,14 @@ exchanging_data(timeout, _, State) ->
     case Total > 0 of
         true ->
             _ = lager:info(
-                "Completed metadata exchange with ~p."
+                "Completed metadata exchange with peer ~p partition ~p."
                 " Repaired ~p missing local prefixes, "
                 "~p missing remote prefixes, and ~p keys",
-                [Peer, LocalPrefixes, RemotePrefixes, Keys]
+                [Peer, Partition, LocalPrefixes, RemotePrefixes, Keys]
             );
         false ->
             _ = lager:info(
-                "Completed metadata exchange with ~p. nothing repaired", [Peer])
+                "Completed metadata exchange with ~p, nothing repaired", [Peer])
     end,
     ok = release_locks(State),
     case State#state.partitions of
@@ -360,6 +352,7 @@ do_async(F) ->
 
 %% @private
 repair(Peer, {missing_prefix, Type, Prefix}) ->
+    lager:info(">>>>>>>>>>>> Missing ~p", [Prefix]),
     repair_prefix(Peer, Type, Prefix);
 
 repair(Peer, {key_diffs, Prefix, Diffs}) ->
@@ -370,7 +363,8 @@ repair(Peer, {key_diffs, Prefix, Diffs}) ->
 %% @private
 repair_prefix(Peer, Type, [Prefix]) ->
     ItType = repair_iterator_type(Type),
-    repair_sub_prefixes(Type, Peer, Prefix, repair_iterator(ItType, Peer, Prefix));
+    repair_sub_prefixes(
+        Type, Peer, Prefix, repair_iterator(ItType, Peer, Prefix));
 
 repair_prefix(Peer, Type, [Prefix, SubPrefix]) ->
     FullPrefix = {Prefix, SubPrefix},
@@ -384,9 +378,7 @@ repair_sub_prefixes(Type, Peer, Prefix, It) ->
         true ->
             pdb:iterator_close(It);
         false ->
-            SubPrefix = pdb:iterator_value(It),
-            FullPrefix = {Prefix, SubPrefix},
-
+            FullPrefix = {Prefix, _} = pdb:iterator_prefix(It),
             ItType = repair_iterator_type(Type),
             ObjIt = repair_iterator(ItType, Peer, FullPrefix),
             repair_full_prefix(Type, Peer, FullPrefix, ObjIt),
@@ -420,8 +412,8 @@ repair_keys(Peer, PrefixList, {_Type, KeyBin}) ->
     Key = binary_to_term(KeyBin),
     Prefix = list_to_tuple(PrefixList),
     PKey = {Prefix, Key},
-    LocalObj = pdb:get(PKey),
-    RemoteObj = pdb:get(Peer, PKey),
+    LocalObj = pdb:get_object(PKey),
+    RemoteObj = pdb:get_object(Peer, PKey),
     merge(undefined, PKey, RemoteObj),
     merge(Peer, PKey, LocalObj),
     ok.
@@ -438,11 +430,11 @@ merge(Peer, PKey, LocalObj) ->
 %% @private
 repair_iterator(local, _, Prefix)
 when is_atom(Prefix) orelse is_binary(Prefix) ->
-    pdb:iterator(Prefix);
+    pdb:base_iterator(Prefix);
 repair_iterator(local, _, Prefix) when is_tuple(Prefix) ->
-    pdb:iterator(Prefix, undefined);
+    pdb:base_iterator(Prefix, undefined);
 repair_iterator(remote, Peer, PrefixOrFull) ->
-    pdb:remote_iterator(Peer, PrefixOrFull).
+    pdb:remote_base_iterator(Peer, PrefixOrFull).
 
 
 %% @private
