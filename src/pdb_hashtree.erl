@@ -31,6 +31,9 @@
 -export([lock/1]).
 -export([lock/2]).
 -export([lock/3]).
+-export([release_lock/1]).
+-export([release_lock/2]).
+-export([release_lock/3]).
 -export([name/1]).
 -export([prefix_hash/2]).
 -export([start_link/1]).
@@ -60,7 +63,7 @@
 
     %% a monitor reference for a process that currently holds a
     %% lock on the tree. undefined otherwise
-    lock        :: {internal | external, reference()} | undefined
+    lock        :: {internal | external, reference(), pid()} | undefined
 }).
 
 
@@ -208,6 +211,51 @@ lock(Node, Partition, Pid) ->
     gen_server:call({name(Partition), Node}, {lock, Pid}, infinity).
 
 
+
+%% -----------------------------------------------------------------------------
+%% @doc Locks the tree on this node for updating on behalf of the
+%% calling process.
+%% @see lock/3
+%% @end
+%% -----------------------------------------------------------------------------
+-spec release_lock(pdb:partition()) -> ok.
+release_lock(Partition) ->
+    release_lock(node(), Partition).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Locks the tree on `Node' for updating on behalf of the calling
+%% process.
+%% @see lock/3
+%% @end
+%% -----------------------------------------------------------------------------
+-spec release_lock(node(), pdb:partition()) -> ok.
+
+release_lock(Node, Partition) ->
+    release_lock(Node, Partition, self()).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Lock the tree for updating. This function must be called
+%% before updating the tree with {@link update/1} or {@link
+%% update/2}. If the tree is not built or already locked then the call
+%% will fail and the appropriate atom is returned. Otherwise,
+%% aqcuiring the lock succeeds and `ok' is returned.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec release_lock(node(), pdb:partition(), pid()) -> ok.
+
+release_lock(Node, Partition, Pid) ->
+    Type = case node() of
+        Node ->
+            internal;
+        _ ->
+            external
+    end,
+    gen_server:call(
+        {name(Partition), Node}, {release_lock, Type, Pid}, infinity).
+
+
 %% -----------------------------------------------------------------------------
 %% @doc Updates the tree on this node.
 %% @see update/2
@@ -291,6 +339,10 @@ handle_call({lock, Pid}, _From, State) ->
     {Reply, State1} = maybe_external_lock(Pid, State),
     {reply, Reply, State1};
 
+handle_call({release_lock, Type, Pid}, _From, State) ->
+    {Reply, State1} = do_release_lock(Type, Pid, State),
+    {reply, Reply, State1};
+
 handle_call({get_bucket, Prefixes, Level, Bucket}, _From, State) ->
     Res = hashtree_tree:get_bucket(Prefixes, Level, Bucket, State#state.tree),
     {reply, Res, State};
@@ -326,8 +378,9 @@ handle_info(
     {noreply, State1};
 
 handle_info(
-    {'DOWN', LockRef, process, _Pid, _Reason}, State=#state{lock={_, LockRef}}) ->
-    State1 = release_lock(State),
+    {'DOWN', LockRef, process, _Pid, _Reason},
+    #state{lock = {_, LockRef, _}} = State) ->
+    {_, State1} = do_release_lock(State),
     {noreply, State1};
 
 handle_info(tick, State) ->
@@ -337,8 +390,9 @@ handle_info(tick, State) ->
     {noreply, State2}.
 
 
-terminate(_Reason, State) ->
-    hashtree_tree:destroy(State#state.tree),
+terminate(_Reason, State0) ->
+    {_, State1} = do_release_lock(State0),
+    hashtree_tree:destroy(State1#state.tree),
     ok.
 
 
@@ -356,7 +410,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @private
 maybe_compare_async(
     From, RemoteFun, HandlerFun, HandlerAcc,
-    State=#state{built = true, lock = {external, _}}) ->
+    State=#state{built = true, lock = {external, _, _}}) ->
     compare_async(From, RemoteFun, HandlerFun, HandlerAcc, State);
 
 maybe_compare_async(From, _, _, HandlerAcc, _State) ->
@@ -376,11 +430,11 @@ maybe_external_update(From, State=#state{built = true, lock = undefined}) ->
     gen_server:reply(From, not_locked),
     State;
 
-maybe_external_update(From, State=#state{built = true, lock = {internal, _}}) ->
+maybe_external_update(From, State=#state{built = true, lock = {internal, _, _}}) ->
     gen_server:reply(From, ongoing_update),
     State;
 
-maybe_external_update(From, State=#state{built = true, lock = {external, _}}) ->
+maybe_external_update(From, State=#state{built = true, lock = {external, _, _}}) ->
     update_async(From, false, State);
 
 maybe_external_update(From, State) ->
@@ -412,9 +466,9 @@ update_async(From, Lock, State=#state{tree = Tree}) ->
         end
     end),
     State1 = case Lock of
-                 true -> do_lock(Pid, internal, State);
-                 false -> State
-             end,
+        true -> do_lock(Pid, internal, State);
+        false -> State
+    end,
     State1#state{tree=Tree2}.
 
 
@@ -473,7 +527,7 @@ build_error(State) ->
 
 
 %% @private
-maybe_external_lock(Pid, State=#state{lock=undefined,built = true}) ->
+maybe_external_lock(Pid, State=#state{lock = undefined, built = true}) ->
     {ok, do_lock(Pid, external, State)};
 
 maybe_external_lock(_Pid, State=#state{built = true}) ->
@@ -486,11 +540,22 @@ maybe_external_lock(_Pid, State) ->
 %% @private
 do_lock(Pid, Type, State) ->
     LockRef = monitor(process, Pid),
-    State#state{lock = {Type, LockRef}}.
+    State#state{lock = {Type, LockRef, Pid}}.
+
 
 %% @private
-release_lock(State) ->
-    State#state{lock = undefined}.
+do_release_lock(Type, Pid, #state{lock = {Type, LockRef, Pid}} = State) ->
+    true = demonitor(LockRef),
+    do_release_lock(State);
+
+do_release_lock(_, _, State) ->
+    %% Type or Pid mismatch
+    {error, State}.
+
+
+%% @private
+do_release_lock(State) ->
+    {ok, State#state{lock = undefined}}.
 
 
 %% @private

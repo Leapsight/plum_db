@@ -290,7 +290,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 
 %% -----------------------------------------------------------------------------
 %% @doc Same as get/1 but reads the value from `Node'
-%% This is function is used by pdb_exchange_fsm.
+%% This is function is used by pdb_exchange_statem.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec get_object(node(), pdb_pkey()) -> pdb_object() | undefined.
@@ -1103,8 +1103,8 @@ graft(Context, Obj) ->
 -spec exchange(node()) -> {ok, pid()} | {error, term()}.
 
 exchange(Peer) ->
-    Timeout = app_helper:get_env(pdb, metadata_exchange_timeout, 60000),
-    case pdb_exchange_fsm:start(Peer, Timeout * partition_count()) of
+    %%
+    case pdb_exchange_statem:start(Peer, 60000) of
         {ok, Pid} ->
             {ok, Pid};
         {error, Reason} ->
