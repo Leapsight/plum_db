@@ -94,7 +94,8 @@ start_link(Partition, Opts) ->
 %% -----------------------------------------------------------------------------
 %% @private
 name(Partition) ->
-    list_to_atom("plum_db_store_server_" ++ integer_to_list(Partition)).
+    list_to_atom(
+        "plum_db_partition_" ++ integer_to_list(Partition) ++ "_server").
 
 
 

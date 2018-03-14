@@ -65,7 +65,7 @@ start_link(Id) ->
 %% -----------------------------------------------------------------------------
 %% @private
 name(Id) ->
-    list_to_atom("plum_db_store_worker_" ++ integer_to_list(Id)).
+    list_to_atom("plum_db_partition_" ++ integer_to_list(Id) ++ "_worker").
 
 
 

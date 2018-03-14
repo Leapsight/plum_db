@@ -12,8 +12,8 @@
 %%           |                       |
 %%           v                       v
 %% +------------------+    +------------------+
-%% |                  |    |                  |
-%% |     plum_db      |    |plum_db_store_sup |
+%% |                  |    |     plum_db_     |
+%% |     plum_db      |    |  partitions_sup  |
 %% |                  |    |                  |
 %% +------------------+    +------------------+
 %%                                   |
@@ -21,8 +21,8 @@
 %%                       |                       |
 %%                       v                       v
 %%             +------------------+    +------------------+
-%%             |  plum_db_store_  |    |  plum_db_store_  |
-%%             | partition_sup_1  |    | partition_sup_n  |
+%%             |plum_db_partition_|    |plum_db_partition_|
+%%             |      1_sup       |    |      n_sup       |
 %%             |                  |    |                  |
 %%             +------------------+    +------------------+
 %%                       |
@@ -30,8 +30,8 @@
 %%           |                       |                      |
 %%           v                       v                      v
 %% +------------------+    +------------------+   +------------------+
-%% |  plum_db_store_  |    |  plum_db_store_  |   |                  |
-%% |     worker_1     |    |     server_1     |   |plum_db_hashtree_1|
+%% |plum_db_partition_|    |plum_db_partition_|   |plum_db_partition_|
+%% |     1_worker     |    |     1_server     |   |    1_hashtree    |
 %% |                  |    |                  |   |                  |
 %% +------------------+    +------------------+   +------------------+
 %%                                   |                      |

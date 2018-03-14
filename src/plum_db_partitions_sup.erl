@@ -14,7 +14,7 @@
 %%    limitations under the License.
 %% -----------------------------------------------------------------------------
 
--module(plum_db_store_sup).
+-module(plum_db_partitions_sup).
 -behaviour(supervisor).
 
 -define(CHILD(Id, Mod, Type, Args, Timeout),

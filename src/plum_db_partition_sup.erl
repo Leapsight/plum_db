@@ -46,7 +46,7 @@ start_link(Partition) ->
 %% -----------------------------------------------------------------------------
 %% @private
 name(Id) when is_integer(Id) ->
-    list_to_atom("plum_db_store_partition_sup_" ++ integer_to_list(Id)).
+    list_to_atom("plum_db_partition_" ++ integer_to_list(Id) ++ "_sup").
 
 
 %% =============================================================================

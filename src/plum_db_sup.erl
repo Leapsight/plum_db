@@ -64,6 +64,6 @@ init([]) ->
     Children = [
         ?CHILD(plum_db, worker, []),
         ?CHILD(plum_db_events, worker, []),
-        ?CHILD(plum_db_store_sup, supervisor, [])
+        ?CHILD(plum_db_partitions_sup, supervisor, [])
     ],
     {ok, {RestartStrategy, Children}}.

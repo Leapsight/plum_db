@@ -95,7 +95,8 @@ start_link(Partition) ->
 %% @end
 %% -----------------------------------------------------------------------------
 name(Partition) ->
-    list_to_atom("plum_db_hashtree_" ++ integer_to_list(Partition)).
+    list_to_atom(
+        "plum_db_partition_" ++ integer_to_list(Partition) ++ "_hashtree").
 
 
 %% -----------------------------------------------------------------------------
