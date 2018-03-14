@@ -18,23 +18,31 @@ $ rebar3 as dev2 run
 $ rebar3 as dev3 run
 ```
 
-Go to node 1 and run
+Make node 2 and 3 join node 1
 
 ```erlang
-> plum_db_peer_service:myself().
-#{name => 'plum_db1@127.0.0.1', listen_addrs => [#{ip => {127,0,0,1}, port => 51107}]}
+plum_db2@127.0.0.1> plum_db_peer_service:join('plum_db1@127.0.0.1').
 ```
 
-Copy the result and in the other two nodes do:
-
 ```erlang
-> plum_db_peer_service:join(#{name => 'plum_db1@127.0.0.1', listen_addrs => [#{ip => {127,0,0,1}, port => 51107}]}).
+plum_db3@127.0.0.1> plum_db_peer_service:join('plum_db1@127.0.0.1').
 ```
 
 Check that the three nodes are visible in each node
 
 ```erlang
-> plum_db_peer_service:members().
+plum_db1@127.0.0.1> plum_db_peer_service:members().
+{ok,['plum_db3@127.0.0.1','plum_db2@127.0.0.1']}
+```
+
+```erlang
+plum_db2@127.0.0.1> plum_db_peer_service:members().
+{ok,['plum_db3@127.0.0.1','plum_db1@127.0.0.1']}
+```
+
+```erlang
+plum_db3@127.0.0.1> plum_db_peer_service:members().
+{ok,['plum_db2@127.0.0.1','plum_db1@127.0.0.1']}
 ```
 
 On node 1 do:
