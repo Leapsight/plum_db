@@ -1039,7 +1039,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec broadcast_data(plum_db_broadcast()) ->
     {{plum_db_pkey(), plum_db_context()}, plum_db_object()}.
 
-broadcast_data(#plum_db_broadcast{pkey=Key, obj=Obj}) ->
+broadcast_data(#plum_db_broadcast{pkey = Key, obj = Obj}) ->
     Context = plum_db_object:context(Obj),
     {{Key, Context}, Obj}.
 
@@ -1089,10 +1089,10 @@ merge(Node, {PKey, _Context}, Obj) ->
 %% -----------------------------------------------------------------------------
 -spec is_stale({plum_db_pkey(), plum_db_context()}) -> boolean().
 
-is_stale({{FullPrefix, Key}, Context}) ->
-    Existing = case ?MODULE:get(FullPrefix, Key) of
-        {ok, Value} -> Value;
-        {error, not_found} -> undefined
+is_stale({PKey, Context}) ->
+    Existing = case ?MODULE:get_object(PKey) of
+        {error, not_found} -> undefined;
+        Obj -> Obj
     end,
     plum_db_object:is_stale(Context, Existing).
 
@@ -1109,8 +1109,8 @@ is_stale({{FullPrefix, Key}, Context}) ->
 -spec graft({plum_db_pkey(), plum_db_context()}) ->
     stale | {ok, plum_db_object()} | {error, term()}.
 
-graft({{FullPrefix, Key}, Context}) ->
-    case ?MODULE:get(FullPrefix, Key) of
+graft({PKey, Context}) ->
+    case ?MODULE:get_object(PKey) of
         {error, not_found} ->
             %% There would have to be a serious error in implementation to hit
             %% this case.
