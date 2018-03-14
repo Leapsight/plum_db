@@ -21,20 +21,20 @@ $ rebar3 as dev3 run
 Go to node 1 and run
 
 ```erlang
-> partisan_peer_service_manager:myself().
+> plum_db_peer_service:myself().
 #{name => 'plum_db1@127.0.0.1', listen_addrs => [#{ip => {127,0,0,1}, port => 51107}]}
 ```
 
 Copy the result and in the other two nodes do:
 
 ```erlang
-> partisan_peer_service:join(#{name => 'plum_db1@127.0.0.1', listen_addrs => [#{ip => {127,0,0,1}, port => 51107}]}).
+> plum_db_peer_service:join(#{name => 'plum_db1@127.0.0.1', listen_addrs => [#{ip => {127,0,0,1}, port => 51107}]}).
 ```
 
 Check that the three nodes are visible in each node
 
 ```erlang
-> partisan_peer_service:members().
+> plum_db_peer_service:members().
 ```
 
 On node 1 do:
