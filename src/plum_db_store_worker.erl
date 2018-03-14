@@ -113,7 +113,6 @@ handle_call({put, PKey, Context, ValueOrFun}, _From, State) ->
 handle_call({merge, PKey, Obj}, _From, State0) ->
     %% We implement puts here since we need to do a read followed by a write
     %% atomically, and we need to serialise them.
-    _ = lager:info("Merging ~p", [{PKey, Obj}]),
     Existing = get_object(PKey, State0),
     case plum_db_object:reconcile(Obj, Existing) of
         false ->
@@ -171,9 +170,9 @@ get_object(PKey, State) ->
 
 
 %% @private
-store({_FullPrefix, _Key} = PKey, Metadata, State) ->
-    Hash = plum_db_object:hash(Metadata),
+store({_FullPrefix, _Key} = PKey, Obj, State) ->
+    Hash = plum_db_object:hash(Obj),
     ok = plum_db_hashtree:insert(State#state.partition, PKey, Hash, false),
-    ok = plum_db_store_server:put(State#state.partition, PKey, Metadata),
-    %% plum_db_events:update(Metadata),
-    {Metadata, State}.
+    ok = plum_db_store_server:put(State#state.partition, PKey, Obj),
+    ok = plum_db_events:update(Obj),
+    {Obj, State}.

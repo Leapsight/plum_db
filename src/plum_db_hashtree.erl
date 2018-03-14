@@ -77,7 +77,7 @@
 
 %% -----------------------------------------------------------------------------
 %% @doc Starts the process using {@link start_link/1}, passing in the
-%% directory where other cluster metadata is stored in `data_dir'
+%% directory where other cluster data is stored in `data_dir'
 %% as the data root.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -287,7 +287,7 @@ update(Node, Partition) ->
 
 %% -----------------------------------------------------------------------------
 %% @doc Compare the local tree managed by this process with the remote
-%% tree also managed by a metadata hashtree process. `RemoteFun' is
+%% tree also managed by a hashtree process. `RemoteFun' is
 %% used to access the buckets and segments of nodes in the remote tree
 %% and should usually call {@link get_bucket/5} and {@link
 %% key_hashes/4}. `HandlerFun' is used to process the differences

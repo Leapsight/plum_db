@@ -485,7 +485,7 @@ rehash_perform(State) ->
             NewState
     end.
 
-%% @doc Mark/clear metadata for tree-id opened/closed.
+%% @doc Mark/clear for tree-id opened/closed.
 %%      Set next_rebuild to be incremental.
 -spec mark_open_empty(index_n()|binary(), hashtree()) -> hashtree().
 mark_open_empty(TreeId, State) when is_binary(TreeId) ->
@@ -495,7 +495,7 @@ mark_open_empty(TreeId, State) ->
     mark_open_empty(term_to_binary(TreeId), State).
 
 %% @doc Check if shutdown/closing of tree-id was clean/dirty by comparing
-%%      `closed' to `opened' metadata count for the hashtree, and,
+%%      `closed' to `opened' count for the hashtree, and,
 %%      increment opened count for hashtree-id.
 %%
 %%
@@ -565,7 +565,7 @@ set_next_rebuild(Tree, NextRebuild) ->
     Tree#state{next_rebuild = NextRebuild}.
 
 %% Note: meta is currently a one per file thing, even if there are multiple
-%%       trees per file. This is intentional. If we want per tree metadata
+%%       trees per file. This is intentional. If we want per tree
 %%       this will need to be added as a separate thing.
 -spec write_meta(binary(), binary()|term(), hashtree()) -> hashtree().
 write_meta(Key, Value, State) when is_binary(Key) and is_binary(Value) ->

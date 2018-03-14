@@ -7,7 +7,7 @@
                                     plum_db_value() | plum_db_tombstone()) -> plum_db_value()).
 -type plum_db_modifier()   :: fun(([plum_db_value() | plum_db_tombstone()] | undefined) ->
                                           plum_db_value()).
--type plum_db_object()     :: {metadata, dvvset:clock()}.
+-type plum_db_object()     :: {object, dvvset:clock()}.
 -type plum_db_context()    :: dvvset:vector().
 
 -record(plum_db_broadcast, {

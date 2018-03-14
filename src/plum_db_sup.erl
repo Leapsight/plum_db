@@ -63,7 +63,7 @@ init([]) ->
     RestartStrategy = {one_for_one, 10, 10},
     Children = [
         ?CHILD(plum_db, worker, []),
+        ?CHILD(plum_db_events, worker, []),
         ?CHILD(plum_db_store_sup, supervisor, [])
-        %% ?CHILD(plum_db_events, worker),
     ],
     {ok, {RestartStrategy, Children}}.

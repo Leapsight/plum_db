@@ -68,7 +68,7 @@ add_sup_callback(Fn) when is_function(Fn) ->
 %% @end
 %% -----------------------------------------------------------------------------
 update(Obj) ->
-    gen_event:notify(?MODULE, {metadata_object_update, Obj}).
+    gen_event:notify(?MODULE, {object_update, Obj}).
 
 
 
@@ -83,7 +83,7 @@ update(Obj) ->
 init([Fn]) ->
     {ok, #state{callback = Fn}}.
 
-handle_event({metadata_object_update, Obj}, State) ->
+handle_event({object_update, Obj}, State) ->
     (State#state.callback)(Obj),
     {ok, State}.
 

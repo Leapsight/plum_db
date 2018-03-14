@@ -37,32 +37,32 @@
 %% @doc returns a single value. if the object holds more than one value an error is generated
 %% @see values/2
 -spec value(plum_db_object()) -> plum_db_value().
-value(Metadata) ->
-    [Value] = values(Metadata),
+value(Obj) ->
+    [Value] = values(Obj),
     Value.
 
 %% @doc returns a list of values held in the object
 -spec values(plum_db_object()) -> [plum_db_value()].
-values({metadata, Object}) ->
+values({object, Object}) ->
     [Value || {Value, _Ts} <- dvvset:values(Object)].
 
 %% @doc returns the number of siblings in the given object
 -spec value_count(plum_db_object()) -> non_neg_integer().
-value_count({metadata, Object}) ->
+value_count({object, Object}) ->
     dvvset:size(Object).
 
 %% @doc returns the context (opaque causal history) for the given object
 -spec context(plum_db_object()) -> plum_db_context().
-context({metadata, Object}) ->
+context({object, Object}) ->
     dvvset:join(Object).
 
 %% @doc returns the representation for an empty context (opaque causal history)
 -spec empty_context() -> plum_db_context().
 empty_context() -> [].
 
-%% @doc returns a hash representing the metadata objects contents
+%% @doc returns a hash representing the objects contents
 -spec hash(plum_db_object()) -> binary().
-hash({metadata, Object}) ->
+hash({object, Object}) ->
     crypto:hash(sha, term_to_binary(Object)).
 
 %% @doc modifies a potentially existing object, setting its value and updating
@@ -82,10 +82,10 @@ modify(undefined, _Context, Value, ServerId) ->
     %% Ignore the context since we dont have a value, its invalid if not
     %% empty anyways, so give it a valid one
     NewRecord = dvvset:new(timestamped_value(Value)),
-    {metadata, dvvset:update(NewRecord, ServerId)};
-modify({metadata, Existing}, Context, Value, ServerId) ->
+    {object, dvvset:update(NewRecord, ServerId)};
+modify({object, Existing}, Context, Value, ServerId) ->
     InsertRec = dvvset:new(Context, timestamped_value(Value)),
-    {metadata, dvvset:update(InsertRec, Existing, ServerId)}.
+    {object, dvvset:update(InsertRec, Existing, ServerId)}.
 
 %% @doc Reconciles a remote object received during replication or anti-entropy
 %% with a local object. If the remote object is an anscestor of or is equal to the local one
@@ -97,26 +97,26 @@ reconcile(undefined, _LocalObj) ->
     false;
 reconcile(RemoteObj, undefined) ->
     {true, RemoteObj};
-reconcile({metadata, RemoteObj}, {metadata, LocalObj}) ->
+reconcile({object, RemoteObj}, {object, LocalObj}) ->
     Less  = dvvset:less(RemoteObj, LocalObj),
     Equal = dvvset:equal(RemoteObj, LocalObj),
     case not (Equal or Less) of
         false -> false;
         true ->
-            {true, {metadata, dvvset:sync([LocalObj, RemoteObj])}}
+            {true, {object, dvvset:sync([LocalObj, RemoteObj])}}
     end.
 
 %% @doc Resolves siblings using either last-write-wins or the provided function and returns
 %% an object containing a single value. The causal history is not updated
 -spec resolve(plum_db_object(), lww | fun(([plum_db_value()]) -> plum_db_value())) ->
                      plum_db_object().
-resolve({metadata, Object}, lww) ->
+resolve({object, Object}, lww) ->
     LWW = fun ({_,TS1}, {_,TS2}) -> TS1 =< TS2 end,
-    {metadata, dvvset:lww(LWW, Object)};
-resolve({metadata, Existing}, Reconcile) when is_function(Reconcile) ->
+    {object, dvvset:lww(LWW, Object)};
+resolve({object, Existing}, Reconcile) when is_function(Reconcile) ->
     ResolveFun = fun({A, _}, {B, _}) -> timestamped_value(Reconcile(A, B)) end,
     F = fun([Value | Rest]) -> lists:foldl(ResolveFun, Value, Rest) end,
-    {metadata, dvvset:reconcile(F, Existing)}.
+    {object, dvvset:reconcile(F, Existing)}.
 
 %% @doc Determines if the given context (version vector) is causually newer than
 %% an existing object. If the object missing or if the context does not represent
@@ -126,7 +126,7 @@ resolve({metadata, Existing}, Reconcile) when is_function(Reconcile) ->
 -spec is_stale(plum_db_context(), plum_db_object()) -> boolean().
 is_stale(_, undefined) ->
     false;
-is_stale(RemoteContext, {metadata, Obj}) ->
+is_stale(RemoteContext, {object, Obj}) ->
     LocalContext = dvvset:join(Obj),
     %% returns true (stale) when local context is causally newer or equal to remote context
     descends(LocalContext, RemoteContext).
@@ -143,7 +143,7 @@ descends(Ca, Cb) ->
 
 %% @doc Returns true if the given context and the context of the existing object are equal
 -spec equal_context(plum_db_context(), plum_db_object()) -> boolean().
-equal_context(Context, {metadata, Obj}) ->
+equal_context(Context, {object, Obj}) ->
     Context =:= dvvset:join(Obj).
 
 timestamped_value(Value) ->

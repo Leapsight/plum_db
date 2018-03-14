@@ -524,7 +524,7 @@ iterator_done(#base_iterator{}) ->
 %% will be resolved using the given function or last-write-wins (if `lww' is
 %% passed as the resolver). If no resolver was used then no conflict resolution
 %% will take place. If conflicts are resolved, the resolved value is written to
-%% local metadata and a broadcast is submitted to update other nodes in the
+%% local store and a broadcast is submitted to update other nodes in the
 %% cluster if `allow_put' is `true'. If `allow_put' is `false' the values are
 %% resolved but are not written or broadcast. A single value is returned as the
 %% second element of the tuple in the case values are resolved. If no
@@ -702,8 +702,8 @@ put(FullPrefix, Key, ValueOrFun) ->
 %% are no put options.
 %%
 %% NOTE: because the third argument to this function can be a plum_db_modifier(),
-%% used to resolve conflicts on write, metadata values cannot be functions.
-%% To store functions in metadata wrap them in another type like a tuple.
+%% used to resolve conflicts on write, values cannot be functions.
+%% To store functions wrap them in another type like a tuple.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec put(plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier(), put_opts()) ->
@@ -1045,7 +1045,7 @@ broadcast_data(#plum_db_broadcast{pkey=Key, obj=Obj}) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Merges a remote copy of a metadata record sent via broadcast w/ the
+%% @doc Merges a remote copy of an object record sent via broadcast w/ the
 %% local view for the key contained in the message id. If the remote copy is
 %% causally older than the current data stored then `false' is returned and no
 %% updates are merged. Otherwise, the remote copy is merged (possibly

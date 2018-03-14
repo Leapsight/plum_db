@@ -19,8 +19,8 @@
 %% -------------------------------------------------------------------
 
 %% @doc This module implements a specialized hash tree that is used
-%% primarily by cluster metadata's anti-entropy exchanges and by
-%% metadata clients for determining when groups of metadata keys have
+%% primarily by cluster anti-entropy exchanges and by
+%% clients for determining when groups of keys have
 %% changed locally. The tree can be used, generally, for determining
 %% the differences in groups of keys, or to find missing groups, between
 %% two stores.
