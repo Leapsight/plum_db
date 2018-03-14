@@ -1,46 +1,62 @@
-plum_db
-=====
+# plum_db
 
-An OTP application
+A database globally replicated via Epidemic Broadcast Trees and lasp-lang’s Partisan. An offspring of Plumtree and Partisan, a descendant of Riak Core Metadata Store.
 
-Build
------
+## Running a 3-node cluster
+
+To run a three node cluster do the following in three separate shells.
+
 ```bash
-
+$ rebar3 as dev1 run
 ```
+
+```bash
+$ rebar3 as dev2 run
+```
+
+```bash
+$ rebar3 as dev3 run
+```
+
+Go to node 1 and run
 
 ```erlang
-application:ensure_all_started(plum_db).
-plum_db:put({foo, bar}, foo, 1).
-plum_db:put({foo, bar}, bar, 2).
-plum_db:put({bar, foo}, foo, 3).
-plum_db:put({bar, foo}, bar, 4).
-plum_db:put({bar, foo}, bar, 10).
-plum_db:get({bar, foo}, bar).
-
-application:ensure_all_started(plum_db).
-plum_db:fold(fun({K, V}, Acc) -> [{K, V}|Acc] end, [], {undefined, undefined}).
+> partisan_peer_service_manager:myself().
+#{name => 'plum_db1@127.0.0.1', listen_addrs => [#{ip => {127,0,0,1}, port => 51107}]}
 ```
 
-## Cluster
-
-On node 1:
+Copy the result and in the other two nodes do:
 
 ```erlang
-Peer = partisan_peer_service_manager:myself().
+> partisan_peer_service:join(#{name => 'plum_db1@127.0.0.1', listen_addrs => [#{ip => {127,0,0,1}, port => 51107}]}).
 ```
 
-On node 2:
-```erlang
-partisan_peer_service:join(#{name => 'plum_db1@127.0.0.1', listen_addrs => [#{ip => {127,0,0,1}, port => 51107}]}).
-partisan_peer_service:members().
-```
-
-## Sync
+Check that the three nodes are visible in each node
 
 ```erlang
-dbg:tracer(), dbg:p(all,c).
-dbg:tpl(plum_db_exchange_statem, '_', []).
+> partisan_peer_service:members().
 ```
 
-## Disconnecting
+On node 1 do:
+
+```erlang
+> plum_db:put({foo, bar}, foo, 1).
+```
+
+On node 2 do:
+
+```erlang
+> plum_db:put({foo, bar}, bar, 2).
+```
+
+On node 3 do:
+
+```erlang
+> plum_db:put({foo, bar}, foobar, 3).
+```
+
+Do the following on each node to check they now all have the three elements:
+
+``` erlang
+> plum_db:fold(fun({K, V}, Acc) -> [{K, V}|Acc] end, [], {undefined, undefined}).
+```
