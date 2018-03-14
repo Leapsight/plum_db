@@ -1089,8 +1089,8 @@ merge(Node, {PKey, _Context}, Obj) ->
 %% -----------------------------------------------------------------------------
 -spec is_stale({plum_db_pkey(), plum_db_context()}) -> boolean().
 
-is_stale({PKey, Context}) ->
-    Existing = case ?MODULE:get(PKey) of
+is_stale({{FullPrefix, Key}, Context}) ->
+    Existing = case ?MODULE:get(FullPrefix, Key) of
         {ok, Value} -> Value;
         {error, not_found} -> undefined
     end,
@@ -1109,8 +1109,8 @@ is_stale({PKey, Context}) ->
 -spec graft({plum_db_pkey(), plum_db_context()}) ->
     stale | {ok, plum_db_object()} | {error, term()}.
 
-graft({PKey, Context}) ->
-    case ?MODULE:get(PKey) of
+graft({{FullPrefix, Key}, Context}) ->
+    case ?MODULE:get(FullPrefix, Key) of
         {error, not_found} ->
             %% There would have to be a serious error in implementation to hit
             %% this case.
