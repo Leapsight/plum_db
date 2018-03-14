@@ -778,7 +778,7 @@ base_iterator() ->
 %% -----------------------------------------------------------------------------
 -spec base_iterator(binary() | atom()) -> base_iterator().
 base_iterator(Prefix) when is_binary(Prefix) or is_atom(Prefix) ->
-    new_base_iterator(undefined, Prefix).
+    new_base_iterator({Prefix, undefined}, undefined).
 
 
 %% -----------------------------------------------------------------------------
@@ -807,8 +807,8 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 -spec base_iterator(undefined | pdb_prefix(), term(), non_neg_integer()) ->
     base_iterator().
 
-base_iterator(undefined, KeyMatch, Partition) when is_integer(Partition) ->
-    new_base_iterator(undefined, KeyMatch, Partition);
+base_iterator(undefined, Prefix, Partition) ->
+    base_iterator({Prefix, undefined}, undefined, Partition);
 
 base_iterator({Prefix, SubPrefix} = FullPrefix, KeyMatch, Partition)
 when (is_binary(Prefix) orelse is_atom(Prefix))
@@ -976,10 +976,12 @@ handle_call({iterator_prefix, RemoteRef}, _From, State) ->
     {reply, Res, State};
 
 handle_call({iterator_done, RemoteRef}, _From, State) ->
-    Res = case from_remote_base_iterator(fun iterator_done/1, RemoteRef, State) of
-              undefined -> true; %% if we don't know about iterator, treat it as done
-              Other -> Other
-          end,
+    Res = case
+        from_remote_base_iterator(fun iterator_done/1, RemoteRef, State)
+    of
+        undefined -> true; % if we don't know about iterator, treat it as done
+        Other -> Other
+    end,
     {reply, Res, State};
 
 handle_call({iterator_close, RemoteRef}, _From, State) ->
@@ -1276,8 +1278,10 @@ new_remote_base_iterator(
 %% @private
 from_remote_base_iterator(Fun, Ref, State) ->
     case ets:lookup(State#state.iterators, Ref) of
-        [] -> undefined;
-        [{Ref, It}] -> Fun(It)
+        [] ->
+            undefined;
+        [{Ref, It}] ->
+            Fun(It)
     end.
 
 

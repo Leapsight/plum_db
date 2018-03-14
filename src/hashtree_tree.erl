@@ -274,6 +274,7 @@ local_compare(T1, T2) ->
     RemoteFun = fun(Prefixes, {get_bucket, {Level, Bucket}}) ->
                         hashtree_tree:get_bucket(Prefixes, Level, Bucket, T2);
                    (Prefixes, {key_hashes, Segment}) ->
+
                         [{_, Hashes}] = hashtree_tree:key_hashes(Prefixes, Segment, T2),
                         Hashes
                 end,

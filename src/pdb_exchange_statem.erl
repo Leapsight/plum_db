@@ -352,7 +352,6 @@ do_async(F) ->
 
 %% @private
 repair(Peer, {missing_prefix, Type, Prefix}) ->
-    lager:info(">>>>>>>>>>>> Missing ~p", [Prefix]),
     repair_prefix(Peer, Type, Prefix);
 
 repair(Peer, {key_diffs, Prefix, Diffs}) ->
@@ -431,8 +430,8 @@ merge(Peer, PKey, LocalObj) ->
 repair_iterator(local, _, Prefix)
 when is_atom(Prefix) orelse is_binary(Prefix) ->
     pdb:base_iterator(Prefix);
-repair_iterator(local, _, Prefix) when is_tuple(Prefix) ->
-    pdb:base_iterator(Prefix, undefined);
+repair_iterator(local, _, FullPrefix) when is_tuple(FullPrefix) ->
+    pdb:base_iterator(FullPrefix, undefined);
 repair_iterator(remote, Peer, PrefixOrFull) ->
     pdb:remote_base_iterator(Peer, PrefixOrFull).
 
