@@ -18,7 +18,7 @@
 %% @doc  A wrapper for an elevelb instance.
 %% @end
 %% -----------------------------------------------------------------------------
--module(plum_db_store_server).
+-module(plum_db_partition_server).
 -behaviour(gen_server).
 
 

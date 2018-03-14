@@ -17,7 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(plum_db_store_worker).
+-module(plum_db_partition_worker).
 -behaviour(gen_server).
 -include("plum_db.hrl").
 
@@ -50,7 +50,7 @@
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Start plum_db_store_worker for the partition Id and link to calling process.
+%% @doc Start plum_db_partition_worker for the partition Id and link to calling process.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec start_link(non_neg_integer()) -> {ok, pid()} | ignore | {error, term()}.
@@ -161,7 +161,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @private
 get_object(PKey, State) ->
-    case plum_db_store_server:get(State#state.partition, PKey) of
+    case plum_db_partition_server:get(State#state.partition, PKey) of
         {error, not_found} ->
             undefined;
         {ok, Existing} ->
@@ -172,7 +172,7 @@ get_object(PKey, State) ->
 %% @private
 store({_FullPrefix, _Key} = PKey, Obj, State) ->
     Hash = plum_db_object:hash(Obj),
-    ok = plum_db_hashtree:insert(State#state.partition, PKey, Hash, false),
-    ok = plum_db_store_server:put(State#state.partition, PKey, Obj),
+    ok = plum_db_partition_hashtree:insert(State#state.partition, PKey, Hash, false),
+    ok = plum_db_partition_server:put(State#state.partition, PKey, Obj),
     ok = plum_db_events:update(Obj),
     {Obj, State}.

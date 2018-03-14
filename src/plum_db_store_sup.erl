@@ -48,16 +48,16 @@ init([]) ->
     RestartStrategy = {one_for_one, 5, 1},
     Children = [
         #{
-            id => plum_db_store_partition_sup:name(Id),
+            id => plum_db_partition_sup:name(Id),
             start => {
-                plum_db_store_partition_sup,
+                plum_db_partition_sup,
                 start_link,
                 [Id]
             },
             restart => permanent,
             shutdown => infinity,
             type => supervisor,
-            modules => [plum_db_store_partition_sup]
+            modules => [plum_db_partition_sup]
         }
         || Id <- plum_db:partitions()
     ],

@@ -210,15 +210,15 @@ exchanging_data(timeout, _, State) ->
 
     RemoteFun = fun
         (Prefixes, {get_bucket, {Level, Bucket}}) ->
-            plum_db_hashtree:get_bucket(Peer, Partition, Prefixes, Level, Bucket);
+            plum_db_partition_hashtree:get_bucket(Peer, Partition, Prefixes, Level, Bucket);
         (Prefixes, {key_hashes, Segment}) ->
-            plum_db_hashtree:key_hashes(Peer, Partition, Prefixes, Segment)
+            plum_db_partition_hashtree:key_hashes(Peer, Partition, Prefixes, Segment)
     end,
     HandlerFun = fun(Diff, Acc) ->
         repair(Peer, Diff),
         track_repair(Diff, Acc)
     end,
-    Res = plum_db_hashtree:compare(
+    Res = plum_db_partition_hashtree:compare(
         Partition,
         RemoteFun,
         HandlerFun,
@@ -288,7 +288,7 @@ log_event(StateLabel, Type, Event, State) ->
 
 acquire_local_lock(#state{partitions = [H|T]} = State) ->
     %% get local lock
-    case plum_db_hashtree:lock(H) of
+    case plum_db_partition_hashtree:lock(H) of
         ok ->
             {ok, H, State};
         Error ->
@@ -307,7 +307,7 @@ acquire_local_lock(#state{partitions = []} = State) ->
 async_acquire_remote_lock(Peer, Partition) ->
     Self = self(),
     do_async(fun() ->
-        Res = plum_db_hashtree:lock(Peer, Partition, Self),
+        Res = plum_db_partition_hashtree:lock(Peer, Partition, Self),
         {remote_lock, Res}
     end).
 
@@ -315,12 +315,12 @@ async_acquire_remote_lock(Peer, Partition) ->
 release_locks(State) ->
     Partition = hd(State#state.partitions),
     %% Release remote lock
-    _ = plum_db_hashtree:release_lock(State#state.peer, Partition),
+    _ = plum_db_partition_hashtree:release_lock(State#state.peer, Partition),
     release_local_lock(State).
 
 
 release_local_lock(State) ->
-    _ = plum_db_hashtree:release_lock(hd(State#state.partitions)),
+    _ = plum_db_partition_hashtree:release_lock(hd(State#state.partitions)),
     ok.
 
 
@@ -329,7 +329,7 @@ update_request(Node, Partition) when Node =:= node() ->
     do_async(fun() ->
         %% acquired lock so we know there is no other update
         %% and tree is built
-        case plum_db_hashtree:update(Node, Partition) of
+        case plum_db_partition_hashtree:update(Node, Partition) of
             ok -> local_tree_updated;
             Error -> {error, {local, Error}}
         end
@@ -339,7 +339,7 @@ update_request(Node, Partition) ->
     do_async(fun() ->
         %% acquired lock so we know there is no other update
         %% and tree is built
-        case plum_db_hashtree:update(Node, Partition) of
+        case plum_db_partition_hashtree:update(Node, Partition) of
             ok -> remote_tree_updated;
             Error -> {error, {remote, Error}}
         end

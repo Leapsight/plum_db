@@ -14,7 +14,7 @@
 %%    limitations under the License.
 %% -----------------------------------------------------------------------------
 
--module(plum_db_store_partition_sup).
+-module(plum_db_partition_sup).
 -behaviour(supervisor).
 
 -define(CHILD(Id, Mod, Type, Args, Timeout),
@@ -60,40 +60,40 @@ init([Id]) ->
     RestartStrategy = {one_for_all, 5, 1},
     Children = [
         #{
-            id => plum_db_store_server:name(Id),
+            id => plum_db_partition_server:name(Id),
             start => {
-                plum_db_store_server,
+                plum_db_partition_server,
                 start_link,
                 [Id, Opts]
             },
             restart => permanent,
             shutdown => 5000,
             type => worker,
-            modules => [plum_db_store_server]
+            modules => [plum_db_partition_server]
         },
         #{
-            id => plum_db_store_worker:name(Id),
+            id => plum_db_partition_worker:name(Id),
             start => {
-                plum_db_store_worker,
+                plum_db_partition_worker,
                 start_link,
                 [Id]
             },
             restart => permanent,
             shutdown => 5000,
             type => worker,
-            modules => [plum_db_store_worker]
+            modules => [plum_db_partition_worker]
         },
         #{
-            id => plum_db_hashtree:name(Id),
+            id => plum_db_partition_hashtree:name(Id),
             start => {
-                plum_db_hashtree,
+                plum_db_partition_hashtree,
                 start_link,
                 [Id]
             },
             restart => permanent,
             shutdown => 5000,
             type => worker,
-            modules => [plum_db_hashtree]
+            modules => [plum_db_partition_hashtree]
         }
     ],
     {ok, {RestartStrategy, Children}}.

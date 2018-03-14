@@ -17,7 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(plum_db_hashtree).
+-module(plum_db_partition_hashtree).
 
 -behaviour(gen_server).
 

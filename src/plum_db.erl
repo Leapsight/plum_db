@@ -42,7 +42,7 @@
     obj                     ::  {plum_db_key(), plum_db_object()}
                                 | plum_db_key()
                                 | undefined,
-    ref                     ::  plum_db_store_server:iterator(),
+    ref                     ::  plum_db_partition_server:iterator(),
     partitions              ::  [non_neg_integer()]
 }).
 
@@ -282,7 +282,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 get_object({{Prefix, SubPrefix}, _Key} = PKey)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
-    case plum_db_store_server:get(PKey) of
+    case plum_db_partition_server:get(PKey) of
         {error, not_found} ->
             undefined;
         {ok, Existing} ->
@@ -303,11 +303,11 @@ get_object(Node, PKey) when node() =:= Node ->
 get_object(Node, {{Prefix, SubPrefix}, _Key} = PKey)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
-    %% We call the corresponding plum_db_store_worker instance
+    %% We call the corresponding plum_db_partition_worker instance
     %% in the remote node.
     %% This assumes all nodes have the same number of plum_db partitions.
     gen_server:call(
-        {plum_db_store_worker:name(get_partition(PKey)), Node},
+        {plum_db_partition_worker:name(get_partition(PKey)), Node},
         {get_object, PKey},
         infinity
     ).
@@ -441,9 +441,9 @@ iterate(#base_iterator{ref = undefined, partitions = [H|_]} = I0) ->
     First = first_key(I0#base_iterator.prefix),
     Ref = case I0#base_iterator.keys_only of
         true ->
-            plum_db_store_server:key_iterator(H);
+            plum_db_partition_server:key_iterator(H);
         false ->
-            plum_db_store_server:iterator(H)
+            plum_db_partition_server:iterator(H)
     end,
     iterate(eleveldb:iterator_move(Ref, First), I0#base_iterator{ref = Ref});
 
@@ -453,7 +453,7 @@ iterate(#base_iterator{ref = Ref} = I) ->
 
 iterate({error, _}, #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
     %% There are no more elements in the partition
-    ok = plum_db_store_server:iterator_close(H, Ref),
+    ok = plum_db_partition_server:iterator_close(H, Ref),
     iterate(I#base_iterator{ref = undefined, partitions = T});
 
 iterate({ok, K}, #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
@@ -462,7 +462,7 @@ iterate({ok, K}, #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
         true ->
             I#base_iterator{obj = PKey};
         false ->
-            ok = plum_db_store_server:iterator_close(H, Ref),
+            ok = plum_db_partition_server:iterator_close(H, Ref),
             iterate(I#base_iterator{ref = undefined, partitions = T})
     end;
 
@@ -472,7 +472,7 @@ iterate({ok, K, V},  #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
         true ->
             I#base_iterator{obj = {PKey, binary_to_term(V)}};
         false ->
-            ok = plum_db_store_server:iterator_close(H, Ref),
+            ok = plum_db_partition_server:iterator_close(H, Ref),
             iterate(I#base_iterator{ref = undefined, partitions = T})
     end.
 
@@ -494,7 +494,7 @@ iterator_close(#base_iterator{ref = undefined}) ->
     ok;
 
 iterator_close(#base_iterator{partitions = [H|_], ref = Ref}) ->
-    plum_db_store_server:iterator_close(H, Ref).
+    plum_db_partition_server:iterator_close(H, Ref).
 
 
 %% -----------------------------------------------------------------------------
@@ -684,7 +684,7 @@ iterator_default(#iterator{opts = Opts} = I) ->
 
 prefix_hash(Prefix)
 when is_tuple(Prefix) or is_atom(Prefix) or is_binary(Prefix) ->
-    plum_db_hashtree:prefix_hash(Prefix).
+    plum_db_partition_hashtree:prefix_hash(Prefix).
 
 
 %% -----------------------------------------------------------------------------
@@ -1032,7 +1032,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% -----------------------------------------------------------------------------
 %% @doc Deconstructs are broadcast that is sent using
-%% `plum_db_store_worker' as the handling module returning the message id
+%% `plum_db_partition_worker' as the handling module returning the message id
 %% and payload.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1058,7 +1058,7 @@ broadcast_data(#plum_db_broadcast{pkey=Key, obj=Obj}) ->
 
 merge({PKey, _Context}, Obj) ->
     gen_server:call(
-        plum_db_store_worker:name(get_partition(PKey)),
+        plum_db_partition_worker:name(get_partition(PKey)),
         {merge, PKey, Obj},
         infinity
     ).
@@ -1076,7 +1076,7 @@ merge(Node, {PKey, _Context}, Obj) ->
     %% Merge is implemented by the worker as an atomic read-merge-write op
     %% TODO: Evaluate using the merge operation in RocksDB when available
     gen_server:call(
-        {plum_db_store_worker:name(Partition), Node},
+        {plum_db_partition_worker:name(Partition), Node},
         {merge, PKey, Obj},
         infinity
     ).
@@ -1164,7 +1164,7 @@ exchange(Peer) ->
 
 %% @private
 current_context(PKey) ->
-    case plum_db_store_server:get(PKey) of
+    case plum_db_partition_server:get(PKey) of
         {ok, CurrentMeta} -> plum_db_object:context(CurrentMeta);
         {error, not_found} -> plum_db_object:empty_context()
     end.
@@ -1186,7 +1186,7 @@ put_with_context({{Prefix, SubPrefix}, _Key} = PKey, Context, ValueOrFun)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     gen_server:call(
-        plum_db_store_worker:name(get_partition(PKey)),
+        plum_db_partition_worker:name(get_partition(PKey)),
         {put, PKey, Context, ValueOrFun},
         infinity
     ).
