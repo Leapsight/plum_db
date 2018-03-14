@@ -6,9 +6,17 @@
     {applications, [
         kernel,
         stdlib,
+        sasl,
+        crypto,
+        inets,
+        tools,
+        runtime_tools,
+        os_mon,
         lager,
         partisan,
-        plumtree
+        plumtree,
+        eleveldb,
+        sext
     ]},
     {env, [
         {data_dir, "data"}

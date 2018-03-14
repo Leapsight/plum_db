@@ -61,6 +61,7 @@ add_callback(Fn) when is_function(Fn) ->
 add_sup_callback(Fn) when is_function(Fn) ->
     gen_event:add_sup_handler(?MODULE, {?MODULE, make_ref()}, [Fn]).
 
+
 %% -----------------------------------------------------------------------------
 %% @doc
 %% Notify the event handlers of an updated object
