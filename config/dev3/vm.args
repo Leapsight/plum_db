@@ -1,8 +1,8 @@
 ## Name of the node
--name pdb3@127.0.0.1
+-name plum_db3@127.0.0.1
 
 ## Cookie for distributed erlang
--setcookie plumtree
+-setcookie plum_db
 
 ## Increase distribution port buffer size.
 +zdbbl 32768

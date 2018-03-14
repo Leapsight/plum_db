@@ -17,9 +17,9 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(pdb_store_worker).
+-module(plum_db_store_worker).
 -behaviour(gen_server).
--include("pdb.hrl").
+-include("plum_db.hrl").
 
 
 -record(state, {
@@ -50,7 +50,7 @@
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Start pdb_store_worker for the partition Id and link to calling process.
+%% @doc Start plum_db_store_worker for the partition Id and link to calling process.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec start_link(non_neg_integer()) -> {ok, pid()} | ignore | {error, term()}.
@@ -65,7 +65,7 @@ start_link(Id) ->
 %% -----------------------------------------------------------------------------
 %% @private
 name(Id) ->
-    list_to_atom("pdb_store_worker_" ++ integer_to_list(Id)).
+    list_to_atom("plum_db_store_worker_" ++ integer_to_list(Id)).
 
 
 
@@ -106,7 +106,7 @@ handle_call({put, PKey, Context, ValueOrFun}, _From, State) ->
     %% atomically, and we need to serialise them.
     Existing = get_object(PKey, State),
     ServerId = State#state.server_id,
-    Modified = pdb_object:modify(Existing, Context, ValueOrFun, ServerId),
+    Modified = plum_db_object:modify(Existing, Context, ValueOrFun, ServerId),
     {Result, NewState} = store(PKey, Modified, State),
     {reply, Result, NewState};
 
@@ -115,7 +115,7 @@ handle_call({merge, PKey, Obj}, _From, State0) ->
     %% atomically, and we need to serialise them.
     _ = lager:info("Merging ~p", [{PKey, Obj}]),
     Existing = get_object(PKey, State0),
-    case pdb_object:reconcile(Obj, Existing) of
+    case plum_db_object:reconcile(Obj, Existing) of
         false ->
             {reply, false, State0};
         {true, Reconciled} ->
@@ -162,7 +162,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @private
 get_object(PKey, State) ->
-    case pdb_store_server:get(State#state.partition, PKey) of
+    case plum_db_store_server:get(State#state.partition, PKey) of
         {error, not_found} ->
             undefined;
         {ok, Existing} ->
@@ -172,8 +172,8 @@ get_object(PKey, State) ->
 
 %% @private
 store({_FullPrefix, _Key} = PKey, Metadata, State) ->
-    Hash = pdb_object:hash(Metadata),
-    ok = pdb_hashtree:insert(State#state.partition, PKey, Hash, false),
-    ok = pdb_store_server:put(State#state.partition, PKey, Metadata),
-    %% pdb_events:update(Metadata),
+    Hash = plum_db_object:hash(Metadata),
+    ok = plum_db_hashtree:insert(State#state.partition, PKey, Hash, false),
+    ok = plum_db_store_server:put(State#state.partition, PKey, Metadata),
+    %% plum_db_events:update(Metadata),
     {Metadata, State}.

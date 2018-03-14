@@ -1,8 +1,8 @@
-{application, pdb, [
+{application, plum_db, [
     {description, "Key Value store fully replicated using Partisan and Plumtree (Epidemic Broadcast Trees)"},
     {vsn, "0.1.0"},
     {registered, []},
-    {mod, {pdb_app, []}},
+    {mod, {plum_db_app, []}},
     {applications, [
         kernel,
         stdlib,

@@ -17,8 +17,8 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(pdb_object).
--include("pdb.hrl").
+-module(plum_db_object).
+-include("plum_db.hrl").
 
 -export([value/1,
          values/1,
@@ -36,32 +36,32 @@
 
 %% @doc returns a single value. if the object holds more than one value an error is generated
 %% @see values/2
--spec value(pdb_object()) -> pdb_value().
+-spec value(plum_db_object()) -> plum_db_value().
 value(Metadata) ->
     [Value] = values(Metadata),
     Value.
 
 %% @doc returns a list of values held in the object
--spec values(pdb_object()) -> [pdb_value()].
+-spec values(plum_db_object()) -> [plum_db_value()].
 values({metadata, Object}) ->
     [Value || {Value, _Ts} <- dvvset:values(Object)].
 
 %% @doc returns the number of siblings in the given object
--spec value_count(pdb_object()) -> non_neg_integer().
+-spec value_count(plum_db_object()) -> non_neg_integer().
 value_count({metadata, Object}) ->
     dvvset:size(Object).
 
 %% @doc returns the context (opaque causal history) for the given object
--spec context(pdb_object()) -> pdb_context().
+-spec context(plum_db_object()) -> plum_db_context().
 context({metadata, Object}) ->
     dvvset:join(Object).
 
 %% @doc returns the representation for an empty context (opaque causal history)
--spec empty_context() -> pdb_context().
+-spec empty_context() -> plum_db_context().
 empty_context() -> [].
 
 %% @doc returns a hash representing the metadata objects contents
--spec hash(pdb_object()) -> binary().
+-spec hash(plum_db_object()) -> binary().
 hash({metadata, Object}) ->
     crypto:hash(sha, term_to_binary(Object)).
 
@@ -70,10 +70,10 @@ hash({metadata, Object}) ->
 %% then this function also is used for conflict resolution. The difference
 %% between this function and resolve/2 is that the logical clock is advanced in the
 %% case of this function. Additionally, the resolution functions are slightly different.
--spec modify(pdb_object() | undefined,
-             pdb_context(),
-             pdb_value() | pdb_modifier(),
-             term()) -> pdb_object().
+-spec modify(plum_db_object() | undefined,
+             plum_db_context(),
+             plum_db_value() | plum_db_modifier(),
+             term()) -> plum_db_object().
 modify(undefined, Context, Fun, ServerId) when is_function(Fun) ->
     modify(undefined, Context, Fun(undefined), ServerId);
 modify(Obj, Context, Fun, ServerId) when is_function(Fun) ->
@@ -91,8 +91,8 @@ modify({metadata, Existing}, Context, Value, ServerId) ->
 %% with a local object. If the remote object is an anscestor of or is equal to the local one
 %% `false' is returned, otherwise the reconciled object is returned as the second
 %% element of the two-tuple
--spec reconcile(pdb_object(), pdb_object() | undefined) ->
-                       false | {true, pdb_object()}.
+-spec reconcile(plum_db_object(), plum_db_object() | undefined) ->
+                       false | {true, plum_db_object()}.
 reconcile(undefined, _LocalObj) ->
     false;
 reconcile(RemoteObj, undefined) ->
@@ -108,8 +108,8 @@ reconcile({metadata, RemoteObj}, {metadata, LocalObj}) ->
 
 %% @doc Resolves siblings using either last-write-wins or the provided function and returns
 %% an object containing a single value. The causal history is not updated
--spec resolve(pdb_object(), lww | fun(([pdb_value()]) -> pdb_value())) ->
-                     pdb_object().
+-spec resolve(plum_db_object(), lww | fun(([plum_db_value()]) -> plum_db_value())) ->
+                     plum_db_object().
 resolve({metadata, Object}, lww) ->
     LWW = fun ({_,TS1}, {_,TS2}) -> TS1 =< TS2 end,
     {metadata, dvvset:lww(LWW, Object)};
@@ -123,7 +123,7 @@ resolve({metadata, Existing}, Reconcile) when is_function(Reconcile) ->
 %% an anscestor of the current key, false is returned. Otherwise, when the context
 %% does represent an ancestor of the existing object or the existing object itself,
 %% true is returned
--spec is_stale(pdb_context(), pdb_object()) -> boolean().
+-spec is_stale(plum_db_context(), plum_db_object()) -> boolean().
 is_stale(_, undefined) ->
     false;
 is_stale(RemoteContext, {metadata, Obj}) ->
@@ -142,7 +142,7 @@ descends(Ca, Cb) ->
     end.
 
 %% @doc Returns true if the given context and the context of the existing object are equal
--spec equal_context(pdb_context(), pdb_object()) -> boolean().
+-spec equal_context(plum_db_context(), plum_db_object()) -> boolean().
 equal_context(Context, {metadata, Obj}) ->
     Context =:= dvvset:join(Obj).
 

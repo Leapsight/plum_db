@@ -14,7 +14,7 @@
 %%    limitations under the License.
 %% -----------------------------------------------------------------------------
 
--module(pdb_store_partition_sup).
+-module(plum_db_store_partition_sup).
 -behaviour(supervisor).
 
 -define(CHILD(Id, Mod, Type, Args, Timeout),
@@ -46,7 +46,7 @@ start_link(Partition) ->
 %% -----------------------------------------------------------------------------
 %% @private
 name(Id) when is_integer(Id) ->
-    list_to_atom("pdb_store_partition_sup_" ++ integer_to_list(Id)).
+    list_to_atom("plum_db_store_partition_sup_" ++ integer_to_list(Id)).
 
 
 %% =============================================================================
@@ -56,44 +56,44 @@ name(Id) when is_integer(Id) ->
 
 
 init([Id]) ->
-    Opts = application:get_env(pdb, leveldb_opts, []),
+    Opts = application:get_env(plum_db, leveldb_opts, []),
     RestartStrategy = {one_for_all, 5, 1},
     Children = [
         #{
-            id => pdb_store_server:name(Id),
+            id => plum_db_store_server:name(Id),
             start => {
-                pdb_store_server,
+                plum_db_store_server,
                 start_link,
                 [Id, Opts]
             },
             restart => permanent,
             shutdown => 5000,
             type => worker,
-            modules => [pdb_store_server]
+            modules => [plum_db_store_server]
         },
         #{
-            id => pdb_store_worker:name(Id),
+            id => plum_db_store_worker:name(Id),
             start => {
-                pdb_store_worker,
+                plum_db_store_worker,
                 start_link,
                 [Id]
             },
             restart => permanent,
             shutdown => 5000,
             type => worker,
-            modules => [pdb_store_worker]
+            modules => [plum_db_store_worker]
         },
         #{
-            id => pdb_hashtree:name(Id),
+            id => plum_db_hashtree:name(Id),
             start => {
-                pdb_hashtree,
+                plum_db_hashtree,
                 start_link,
                 [Id]
             },
             restart => permanent,
             shutdown => 5000,
             type => worker,
-            modules => [pdb_hashtree]
+            modules => [plum_db_hashtree]
         }
     ],
     {ok, {RestartStrategy, Children}}.

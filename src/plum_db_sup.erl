@@ -22,7 +22,7 @@
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--module(pdb_sup).
+-module(plum_db_sup).
 -behaviour(supervisor).
 
 -define(CHILD(I, Type, Args, Timeout), #{
@@ -62,8 +62,8 @@ start_link() ->
 init([]) ->
     RestartStrategy = {one_for_one, 10, 10},
     Children = [
-        ?CHILD(pdb, worker, []),
-        ?CHILD(pdb_store_sup, supervisor, [])
-        %% ?CHILD(pdb_events, worker),
+        ?CHILD(plum_db, worker, []),
+        ?CHILD(plum_db_store_sup, supervisor, [])
+        %% ?CHILD(plum_db_events, worker),
     ],
     {ok, {RestartStrategy, Children}}.

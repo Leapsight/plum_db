@@ -17,10 +17,10 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(pdb).
+-module(plum_db).
 -behaviour(gen_server).
 -behaviour(plumtree_broadcast_handler).
--include("pdb.hrl").
+-include("plum_db.hrl").
 
 -define(TOMBSTONE, '$deleted').
 
@@ -36,20 +36,20 @@
 }).
 
 -record(base_iterator, {
-    prefix                  ::  pdb_prefix() | undefined,
+    prefix                  ::  plum_db_prefix() | undefined,
     match                   ::  term() | undefined,
     keys_only = false       ::  boolean(),
-    obj                     ::  {pdb_key(), pdb_object()}
-                                | pdb_key()
+    obj                     ::  {plum_db_key(), plum_db_object()}
+                                | plum_db_key()
                                 | undefined,
-    ref                     ::  pdb_store_server:iterator(),
+    ref                     ::  plum_db_store_server:iterator(),
     partitions              ::  [non_neg_integer()]
 }).
 
 -record(remote_base_iterator, {
     node   :: node(),
     ref    :: reference(),
-    prefix :: pdb_prefix() | atom() | binary()
+    prefix :: plum_db_prefix() | atom() | binary()
 }).
 
 -type state()               ::  #state{}.
@@ -59,23 +59,23 @@
 
 
 %% Get Option Types
--type value_or_values()     ::  [pdb_value() | pdb_tombstone()]
-                                | pdb_value() | pdb_tombstone().
+-type value_or_values()     ::  [plum_db_value() | plum_db_tombstone()]
+                                | plum_db_value() | plum_db_tombstone().
 -type fold_fun()            ::  fun(
-                                ({pdb_key(), value_or_values()}, any()) ->
+                                ({plum_db_key(), value_or_values()}, any()) ->
                                     any()
                                 ).
--type get_opt_default_val() ::  {default, pdb_value()}.
--type get_opt_resolver()    ::  {resolver, pdb_resolver()}.
+-type get_opt_default_val() ::  {default, plum_db_value()}.
+-type get_opt_resolver()    ::  {resolver, plum_db_resolver()}.
 -type get_opt_allow_put()   ::  {allow_put, boolean()}.
 -type get_opt()             ::  get_opt_default_val()
                                 | get_opt_resolver() | get_opt_allow_put().
 -type get_opts()            ::  [get_opt()].
 
 %% Iterator Types
--type it_opt_resolver()     ::  {resolver, pdb_resolver() | lww}.
--type it_opt_default_fun()  ::  fun((pdb_key()) -> pdb_value()).
--type it_opt_default()      ::  {default, pdb_value() | it_opt_default_fun()}.
+-type it_opt_resolver()     ::  {resolver, plum_db_resolver() | lww}.
+-type it_opt_default_fun()  ::  fun((plum_db_key()) -> plum_db_value()).
+-type it_opt_default()      ::  {default, plum_db_value() | it_opt_default_fun()}.
 -type it_opt_keymatch()     ::  {match, term()}.
 -type it_opt()              ::  it_opt_resolver()
                                 | it_opt_default()
@@ -202,7 +202,7 @@ partitions() ->
 -spec partition_count() -> non_neg_integer().
 
 partition_count() ->
-    application:get_env(pdb, partitions, 8).
+    application:get_env(plum_db, partitions, 8).
 
 
 %% -----------------------------------------------------------------------------
@@ -228,7 +228,7 @@ decode_key(Bin) ->
 %% @doc Same as get(FullPrefix, Key, [])
 %% @end
 %% -----------------------------------------------------------------------------
--spec get(pdb_prefix(), pdb_key()) -> pdb_value() | undefined.
+-spec get(plum_db_prefix(), plum_db_key()) -> plum_db_value() | undefined.
 
 get(FullPrefix, Key) ->
     get(FullPrefix, Key, []).
@@ -250,7 +250,7 @@ get(FullPrefix, Key) ->
 %% concurrenct writes during resolution are not resolved
 %% @end
 %% -----------------------------------------------------------------------------
--spec get(pdb_prefix(), pdb_key(), get_opts()) -> pdb_value() | undefined.
+-spec get(plum_db_prefix(), plum_db_key(), get_opts()) -> plum_db_value() | undefined.
 
 get({Prefix, SubPrefix} = FullPrefix, Key, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
@@ -265,8 +265,8 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
         Existing ->
             %% Aa Dotted Version Vector Set is returned.
             %% When reading the value for a subsequent call to put/3 the
-            %% context can be obtained using pdb_object:context/1. Values can
-            %% obtained w/ pdb_object:values/1.
+            %% context can be obtained using plum_db_object:context/1. Values can
+            %% obtained w/ plum_db_object:values/1.
             maybe_tombstone(
                 maybe_resolve(PKey, Existing, ResolveMethod, AllowPut), Default)
     end.
@@ -275,14 +275,14 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% -----------------------------------------------------------------------------
 %% @doc Returns a Dotted Version Vector Set or undefined.
 %% When reading the value for a subsequent call to put/3 the
-%% context can be obtained using pdb_object:context/1. Values can
-%% obtained w/ pdb_object:values/1.
+%% context can be obtained using plum_db_object:context/1. Values can
+%% obtained w/ plum_db_object:values/1.
 %% @end
 %% -----------------------------------------------------------------------------
 get_object({{Prefix, SubPrefix}, _Key} = PKey)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
-    case pdb_store_server:get(PKey) of
+    case plum_db_store_server:get(PKey) of
         {error, not_found} ->
             undefined;
         {ok, Existing} ->
@@ -292,10 +292,10 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 
 %% -----------------------------------------------------------------------------
 %% @doc Same as get/1 but reads the value from `Node'
-%% This is function is used by pdb_exchange_statem.
+%% This is function is used by plum_db_exchange_statem.
 %% @end
 %% -----------------------------------------------------------------------------
--spec get_object(node(), pdb_pkey()) -> pdb_object() | undefined.
+-spec get_object(node(), plum_db_pkey()) -> plum_db_object() | undefined.
 
 get_object(Node, PKey) when node() =:= Node ->
     get_object(PKey);
@@ -303,11 +303,11 @@ get_object(Node, PKey) when node() =:= Node ->
 get_object(Node, {{Prefix, SubPrefix}, _Key} = PKey)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
-    %% We call the corresponding pdb_store_worker instance
+    %% We call the corresponding plum_db_store_worker instance
     %% in the remote node.
-    %% This assumes all nodes have the same number of pdb partitions.
+    %% This assumes all nodes have the same number of plum_db partitions.
     gen_server:call(
-        {pdb_store_worker:name(get_partition(PKey)), Node},
+        {plum_db_store_worker:name(get_partition(PKey)), Node},
         {get_object, PKey},
         infinity
     ).
@@ -316,7 +316,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% @doc Same as fold(Fun, Acc0, FullPrefix, []).
 %% @end
 %% -----------------------------------------------------------------------------
--spec fold(fold_fun(), any(), pdb_prefix()) -> any().
+-spec fold(fold_fun(), any(), plum_db_prefix()) -> any().
 fold(Fun, Acc0, FullPrefix) ->
     fold(Fun, Acc0, FullPrefix, []).
 
@@ -327,7 +327,7 @@ fold(Fun, Acc0, FullPrefix) ->
 %% early, throw {break, Result} in your fold function.
 %% @end
 %% -----------------------------------------------------------------------------
--spec fold(fold_fun(), any(), pdb_prefix(), fold_opts()) -> any().
+-spec fold(fold_fun(), any(), plum_db_prefix(), fold_opts()) -> any().
 fold(Fun, Acc0, FullPrefix, Opts) ->
     It = iterator(FullPrefix, Opts),
     try
@@ -353,7 +353,7 @@ fold_it(Fun, Acc, It) ->
 %% @doc Same as to_list(FullPrefix, [])
 %% @end
 %% -----------------------------------------------------------------------------
--spec to_list(pdb_prefix()) -> [{pdb_key(), value_or_values()}].
+-spec to_list(plum_db_prefix()) -> [{plum_db_key(), value_or_values()}].
 to_list(FullPrefix) ->
     to_list(FullPrefix, []).
 
@@ -364,7 +364,7 @@ to_list(FullPrefix) ->
 %% iterator/2.
 %% @end
 %% -----------------------------------------------------------------------------
--spec to_list(pdb_prefix(), fold_opts()) -> [{pdb_key(), value_or_values()}].
+-spec to_list(plum_db_prefix(), fold_opts()) -> [{plum_db_key(), value_or_values()}].
 to_list(FullPrefix, Opts) ->
     fold(fun({Key, ValOrVals}, Acc) ->
                  [{Key, ValOrVals} | Acc]
@@ -375,7 +375,7 @@ to_list(FullPrefix, Opts) ->
 %% @doc Same as iterator(FullPrefix, []).
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator(pdb_prefix()) -> iterator().
+-spec iterator(plum_db_prefix()) -> iterator().
 iterator(FullPrefix) ->
     iterator(FullPrefix, []).
 
@@ -403,7 +403,7 @@ iterator(FullPrefix) ->
 %%
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator(pdb_prefix(), it_opts()) -> iterator().
+-spec iterator(plum_db_prefix(), it_opts()) -> iterator().
 
 iterator({Prefix, SubPrefix} = FullPrefix, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
@@ -441,9 +441,9 @@ iterate(#base_iterator{ref = undefined, partitions = [H|_]} = I0) ->
     First = first_key(I0#base_iterator.prefix),
     Ref = case I0#base_iterator.keys_only of
         true ->
-            pdb_store_server:key_iterator(H);
+            plum_db_store_server:key_iterator(H);
         false ->
-            pdb_store_server:iterator(H)
+            plum_db_store_server:iterator(H)
     end,
     iterate(eleveldb:iterator_move(Ref, First), I0#base_iterator{ref = Ref});
 
@@ -453,26 +453,26 @@ iterate(#base_iterator{ref = Ref} = I) ->
 
 iterate({error, _}, #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
     %% There are no more elements in the partition
-    ok = pdb_store_server:iterator_close(H, Ref),
+    ok = plum_db_store_server:iterator_close(H, Ref),
     iterate(I#base_iterator{ref = undefined, partitions = T});
 
 iterate({ok, K}, #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
-    PKey = pdb:decode_key(K),
+    PKey = plum_db:decode_key(K),
     case prefixed_key_matches(PKey, I) of
         true ->
             I#base_iterator{obj = PKey};
         false ->
-            ok = pdb_store_server:iterator_close(H, Ref),
+            ok = plum_db_store_server:iterator_close(H, Ref),
             iterate(I#base_iterator{ref = undefined, partitions = T})
     end;
 
 iterate({ok, K, V},  #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
-    PKey = pdb:decode_key(K),
+    PKey = plum_db:decode_key(K),
     case prefixed_key_matches(PKey, I) of
         true ->
             I#base_iterator{obj = {PKey, binary_to_term(V)}};
         false ->
-            ok = pdb_store_server:iterator_close(H, Ref),
+            ok = plum_db_store_server:iterator_close(H, Ref),
             iterate(I#base_iterator{ref = undefined, partitions = T})
     end.
 
@@ -494,7 +494,7 @@ iterator_close(#base_iterator{ref = undefined}) ->
     ok;
 
 iterator_close(#base_iterator{partitions = [H|_], ref = Ref}) ->
-    pdb_store_server:iterator_close(H, Ref).
+    plum_db_store_server:iterator_close(H, Ref).
 
 
 %% -----------------------------------------------------------------------------
@@ -536,7 +536,7 @@ iterator_done(#base_iterator{}) ->
 %% can be called once more).
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator_key_values(iterator()) -> {pdb_key(), value_or_values()}.
+-spec iterator_key_values(iterator()) -> {plum_db_key(), value_or_values()}.
 
 iterator_key_values(#iterator{base_iterator = Base, opts = Opts} = I) ->
     Default = iterator_default(I),
@@ -544,7 +544,7 @@ iterator_key_values(#iterator{base_iterator = Base, opts = Opts} = I) ->
     AllowPut = get_option(allow_put, Opts, true),
     case get_option(resolver, Opts, undefined) of
         undefined ->
-            {Key, maybe_tombstones(pdb_object:values(Obj), Default)};
+            {Key, maybe_tombstones(plum_db_object:values(Obj), Default)};
         Resolver ->
             Prefix = base_iterator_prefix(Base),
             PKey = prefixed_key(Prefix, Key),
@@ -559,7 +559,7 @@ iterator_key_values(#iterator{base_iterator = Base, opts = Opts} = I) ->
 %% will be performed as a result of calling this function.
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator_key(iterator()) -> pdb_key().
+-spec iterator_key(iterator()) -> plum_db_key().
 iterator_key(#iterator{base_iterator = Base}) ->
     {Key, _} = iterator_value(Base),
     Key.
@@ -572,11 +572,11 @@ iterator_key(#iterator{base_iterator = Base}) ->
 %% function.
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator_values(iterator()) -> [pdb_value() | pdb_tombstone()].
+-spec iterator_values(iterator()) -> [plum_db_value() | plum_db_tombstone()].
 iterator_values(#iterator{base_iterator = Base} = I) ->
     Default = iterator_default(I),
     {_, Obj} = iterator_value(Base),
-    maybe_tombstones(pdb_object:values(Obj), Default).
+    maybe_tombstones(plum_db_object:values(Obj), Default).
 
 
 %% -----------------------------------------------------------------------------
@@ -599,9 +599,9 @@ iterator_values(#iterator{base_iterator = Base} = I) ->
 %% -----------------------------------------------------------------------------
 -spec iterator_value
     (iterator()) ->
-        pdb_value() | pdb_tombstone() | {error, conflict};
+        plum_db_value() | plum_db_tombstone() | {error, conflict};
     (base_iterator() | remote_base_iterator()) ->
-        {pdb_key(), pdb_object()} | pdb_prefix() | binary() | atom().
+        {plum_db_key(), plum_db_object()} | plum_db_prefix() | binary() | atom().
 
 
 iterator_value(#iterator{base_iterator = Base, opts = Opts} = I) ->
@@ -610,9 +610,9 @@ iterator_value(#iterator{base_iterator = Base, opts = Opts} = I) ->
     AllowPut = get_option(allow_put, Opts, true),
     case get_option(resolver, Opts, undefined) of
         undefined ->
-            case pdb_object:value_count(Obj) of
+            case plum_db_object:value_count(Obj) of
                 1 ->
-                    maybe_tombstone(pdb_object:value(Obj), Default);
+                    maybe_tombstone(plum_db_object:value(Obj), Default);
                 _ ->
                     {error, conflict}
             end;
@@ -661,7 +661,7 @@ iterator_object(#base_iterator{obj = Obj}) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec iterator_default(iterator()) ->
-    pdb_tombstone() | pdb_value() | it_opt_default_fun().
+    plum_db_tombstone() | plum_db_value() | it_opt_default_fun().
 
 iterator_default(#iterator{opts = Opts} = I) ->
     case proplists:get_value(default, Opts, ?TOMBSTONE) of
@@ -680,18 +680,18 @@ iterator_default(#iterator{opts = Opts} = I) ->
 %% (full-)prefix. `undefined' is returned.
 %% @end
 %% -----------------------------------------------------------------------------
--spec prefix_hash(pdb_prefix() | binary() | atom()) -> binary() | undefined.
+-spec prefix_hash(plum_db_prefix() | binary() | atom()) -> binary() | undefined.
 
 prefix_hash(Prefix)
 when is_tuple(Prefix) or is_atom(Prefix) or is_binary(Prefix) ->
-    pdb_hashtree:prefix_hash(Prefix).
+    plum_db_hashtree:prefix_hash(Prefix).
 
 
 %% -----------------------------------------------------------------------------
 %% @doc Same as put(FullPrefix, Key, Value, [])
 %% @end
 %% -----------------------------------------------------------------------------
--spec put(pdb_prefix(), pdb_key(), pdb_value() | pdb_modifier()) -> ok.
+-spec put(plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier()) -> ok.
 put(FullPrefix, Key, ValueOrFun) ->
     put(FullPrefix, Key, ValueOrFun, []).
 
@@ -701,12 +701,12 @@ put(FullPrefix, Key, ValueOrFun) ->
 %% triggers a broadcast to notify other nodes in the cluster. Currently, there
 %% are no put options.
 %%
-%% NOTE: because the third argument to this function can be a pdb_modifier(),
+%% NOTE: because the third argument to this function can be a plum_db_modifier(),
 %% used to resolve conflicts on write, metadata values cannot be functions.
 %% To store functions in metadata wrap them in another type like a tuple.
 %% @end
 %% -----------------------------------------------------------------------------
--spec put(pdb_prefix(), pdb_key(), pdb_value() | pdb_modifier(), put_opts()) ->
+-spec put(plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier(), put_opts()) ->
     ok.
 
 put({Prefix, SubPrefix} = FullPrefix, Key, ValueOrFun, _Opts)
@@ -731,7 +731,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% @doc Same as delete(FullPrefix, Key, [])
 %% @end
 %% -----------------------------------------------------------------------------
--spec delete(pdb_prefix(), pdb_key()) -> ok.
+-spec delete(plum_db_prefix(), plum_db_key()) -> ok.
 delete(FullPrefix, Key) ->
     delete(FullPrefix, Key, []).
 
@@ -744,7 +744,7 @@ delete(FullPrefix, Key) ->
 %% NOTE: currently deletion is logical and no GC is performed.
 %% @end
 %% -----------------------------------------------------------------------------
--spec delete(pdb_prefix(), pdb_key(), delete_opts()) -> ok.
+-spec delete(plum_db_prefix(), plum_db_key(), delete_opts()) -> ok.
 delete(FullPrefix, Key, _Opts) ->
     put(FullPrefix, Key, ?TOMBSTONE, []).
 
@@ -796,7 +796,7 @@ base_iterator(Prefix) when is_binary(Prefix) or is_atom(Prefix) ->
 %% When done with the iterator, iterator_close/1 must be called.
 %% @end
 %% -----------------------------------------------------------------------------
--spec base_iterator(pdb_prefix(), term()) -> base_iterator().
+-spec base_iterator(plum_db_prefix(), term()) -> base_iterator().
 
 base_iterator({Prefix, SubPrefix} = FullPrefix, KeyMatch)
 when (is_binary(Prefix) orelse is_atom(Prefix))
@@ -804,7 +804,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     new_base_iterator(FullPrefix, KeyMatch).
 
 
--spec base_iterator(undefined | pdb_prefix(), term(), non_neg_integer()) ->
+-spec base_iterator(undefined | plum_db_prefix(), term(), non_neg_integer()) ->
     base_iterator().
 
 base_iterator(undefined, Prefix, Partition) ->
@@ -844,7 +844,7 @@ remote_base_iterator(Node) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec remote_base_iterator(
-    node(), pdb_prefix() | binary() | atom() | undefined) ->
+    node(), plum_db_prefix() | binary() | atom() | undefined) ->
     remote_base_iterator().
 
 remote_base_iterator(Node, Prefix) when is_atom(Prefix); is_binary(Prefix) ->
@@ -902,7 +902,7 @@ prefixed_key_matches(_, _, _) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec base_iterator_prefix(base_iterator() | remote_base_iterator()) ->
-    pdb_prefix() | undefined | binary() | atom().
+    plum_db_prefix() | undefined | binary() | atom().
 
 base_iterator_prefix(#remote_base_iterator{prefix = Prefix}) ->
     Prefix;
@@ -1032,15 +1032,15 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% -----------------------------------------------------------------------------
 %% @doc Deconstructs are broadcast that is sent using
-%% `pdb_store_worker' as the handling module returning the message id
+%% `plum_db_store_worker' as the handling module returning the message id
 %% and payload.
 %% @end
 %% -----------------------------------------------------------------------------
--spec broadcast_data(pdb_broadcast()) ->
-    {{pdb_pkey(), pdb_context()}, pdb_object()}.
+-spec broadcast_data(plum_db_broadcast()) ->
+    {{plum_db_pkey(), plum_db_context()}, plum_db_object()}.
 
-broadcast_data(#pdb_broadcast{pkey=Key, obj=Obj}) ->
-    Context = pdb_object:context(Obj),
+broadcast_data(#plum_db_broadcast{pkey=Key, obj=Obj}) ->
+    Context = plum_db_object:context(Obj),
     {{Key, Context}, Obj}.
 
 
@@ -1053,12 +1053,12 @@ broadcast_data(#pdb_broadcast{pkey=Key, obj=Obj}) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec merge(
-    {pdb_pkey(), undefined | pdb_context()},
-    undefined | pdb_object()) -> boolean().
+    {plum_db_pkey(), undefined | plum_db_context()},
+    undefined | plum_db_object()) -> boolean().
 
 merge({PKey, _Context}, Obj) ->
     gen_server:call(
-        pdb_store_worker:name(get_partition(PKey)),
+        plum_db_store_worker:name(get_partition(PKey)),
         {merge, PKey, Obj},
         infinity
     ).
@@ -1068,7 +1068,7 @@ merge({PKey, _Context}, Obj) ->
 %% @doc Same as merge/2 but merges the object on `Node'
 %% @end
 %% -----------------------------------------------------------------------------
--spec merge(node(), {pdb_pkey(), undefined | pdb_context()}, pdb_object()) ->
+-spec merge(node(), {plum_db_pkey(), undefined | plum_db_context()}, plum_db_object()) ->
     boolean().
 
 merge(Node, {PKey, _Context}, Obj) ->
@@ -1076,7 +1076,7 @@ merge(Node, {PKey, _Context}, Obj) ->
     %% Merge is implemented by the worker as an atomic read-merge-write op
     %% TODO: Evaluate using the merge operation in RocksDB when available
     gen_server:call(
-        {pdb_store_worker:name(Partition), Node},
+        {plum_db_store_worker:name(Partition), Node},
         {merge, PKey, Obj},
         infinity
     ).
@@ -1087,14 +1087,14 @@ merge(Node, {PKey, _Context}, Obj) ->
 %% been received (stored locally).
 %% @end
 %% -----------------------------------------------------------------------------
--spec is_stale({pdb_pkey(), pdb_context()}) -> boolean().
+-spec is_stale({plum_db_pkey(), plum_db_context()}) -> boolean().
 
 is_stale({PKey, Context}) ->
     Existing = case ?MODULE:get(PKey) of
         {ok, Value} -> Value;
         {error, not_found} -> undefined
     end,
-    pdb_object:is_stale(Context, Existing).
+    plum_db_object:is_stale(Context, Existing).
 
 
 %% -----------------------------------------------------------------------------
@@ -1106,8 +1106,8 @@ is_stale({PKey, Context}) ->
 %% the grafted one
 %% @end
 %% -----------------------------------------------------------------------------
--spec graft({pdb_pkey(), pdb_context()}) ->
-    stale | {ok, pdb_object()} | {error, term()}.
+-spec graft({plum_db_pkey(), plum_db_context()}) ->
+    stale | {ok, plum_db_object()} | {error, term()}.
 
 graft({PKey, Context}) ->
     case ?MODULE:get(PKey) of
@@ -1123,7 +1123,7 @@ graft({PKey, Context}) ->
     end.
 
 graft(Context, Obj) ->
-    case pdb_object:equal_context(Context, Obj) of
+    case plum_db_object:equal_context(Context, Obj) of
         false ->
             %% when grafting the context will never be causally newer
             %% than what we have locally. Since its not equal, it must be
@@ -1144,7 +1144,7 @@ graft(Context, Obj) ->
 
 exchange(Peer) ->
     %%
-    case pdb_exchange_statem:start(Peer, 60000) of
+    case plum_db_exchange_statem:start(Peer, 60000) of
         {ok, Pid} ->
             {ok, Pid};
         {error, Reason} ->
@@ -1164,9 +1164,9 @@ exchange(Peer) ->
 
 %% @private
 current_context(PKey) ->
-    case pdb_store_server:get(PKey) of
-        {ok, CurrentMeta} -> pdb_object:context(CurrentMeta);
-        {error, not_found} -> pdb_object:empty_context()
+    case plum_db_store_server:get(PKey) of
+        {ok, CurrentMeta} -> plum_db_object:context(CurrentMeta);
+        {error, not_found} -> plum_db_object:empty_context()
     end.
 
 
@@ -1186,7 +1186,7 @@ put_with_context({{Prefix, SubPrefix}, _Key} = PKey, Context, ValueOrFun)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     gen_server:call(
-        pdb_store_worker:name(get_partition(PKey)),
+        plum_db_store_worker:name(get_partition(PKey)),
         {put, PKey, Context, ValueOrFun},
         infinity
     ).
@@ -1194,18 +1194,18 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 
 %% @private
 maybe_resolve(PKey, Existing, Method, AllowPut) ->
-    SibCount = pdb_object:value_count(Existing),
+    SibCount = plum_db_object:value_count(Existing),
     maybe_resolve(PKey, Existing, SibCount, Method, AllowPut).
 
 
 %% @private
 maybe_resolve(_PKey, Existing, 1, _Method, _AllowPut) ->
-    pdb_object:value(Existing);
+    plum_db_object:value(Existing);
 
 maybe_resolve(PKey, Existing, _, Method, AllowPut) ->
-    Reconciled = pdb_object:resolve(Existing, Method),
-    RContext = pdb_object:context(Reconciled),
-    RValue = pdb_object:value(Reconciled),
+    Reconciled = plum_db_object:resolve(Existing, Method),
+    RContext = plum_db_object:context(Reconciled),
+    RValue = plum_db_object:value(Reconciled),
     case AllowPut of
         false ->
             ok;
@@ -1227,12 +1227,12 @@ maybe_tombstone(Value, _Default) ->
 
 %% @private
 broadcast(PKey, Obj) ->
-    Broadcast = #pdb_broadcast{pkey = PKey, obj  = Obj},
-    plumtree_broadcast:broadcast(Broadcast, pdb).
+    Broadcast = #plum_db_broadcast{pkey = PKey, obj  = Obj},
+    plumtree_broadcast:broadcast(Broadcast, plum_db).
 
 
 %% @private
--spec prefixed_key(pdb_prefix(), pdb_key()) -> pdb_pkey().
+-spec prefixed_key(plum_db_prefix(), plum_db_key()) -> plum_db_pkey().
 prefixed_key(FullPrefix, Key) ->
     {FullPrefix, Key}.
 
@@ -1293,7 +1293,7 @@ close_remote_base_iterator(Ref, #state{iterators = Iterators} = State) ->
 
 %% @private
 new_base_iterator(FullPrefix, KeyMatch) ->
-    new_base_iterator(FullPrefix, KeyMatch, pdb:partitions(), false).
+    new_base_iterator(FullPrefix, KeyMatch, plum_db:partitions(), false).
 
 %% @private
 new_base_iterator(FullPrefix, KeyMatch, Partition) ->

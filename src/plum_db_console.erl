@@ -1,5 +1,5 @@
--module(pdb_console).
--include("pdb.hrl").
+-module(plum_db_console).
+-include("plum_db.hrl").
 
 -export([members/1]).
 
@@ -14,7 +14,7 @@
 
 
 members([]) ->
-    {ok, Members} = pdb_peer_service:members(),
+    {ok, Members} = plum_db_peer_service:members(),
     print_members(Members).
 
 

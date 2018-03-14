@@ -18,7 +18,7 @@
 %% @doc  A wrapper for an elevelb instance.
 %% @end
 %% -----------------------------------------------------------------------------
--module(pdb_store_server).
+-module(plum_db_store_server).
 -behaviour(gen_server).
 
 
@@ -94,7 +94,7 @@ start_link(Partition, Opts) ->
 %% -----------------------------------------------------------------------------
 %% @private
 name(Partition) ->
-    list_to_atom("pdb_store_server_" ++ integer_to_list(Partition)).
+    list_to_atom("plum_db_store_server_" ++ integer_to_list(Partition)).
 
 
 
@@ -104,7 +104,7 @@ name(Partition) ->
 %% @end
 %% -----------------------------------------------------------------------------
 get(Key) ->
-    get(name(pdb:get_partition(Key)), Key).
+    get(name(plum_db:get_partition(Key)), Key).
 
 
 %% -----------------------------------------------------------------------------
@@ -123,7 +123,7 @@ get(Name, Key) when is_atom(Name) ->
 %% @end
 %% -----------------------------------------------------------------------------
 put(Key, Value) ->
-    put(name(pdb:get_partition(Key)), Key, Value).
+    put(name(plum_db:get_partition(Key)), Key, Value).
 
 
 %% -----------------------------------------------------------------------------
@@ -142,7 +142,7 @@ put(Name, Key, Value) when is_atom(Name) ->
 %% @end
 %% -----------------------------------------------------------------------------
 delete(Key) ->
-    delete(name(pdb:get_partition(Key)), Key).
+    delete(name(plum_db:get_partition(Key)), Key).
 
 
 %% -----------------------------------------------------------------------------
@@ -223,7 +223,7 @@ init([Partition, Opts]) ->
     rand:seed(exsplus, erlang:timestamp()),
 
     DataRoot = filename:join([
-        app_helper:get_prop_or_env(data_dir, Opts, pdb),
+        app_helper:get_prop_or_env(data_dir, Opts, plum_db),
         "leveldb",
         integer_to_list(Partition)
     ]),
@@ -406,7 +406,7 @@ config_value(Key, Config, Default) ->
 
 %% @private
 open_db(State0) ->
-    RetriesLeft = app_helper:get_env(pdb, store_open_retry_Limit, 30),
+    RetriesLeft = app_helper:get_env(plum_db, store_open_retry_Limit, 30),
     open_db(State0, max(1, RetriesLeft), undefined).
 
 
@@ -426,7 +426,7 @@ open_db(State0, RetriesLeft, _) ->
             case lists:prefix("IO error: lock ", OpenErr) of
                 true ->
                     SleepFor = app_helper:get_env(
-                        pdb, store_open_retries_delay, 2000),
+                        plum_db, store_open_retries_delay, 2000),
                     lager:debug("Leveldb backend retrying ~p in ~p ms after error ~s\n",
                                 [State0#state.data_root, SleepFor, OpenErr]),
                     timer:sleep(SleepFor),
@@ -454,7 +454,7 @@ open_db(State0, RetriesLeft, _) ->
 %% @end
 %% -----------------------------------------------------------------------------
 valid_partition(Id) ->
-   pdb:is_partition(Id) orelse error(invalid_store_id),
+   plum_db:is_partition(Id) orelse error(invalid_store_id),
    Id.
 
 

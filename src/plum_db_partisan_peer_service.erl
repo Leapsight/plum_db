@@ -23,8 +23,8 @@
 %% Based on: github.com/lasp-lang/lasp/...lasp_partisan_peer_service.erl
 %% @end
 %% -----------------------------------------------------------------------------
--module(pdb_partisan_peer_service).
--behaviour(pdb_peer_service).
+-module(plum_db_partisan_peer_service).
+-behaviour(plum_db_peer_service).
 
 -define(PEER_SERVICE, partisan_peer_service).
 

@@ -763,7 +763,7 @@ sha(Chunk, Bin, Ctx) ->
     end.
 
 get_env(Key, Default) ->
-    app_helper:get_env(pdb, Key, Default).
+    app_helper:get_env(plum_db, Key, Default).
 
 -spec update_levels(integer(),
                     [{integer(), [{integer(), binary()}]}],

@@ -1,11 +1,11 @@
--module(pdb_exchange_statem).
+-module(plum_db_exchange_statem).
 -behaviour(gen_statem).
 
 -record(state, {
     %% node the exchange is taking place with
     peer                        :: node(),
     %%  the partitions left
-    partitions                  :: [pdb:partition()],
+    partitions                  :: [plum_db:partition()],
     %% count of trees that have been buit
     local_tree_updated = false   ::  boolean(),
     remote_tree_updated = false ::  boolean(),
@@ -69,7 +69,7 @@ start(Peer, Timeout) ->
 init([Peer, Timeout]) ->
     State = #state{
         peer = Peer,
-        partitions = pdb:partitions(),
+        partitions = plum_db:partitions(),
         timeout = Timeout
     },
     {ok, acquiring_locks, State, [{next_event, internal, start}]}.
@@ -210,15 +210,15 @@ exchanging_data(timeout, _, State) ->
 
     RemoteFun = fun
         (Prefixes, {get_bucket, {Level, Bucket}}) ->
-            pdb_hashtree:get_bucket(Peer, Partition, Prefixes, Level, Bucket);
+            plum_db_hashtree:get_bucket(Peer, Partition, Prefixes, Level, Bucket);
         (Prefixes, {key_hashes, Segment}) ->
-            pdb_hashtree:key_hashes(Peer, Partition, Prefixes, Segment)
+            plum_db_hashtree:key_hashes(Peer, Partition, Prefixes, Segment)
     end,
     HandlerFun = fun(Diff, Acc) ->
         repair(Peer, Diff),
         track_repair(Diff, Acc)
     end,
-    Res = pdb_hashtree:compare(
+    Res = plum_db_hashtree:compare(
         Partition,
         RemoteFun,
         HandlerFun,
@@ -235,14 +235,18 @@ exchanging_data(timeout, _, State) ->
     case Total > 0 of
         true ->
             _ = lager:info(
-                "Completed metadata exchange with peer ~p partition ~p."
-                " Repaired ~p missing local prefixes, "
-                "~p missing remote prefixes, and ~p keys",
-                [Peer, Partition, LocalPrefixes, RemotePrefixes, Keys]
+                "Completed data exchange with remote partition;"
+                " partition=~p, peer=~p, missing_local_prefixes=~p,"
+                " missing_remote_prefixes=~p, keys=~p",
+                [Partition, Partition, LocalPrefixes, RemotePrefixes, Keys]
             );
         false ->
             _ = lager:info(
-                "Completed metadata exchange with ~p, nothing repaired", [Peer])
+                "Completed data exchange with remote partition;"
+                " partition=~p, peer=~p, missing_local_prefixes=0,"
+                " missing_remote_prefixes=0, keys=0",
+                [Partition, Peer]
+            )
     end,
     ok = release_locks(State),
     case State#state.partitions of
@@ -284,7 +288,7 @@ log_event(StateLabel, Type, Event, State) ->
 
 acquire_local_lock(#state{partitions = [H|T]} = State) ->
     %% get local lock
-    case pdb_hashtree:lock(H) of
+    case plum_db_hashtree:lock(H) of
         ok ->
             {ok, H, State};
         Error ->
@@ -303,7 +307,7 @@ acquire_local_lock(#state{partitions = []} = State) ->
 async_acquire_remote_lock(Peer, Partition) ->
     Self = self(),
     do_async(fun() ->
-        Res = pdb_hashtree:lock(Peer, Partition, Self),
+        Res = plum_db_hashtree:lock(Peer, Partition, Self),
         {remote_lock, Res}
     end).
 
@@ -311,12 +315,12 @@ async_acquire_remote_lock(Peer, Partition) ->
 release_locks(State) ->
     Partition = hd(State#state.partitions),
     %% Release remote lock
-    _ = pdb_hashtree:release_lock(State#state.peer, Partition),
+    _ = plum_db_hashtree:release_lock(State#state.peer, Partition),
     release_local_lock(State).
 
 
 release_local_lock(State) ->
-    _ = pdb_hashtree:release_lock(hd(State#state.partitions)),
+    _ = plum_db_hashtree:release_lock(hd(State#state.partitions)),
     ok.
 
 
@@ -325,7 +329,7 @@ update_request(Node, Partition) when Node =:= node() ->
     do_async(fun() ->
         %% acquired lock so we know there is no other update
         %% and tree is built
-        case pdb_hashtree:update(Node, Partition) of
+        case plum_db_hashtree:update(Node, Partition) of
             ok -> local_tree_updated;
             Error -> {error, {local, Error}}
         end
@@ -335,7 +339,7 @@ update_request(Node, Partition) ->
     do_async(fun() ->
         %% acquired lock so we know there is no other update
         %% and tree is built
-        case pdb_hashtree:update(Node, Partition) of
+        case plum_db_hashtree:update(Node, Partition) of
             ok -> remote_tree_updated;
             Error -> {error, {remote, Error}}
         end
@@ -373,27 +377,27 @@ repair_prefix(Peer, Type, [Prefix, SubPrefix]) ->
 
 %% @private
 repair_sub_prefixes(Type, Peer, Prefix, It) ->
-    case pdb:iterator_done(It) of
+    case plum_db:iterator_done(It) of
         true ->
-            pdb:iterator_close(It);
+            plum_db:iterator_close(It);
         false ->
-            FullPrefix = {Prefix, _} = pdb:iterator_prefix(It),
+            FullPrefix = {Prefix, _} = plum_db:iterator_prefix(It),
             ItType = repair_iterator_type(Type),
             ObjIt = repair_iterator(ItType, Peer, FullPrefix),
             repair_full_prefix(Type, Peer, FullPrefix, ObjIt),
-            repair_sub_prefixes(Type, Peer, Prefix, pdb:iterate(It))
+            repair_sub_prefixes(Type, Peer, Prefix, plum_db:iterate(It))
     end.
 
 
 %% @private
 repair_full_prefix(Type, Peer, FullPrefix, ObjIt) ->
-    case pdb:iterator_done(ObjIt) of
+    case plum_db:iterator_done(ObjIt) of
         true ->
-            pdb:iterator_close(ObjIt);
+            plum_db:iterator_close(ObjIt);
         false ->
-            {Key, Obj} = pdb:iterator_value(ObjIt),
+            {Key, Obj} = plum_db:iterator_value(ObjIt),
             repair_other(Type, Peer, {FullPrefix, Key}, Obj),
-            repair_full_prefix(Type, Peer, FullPrefix, pdb:iterate(ObjIt))
+            repair_full_prefix(Type, Peer, FullPrefix, plum_db:iterate(ObjIt))
     end.
 
 
@@ -411,8 +415,8 @@ repair_keys(Peer, PrefixList, {_Type, KeyBin}) ->
     Key = binary_to_term(KeyBin),
     Prefix = list_to_tuple(PrefixList),
     PKey = {Prefix, Key},
-    LocalObj = pdb:get_object(PKey),
-    RemoteObj = pdb:get_object(Peer, PKey),
+    LocalObj = plum_db:get_object(PKey),
+    RemoteObj = plum_db:get_object(Peer, PKey),
     merge(undefined, PKey, RemoteObj),
     merge(Peer, PKey, LocalObj),
     ok.
@@ -421,19 +425,19 @@ repair_keys(Peer, PrefixList, {_Type, KeyBin}) ->
 %% @private
 %% context is ignored since its in object, so pass undefined
 merge(undefined, PKey, RemoteObj) ->
-    pdb:merge({PKey, undefined}, RemoteObj);
+    plum_db:merge({PKey, undefined}, RemoteObj);
 merge(Peer, PKey, LocalObj) ->
-    pdb:merge(Peer, {PKey, undefined}, LocalObj).
+    plum_db:merge(Peer, {PKey, undefined}, LocalObj).
 
 
 %% @private
 repair_iterator(local, _, Prefix)
 when is_atom(Prefix) orelse is_binary(Prefix) ->
-    pdb:base_iterator(Prefix);
+    plum_db:base_iterator(Prefix);
 repair_iterator(local, _, FullPrefix) when is_tuple(FullPrefix) ->
-    pdb:base_iterator(FullPrefix, undefined);
+    plum_db:base_iterator(FullPrefix, undefined);
 repair_iterator(remote, Peer, PrefixOrFull) ->
-    pdb:remote_base_iterator(Peer, PrefixOrFull).
+    plum_db:remote_base_iterator(Peer, PrefixOrFull).
 
 
 %% @private

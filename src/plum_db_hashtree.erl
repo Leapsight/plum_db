@@ -17,7 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(pdb_hashtree).
+-module(plum_db_hashtree).
 
 -behaviour(gen_server).
 
@@ -48,7 +48,7 @@
 -export([terminate/2]).
 -export([code_change/3]).
 
--include("pdb.hrl").
+-include("plum_db.hrl").
 
 
 -record(state, {
@@ -84,7 +84,7 @@
 -spec start_link(non_neg_integer()) -> {ok, pid()} | ignore | {error, term()}.
 
 start_link(Partition) ->
-    PRoot = app_helper:get_env(pdb, data_dir),
+    PRoot = app_helper:get_env(plum_db, data_dir),
     DataRoot = filename:join([PRoot, "trees", integer_to_list(Partition)]),
     Name = name(Partition),
     gen_server:start_link({local, Name}, ?MODULE, [Partition, DataRoot], []).
@@ -95,14 +95,14 @@ start_link(Partition) ->
 %% @end
 %% -----------------------------------------------------------------------------
 name(Partition) ->
-    list_to_atom("pdb_hashtree_" ++ integer_to_list(Partition)).
+    list_to_atom("plum_db_hashtree_" ++ integer_to_list(Partition)).
 
 
 %% -----------------------------------------------------------------------------
 %% @doc Same as insert(PKey, Hash, false).
 %% @end
 %% -----------------------------------------------------------------------------
--spec insert(pdb_pkey(), binary()) -> ok.
+-spec insert(plum_db_pkey(), binary()) -> ok.
 insert(PKey, Hash) ->
     insert(PKey, Hash, false).
 
@@ -113,13 +113,13 @@ insert(PKey, Hash) ->
 %% inserted into the tree if the key is not already present.
 %% @end
 %% -----------------------------------------------------------------------------
--spec insert(pdb_pkey(), binary(), boolean()) -> ok.
+-spec insert(plum_db_pkey(), binary(), boolean()) -> ok.
 insert(PKey, Hash, IfMissing) ->
-    Name = name(pdb:get_partition(PKey)),
+    Name = name(plum_db:get_partition(PKey)),
     gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
 
 
--spec insert(pbd:partition(), pdb_pkey(), binary(), boolean()) -> ok.
+-spec insert(pbd:partition(), plum_db_pkey(), binary(), boolean()) -> ok.
 insert(Partition, PKey, Hash, IfMissing) ->
     Name = name(Partition),
     gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
@@ -131,7 +131,7 @@ insert(Partition, PKey, Hash, IfMissing) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec prefix_hash(
-    pdb:partition() | pid() | atom(), pdb_prefix() | binary() | atom()) ->
+    plum_db:partition() | pid() | atom(), plum_db_prefix() | binary() | atom()) ->
     undefined | binary().
 
 prefix_hash(Partition, Prefix) when is_integer(Partition) ->
@@ -180,7 +180,7 @@ key_hashes(Node, Partition, Prefixes, Segment) ->
 %% @see lock/3
 %% @end
 %% -----------------------------------------------------------------------------
--spec lock(pdb:partition()) -> ok | not_built | locked.
+-spec lock(plum_db:partition()) -> ok | not_built | locked.
 lock(Partition) ->
     lock(node(), Partition).
 
@@ -191,7 +191,7 @@ lock(Partition) ->
 %% @see lock/3
 %% @end
 %% -----------------------------------------------------------------------------
--spec lock(node(), pdb:partition()) -> ok | not_built | locked.
+-spec lock(node(), plum_db:partition()) -> ok | not_built | locked.
 
 lock(Node, Partition) ->
     lock(Node, Partition, self()).
@@ -205,7 +205,7 @@ lock(Node, Partition) ->
 %% aqcuiring the lock succeeds and `ok' is returned.
 %% @end
 %% -----------------------------------------------------------------------------
--spec lock(node(), pdb:partition(), pid()) -> ok | not_built | locked.
+-spec lock(node(), plum_db:partition(), pid()) -> ok | not_built | locked.
 
 lock(Node, Partition, Pid) ->
     gen_server:call({name(Partition), Node}, {lock, Pid}, infinity).
@@ -218,7 +218,7 @@ lock(Node, Partition, Pid) ->
 %% @see lock/3
 %% @end
 %% -----------------------------------------------------------------------------
--spec release_lock(pdb:partition()) -> ok.
+-spec release_lock(plum_db:partition()) -> ok.
 release_lock(Partition) ->
     release_lock(node(), Partition).
 
@@ -229,7 +229,7 @@ release_lock(Partition) ->
 %% @see lock/3
 %% @end
 %% -----------------------------------------------------------------------------
--spec release_lock(node(), pdb:partition()) -> ok.
+-spec release_lock(node(), plum_db:partition()) -> ok.
 
 release_lock(Node, Partition) ->
     release_lock(Node, Partition, self()).
@@ -243,7 +243,7 @@ release_lock(Node, Partition) ->
 %% aqcuiring the lock succeeds and `ok' is returned.
 %% @end
 %% -----------------------------------------------------------------------------
--spec release_lock(node(), pdb:partition(), pid()) -> ok.
+-spec release_lock(node(), plum_db:partition(), pid()) -> ok.
 
 release_lock(Node, Partition, Pid) ->
     Type = case node() of
@@ -261,7 +261,7 @@ release_lock(Node, Partition, Pid) ->
 %% @see update/2
 %% @end
 %% -----------------------------------------------------------------------------
--spec update(pdb:partition()) -> ok | not_locked | not_built | ongoing_update.
+-spec update(plum_db:partition()) -> ok | not_locked | not_built | ongoing_update.
 update(Partition) ->
     update(node(), Partition).
 
@@ -278,7 +278,7 @@ update(Partition) ->
 %% the process that manages the tree (e.g. future inserts).
 %% @end
 %% -----------------------------------------------------------------------------
--spec update(node(), pdb:partition()) ->
+-spec update(node(), plum_db:partition()) ->
     ok | not_locked | not_built | ongoing_update.
 
 update(Node, Partition) ->
@@ -299,7 +299,7 @@ update(Node, Partition) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec compare(
-    pdb:partition(),
+    plum_db:partition(),
     hashtree_tree:remote_fun(),
     hashtree_tree:handler_fun(X),
     X) -> X.
@@ -487,7 +487,7 @@ maybe_build_async(State) ->
 build_async(State) ->
     {_Pid, Ref} = spawn_monitor(fun() ->
         Partition = State#state.partition,
-        PrefixIt = pdb:base_iterator(
+        PrefixIt = plum_db:base_iterator(
             {undefined, undefined}, undefined, Partition),
         build(Partition, PrefixIt)
     end),
@@ -497,29 +497,29 @@ build_async(State) ->
 
 %% @private
 build(Partition, PrefixIt) ->
-    case pdb:iterator_done(PrefixIt) of
+    case plum_db:iterator_done(PrefixIt) of
         true ->
-            pdb:iterator_close(PrefixIt);
+            plum_db:iterator_close(PrefixIt);
         false ->
-            Prefix = pdb:iterator_prefix(PrefixIt),
-            ObjIt = pdb:base_iterator(Prefix, undefined, Partition),
+            Prefix = plum_db:iterator_prefix(PrefixIt),
+            ObjIt = plum_db:base_iterator(Prefix, undefined, Partition),
             build(Partition, PrefixIt, ObjIt)
     end.
 
 
 %% @private
 build(Partition, PrefixIt, ObjIt) ->
-    case pdb:iterator_done(ObjIt) of
+    case plum_db:iterator_done(ObjIt) of
         true ->
-            pdb:iterator_close(ObjIt),
-            build(Partition, pdb:iterate(PrefixIt));
+            plum_db:iterator_close(ObjIt),
+            build(Partition, plum_db:iterate(PrefixIt));
         false ->
-            FullPrefix = pdb:base_iterator_prefix(ObjIt),
-            {Key, Obj} = pdb:iterator_value(ObjIt),
-            Hash = pdb_object:hash(Obj),
+            FullPrefix = plum_db:base_iterator_prefix(ObjIt),
+            {Key, Obj} = plum_db:iterator_value(ObjIt),
+            Hash = plum_db_object:hash(Obj),
             %% insert only if missing to not clash w/ newer writes during build
             ?MODULE:insert({FullPrefix, Key}, Hash, true),
-            build(Partition, PrefixIt, pdb:iterate(ObjIt))
+            build(Partition, PrefixIt, plum_db:iterate(ObjIt))
     end.
 
 %% @private
@@ -577,5 +577,5 @@ prepare_pkey({FullPrefix, Key}) ->
 
 %% @private
 schedule_tick() ->
-    TickMs = app_helper:get_env(pdb, hashtree_timer, 10000),
+    TickMs = app_helper:get_env(plum_db, hashtree_timer, 10000),
     erlang:send_after(TickMs, ?MODULE, tick).

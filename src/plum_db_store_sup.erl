@@ -14,7 +14,7 @@
 %%    limitations under the License.
 %% -----------------------------------------------------------------------------
 
--module(pdb_store_sup).
+-module(plum_db_store_sup).
 -behaviour(supervisor).
 
 -define(CHILD(Id, Mod, Type, Args, Timeout),
@@ -48,17 +48,17 @@ init([]) ->
     RestartStrategy = {one_for_one, 5, 1},
     Children = [
         #{
-            id => pdb_store_partition_sup:name(Id),
+            id => plum_db_store_partition_sup:name(Id),
             start => {
-                pdb_store_partition_sup,
+                plum_db_store_partition_sup,
                 start_link,
                 [Id]
             },
             restart => permanent,
             shutdown => infinity,
             type => supervisor,
-            modules => [pdb_store_partition_sup]
+            modules => [plum_db_store_partition_sup]
         }
-        || Id <- pdb:partitions()
+        || Id <- plum_db:partitions()
     ],
     {ok, {RestartStrategy, Children}}.

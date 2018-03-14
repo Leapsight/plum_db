@@ -18,7 +18,7 @@
 %%
 %% -------------------------------------------------------------------
 
--module(pdb_events).
+-module(plum_db_events).
 
 -behaviour(gen_event).
 

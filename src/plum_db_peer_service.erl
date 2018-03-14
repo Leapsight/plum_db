@@ -23,9 +23,9 @@
 %% Based on: github.com/lasp-lang/lasp/...lasp_peer_service.erl
 %% @end
 %% -----------------------------------------------------------------------------
--module(pdb_peer_service).
+-module(plum_db_peer_service).
 
--define(DEFAULT_PEER_SERVICE, pdb_partisan_peer_service).
+-define(DEFAULT_PEER_SERVICE, plum_db_partisan_peer_service).
 
 
 -export([join/1]).
@@ -83,7 +83,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 peer_service() ->
-    application:get_env(pdb, peer_service, ?DEFAULT_PEER_SERVICE).
+    application:get_env(plum_db, peer_service, ?DEFAULT_PEER_SERVICE).
 
 
 %% -----------------------------------------------------------------------------
