@@ -235,14 +235,14 @@ exchanging_data(timeout, _, State) ->
     case Total > 0 of
         true ->
             _ = lager:info(
-                "Completed data exchange with remote partition;"
+                "Completed data exchange;"
                 " partition=~p, peer=~p, missing_local_prefixes=~p,"
                 " missing_remote_prefixes=~p, keys=~p",
                 [Partition, Partition, LocalPrefixes, RemotePrefixes, Keys]
             );
         false ->
             _ = lager:info(
-                "Completed data exchange with remote partition;"
+                "Completed data exchange;"
                 " partition=~p, peer=~p, missing_local_prefixes=0,"
                 " missing_remote_prefixes=0, keys=0",
                 [Partition, Peer]
