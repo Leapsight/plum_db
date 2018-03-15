@@ -238,7 +238,7 @@ exchanging_data(timeout, _, State) ->
                 "Completed data exchange;"
                 " partition=~p, peer=~p, missing_local_prefixes=~p,"
                 " missing_remote_prefixes=~p, keys=~p",
-                [Partition, Partition, LocalPrefixes, RemotePrefixes, Keys]
+                [Partition, Peer, LocalPrefixes, RemotePrefixes, Keys]
             );
         false ->
             _ = lager:info(
