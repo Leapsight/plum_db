@@ -24,6 +24,9 @@
 
 %% API
 -export([start_link/0]).
+-export([subscribe/1]).
+-export([unsubscribe/1]).
+-export([subscribe/2]).
 -export([add_handler/2]).
 -export([add_sup_handler/2]).
 -export([add_callback/1]).
@@ -49,26 +52,99 @@
 start_link() ->
     gen_event:start_link({local, ?MODULE}).
 
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
 add_handler(Handler, Args) ->
     gen_event:add_handler(?MODULE, Handler, Args).
 
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
 add_sup_handler(Handler, Args) ->
     gen_event:add_sup_handler(?MODULE, Handler, Args).
 
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
 add_callback(Fn) when is_function(Fn) ->
     gen_event:add_handler(?MODULE, {?MODULE, make_ref()}, [Fn]).
 
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
 add_sup_callback(Fn) when is_function(Fn) ->
     gen_event:add_sup_handler(?MODULE, {?MODULE, make_ref()}, [Fn]).
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
-%% Notify the event handlers of an updated object
+%% @doc Subscribe to events of type Event.
+%% Any events published  through update/1 will delivered to the current process,
+%% along with all other subscribers.
+%% This function will raise an exception if you try to subscribe to the same
+%% event twice from the same process.
+%% This function uses plum_db_pubsub:subscribe/2.
 %% @end
 %% -----------------------------------------------------------------------------
-update(Obj) ->
-    gen_event:notify(?MODULE, {object_update, Obj}).
+subscribe(Event) ->
+    true = plum_db_pubsub:subscribe(l, Event),
+    ok.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Subscribe conditionally to events of type Event.
+%% This function is similar to subscribe/2, but adds a condition in the form of
+%% an ets match specification.
+%% The condition is tested and a message is delivered only if the condition is
+%% true. Specifically, the test is:
+%% `ets:match_spec_run([Msg], ets:match_spec_compile(Cond)) == [true]'
+%% In other words, if the match_spec returns true for a message, that message
+%% is sent to the subscriber.
+%% For any other result from the match_spec, the message is not sent. `Cond ==
+%% undefined' means that all messages will be delivered, which means that
+%% `Cond=undefined' and `Cond=[{'_',[],[true]}]' are equivalent.
+%% This function will raise an exception if you try to subscribe to the same
+%% event twice from the same process.
+%% This function uses `plum_db_pubsub:subscribe_cond/2'.
+%% @end
+%% -----------------------------------------------------------------------------
+subscribe(Event, MatchSpec) ->
+    true = plum_db_pubsub:subscribe_cond(l, Event, MatchSpec),
+    ok.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Remove subscription created using `subscribe/1,2'
+%% @end
+%% -----------------------------------------------------------------------------
+unsubscribe(Event) ->
+    true = plum_db_pubsub:unsubscribe(l, Event),
+    ok.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% Notify the event handlers, callback funs and subscribers of an updated
+%% object.
+%% The message delivered to each subscriber will be of the form:
+%% `{plum_db_event, Event, Msg}'
+%% @end
+%% -----------------------------------------------------------------------------
+update(PObject) ->
+    %% We notify gen_event handlers and callback funs
+    ok = gen_event:notify(?MODULE, {object_update, PObject}),
+    %% We notify gproc subscribers
+    %% _ = plum_db_pubsub:publish(l, object_update, PObject),
+    %% We notify gproc conditional subscribers
+    _ = plum_db_pubsub:publish_cond(l, object_update, PObject),
+    ok.
 
 
 
