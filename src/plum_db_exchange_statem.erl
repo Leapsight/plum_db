@@ -426,6 +426,7 @@ repair_keys(Peer, PrefixList, {_Type, KeyBin}) ->
 %% context is ignored since its in object, so pass undefined
 merge(undefined, PKey, RemoteObj) ->
     plum_db:merge({PKey, undefined}, RemoteObj);
+
 merge(Peer, PKey, LocalObj) ->
     plum_db:merge(Peer, {PKey, undefined}, LocalObj).
 
