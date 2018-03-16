@@ -27,6 +27,7 @@
 -export([subscribe/1]).
 -export([unsubscribe/1]).
 -export([subscribe/2]).
+-export([add_pubsub_handler/0]).
 -export([add_handler/2]).
 -export([add_sup_handler/2]).
 -export([add_callback/1]).
@@ -42,15 +43,26 @@
 -export([code_change/3]).
 
 -record(state, {
-    callback
+    callback    :: function() | undefined
 }).
 
 %% ===================================================================
 %% API functions
 %% ===================================================================
 
+
+
 start_link() ->
     gen_event:start_link({local, ?MODULE}).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+add_pubsub_handler() ->
+    gen_event:add_handler(?MODULE, {?MODULE, pubsub}, [pubsub]).
+
 
 %% -----------------------------------------------------------------------------
 %% @doc
@@ -72,7 +84,7 @@ add_sup_handler(Handler, Args) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-add_callback(Fn) when is_function(Fn) ->
+add_callback(Fn) when is_function(Fn, 1) ->
     gen_event:add_handler(?MODULE, {?MODULE, make_ref()}, [Fn]).
 
 
@@ -80,7 +92,7 @@ add_callback(Fn) when is_function(Fn) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-add_sup_callback(Fn) when is_function(Fn) ->
+add_sup_callback(Fn) when is_function(Fn, 1) ->
     gen_event:add_sup_handler(?MODULE, {?MODULE, make_ref()}, [Fn]).
 
 
@@ -148,22 +160,32 @@ update(PObject) ->
 %% =============================================================================
 
 
+init([pubsub]) ->
+    {ok, #state{}};
 
-init([Fn]) ->
+init([Fn]) when is_function(Fn, 1) ->
     {ok, #state{callback = Fn}}.
+
+
+handle_event({object_update, PObj}, #state{callback = undefined} = State) ->
+    %% This is the pubsub handler instance
+    %% We notify gproc conditional subscribers
+    _ = plum_db_pubsub:publish_cond(l, object_update, PObj),
+    {ok, State};
 
 handle_event({object_update, PObj}, State) ->
     %% We notify gen_event handlers and callback funs
     (State#state.callback)(PObj),
-    %% We notify gproc conditional subscribers
-    _ = plum_db_pubsub:publish_cond(l, object_update, PObj),
     {ok, State}.
+
 
 handle_call(_Request, State) ->
     {ok, ok, State}.
 
+
 handle_info(_Info, State) ->
     {ok, State}.
+
 
 terminate(_Reason, _State) ->
     ok.

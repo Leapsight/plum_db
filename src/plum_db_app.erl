@@ -63,7 +63,10 @@
 %% @end
 %% -----------------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
-    plum_db_sup:start_link().
+    {ok, Pid} = plum_db_sup:start_link(),
+    %% We set the pubsub handler
+    ok = plum_db_events:add_pubsub_handler(),
+    {ok, Pid}.
 
 
 %% -----------------------------------------------------------------------------
