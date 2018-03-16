@@ -138,15 +138,7 @@ unsubscribe(Event) ->
 %% @end
 %% -----------------------------------------------------------------------------
 update(PObject) ->
-    %% We notify gen_event handlers and callback funs
-    ok = gen_event:notify(?MODULE, {object_update, PObject}),
-    %% We notify gproc subscribers
-    %% _ = plum_db_pubsub:publish(l, object_update, PObject),
-    %% We notify gproc conditional subscribers
-    _ = plum_db_pubsub:publish_cond(l, object_update, PObject),
-    ok.
-
-
+    ok = gen_event:notify(?MODULE, {object_update, PObject}).
 
 
 
@@ -156,11 +148,15 @@ update(PObject) ->
 %% =============================================================================
 
 
+
 init([Fn]) ->
     {ok, #state{callback = Fn}}.
 
-handle_event({object_update, Obj}, State) ->
-    (State#state.callback)(Obj),
+handle_event({object_update, PObj}, State) ->
+    %% We notify gen_event handlers and callback funs
+    (State#state.callback)(PObj),
+    %% We notify gproc conditional subscribers
+    _ = plum_db_pubsub:publish_cond(l, object_update, PObj),
     {ok, State}.
 
 handle_call(_Request, State) ->
