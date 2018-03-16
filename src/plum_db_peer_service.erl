@@ -35,6 +35,7 @@
 -export([leave/1]).
 -export([manager/0]).
 -export([myself/0]).
+-export([mynode/0]).
 -export([members/0]).
 -export([peer_service/0]).
 -export([stop/0]).
@@ -58,11 +59,20 @@
 %% ownership.
 -callback join(node(), node(), boolean()) -> ok | {error, atom()}.
 
-%% Remove a node from the cluster.
+%% Remove myself from the cluster.
 -callback leave() -> ok.
+
+%% Remove a node from the cluster.
+-callback leave(node()) -> ok.
 
 %% Return members of the cluster.
 -callback members() -> {ok, [node()]}.
+
+%% Return manager.
+-callback myself() -> map().
+
+%% Return manager.
+-callback mynode() -> atom().
 
 %% Return manager.
 -callback manager() -> module().
@@ -104,6 +114,9 @@ join(NodeStr, Auto) when is_list(NodeStr) ->
     do(join, [NodeStr, Auto]);
 
 join(Node, Auto) when is_atom(Node) ->
+    do(join, [Node, Auto]);
+
+join(#{name := _Name, listen_addrs := _ListenAddrs} = Node, Auto) ->
     do(join, [Node, Auto]).
 
 
@@ -132,6 +145,14 @@ myself() ->
 
 
 %% -----------------------------------------------------------------------------
+%% @doc Return myself.
+%% @end
+%% -----------------------------------------------------------------------------
+mynode() ->
+    do(node, []).
+
+
+%% -----------------------------------------------------------------------------
 %% @doc Return manager.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -144,8 +165,7 @@ manager() ->
 %% @end
 %% -----------------------------------------------------------------------------
 leave() ->
-    do(leave, [partisan_peer_service_manager:mynode()]).
-
+    do(leave, []).
 
 
 %% -----------------------------------------------------------------------------
@@ -154,8 +174,6 @@ leave() ->
 %% -----------------------------------------------------------------------------
 leave(Peer) ->
     do(leave, [Peer]).
-
-
 
 
 %% -----------------------------------------------------------------------------

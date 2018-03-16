@@ -28,13 +28,16 @@
 
 -define(PEER_SERVICE, partisan_peer_service).
 
+%% plum_db_peer_service callbacks
 -export([join/1]).
 -export([join/2]).
 -export([join/3]).
 -export([leave/0]).
+-export([leave/1]).
 -export([members/0]).
 -export([manager/0]).
 -export([myself/0]).
+-export([mynode/0]).
 -export([stop/0]).
 -export([stop/1]).
 
@@ -81,7 +84,16 @@ join(Node, Node, Auto) ->
 %% @end
 %% -----------------------------------------------------------------------------
 leave() ->
-    do(leave, []).
+    Manager = do(?PEER_SERVICE, manager, []),
+    do(leave, [Manager:mynode()]).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Leave the cluster.
+%% @end
+%% -----------------------------------------------------------------------------
+leave(Node) ->
+    do(leave, [Node]).
 
 
 %% -----------------------------------------------------------------------------
@@ -107,6 +119,15 @@ manager() ->
 myself() ->
     Manager = do(?PEER_SERVICE, manager, []),
     Manager:myself().
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+mynode() ->
+    Manager = do(?PEER_SERVICE, manager, []),
+    Manager:mynode().
 
 
 %% -----------------------------------------------------------------------------

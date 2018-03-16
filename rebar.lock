@@ -1,9 +1,13 @@
 {"1.1.0",
-[{<<"acceptor_pool">>,{pkg,<<"acceptor_pool">>,<<"1.0.0-rc.0">>},2},
+[{<<"acceptor_pool">>,{pkg,<<"acceptor_pool">>,<<"1.0.0-rc.0">>},1},
  {<<"eleveldb">>,{pkg,<<"eleveldb">>,<<"2.2.20">>},0},
  {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},1},
  {<<"lager">>,{pkg,<<"lager">>,<<"3.6.1">>},0},
  {<<"lasp_support">>,{pkg,<<"lasp_support">>,<<"0.0.3">>},1},
+ {<<"partisan">>,
+  {git,"git@github.com:Leapsight/partisan.git",
+       {ref,"22c3f76ca7e29b926a22cf6598891dde08b9cf9c"}},
+  0},
  {<<"plumtree">>,
   {git,"https://github.com/lasp-lang/plumtree.git",
        {ref,"79b2a642575f933574b6b4daf2b81739d40511a2"}},
@@ -11,15 +15,15 @@
  {<<"quickrand">>,
   {git,"https://github.com/okeuday/quickrand.git",
        {ref,"336c0d94a6a384f307183b3c14fc2112656dac37"}},
-  3},
+  2},
  {<<"rand_compat">>,{pkg,<<"rand_compat">>,<<"0.0.3">>},1},
  {<<"sext">>,{pkg,<<"sext">>,<<"1.4.1">>},0},
  {<<"time_compat">>,{pkg,<<"time_compat">>,<<"0.0.1">>},1},
- {<<"types">>,{pkg,<<"types">>,<<"0.1.6">>},2},
+ {<<"types">>,{pkg,<<"types">>,<<"0.1.6">>},1},
  {<<"uuid">>,
   {git,"https://github.com/okeuday/uuid.git",
        {ref,"aadf1be200d318f2fdf2f996b58852a4a49244f0"}},
-  2}]}.
+  1}]}.
 [
 {pkg_hash,[
  {<<"acceptor_pool">>, <<"679D741DF87FC13599B1AEF2DF8F78F1F880449A6BEFAB7C44FB6FAE0E92A2DE">>},
