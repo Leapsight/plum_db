@@ -119,6 +119,8 @@ handle_call({merge, PKey, Obj}, _From, State0) ->
             {reply, false, State0};
         {true, Reconciled} ->
             {Reconciled, State1} = store(PKey, Reconciled, State0),
+            %% We notify local subscribers and event handlers
+            ok = plum_db_events:update({PKey, Reconciled}),
             {reply, true, State1}
     end.
 
@@ -174,5 +176,4 @@ store({_FullPrefix, _Key} = PKey, Obj, State) ->
     Hash = plum_db_object:hash(Obj),
     ok = plum_db_partition_hashtree:insert(State#state.partition, PKey, Hash, false),
     ok = plum_db_partition_server:put(State#state.partition, PKey, Obj),
-    ok = plum_db_events:update({PKey, Obj}),
     {Obj, State}.
