@@ -105,6 +105,7 @@
 -export([get/3]).
 -export([get_object/1]).
 -export([get_object/2]).
+-export([iterator/0]).
 -export([iterator/1]).
 -export([iterator/2]).
 -export([iterator_close/1]).
@@ -372,6 +373,15 @@ to_list(FullPrefix, Opts) ->
 
 
 %% -----------------------------------------------------------------------------
+%% @doc Same as iterator({undefined, undefined}).
+%% @end
+%% -----------------------------------------------------------------------------
+-spec iterator() -> iterator().
+iterator() ->
+    iterator({undefined, undefined}, []).
+
+
+%% -----------------------------------------------------------------------------
 %% @doc Same as iterator(FullPrefix, []).
 %% @end
 %% -----------------------------------------------------------------------------
@@ -625,8 +635,8 @@ iterator_value(#iterator{base_iterator = Base, opts = Opts} = I) ->
 iterator_value(#remote_base_iterator{ref = Ref, node = Node}) ->
     gen_server:call({?MODULE, Node}, {iterator_value, Ref}, infinity);
 
-iterator_value(#base_iterator{obj = {{_Prefix, K}, V}}) ->
-    {K, V}.
+iterator_value(#base_iterator{obj = {{_Prefix, K}, Obj}} = I) ->
+    {K, maybe_tombstone(plum_db_object:value(Obj), iterator_default(I))}.
 
 
 

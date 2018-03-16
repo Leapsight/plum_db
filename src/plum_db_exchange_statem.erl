@@ -395,7 +395,7 @@ repair_full_prefix(Type, Peer, FullPrefix, ObjIt) ->
         true ->
             plum_db:iterator_close(ObjIt);
         false ->
-            {Key, Obj} = plum_db:iterator_value(ObjIt),
+            {{_, Key}, Obj} = plum_db:iterator_object(ObjIt),
             repair_other(Type, Peer, {FullPrefix, Key}, Obj),
             repair_full_prefix(Type, Peer, FullPrefix, plum_db:iterate(ObjIt))
     end.

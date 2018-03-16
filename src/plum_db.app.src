@@ -1,5 +1,5 @@
 {application, plum_db, [
-    {description, "Key Value store fully replicated using Partisan and Plumtree (Epidemic Broadcast Trees)"},
+    {description, "A database globally replicated via Plumtree (Epidemic Broadcast Trees) and Partisan. An offspring of Plumtree and Partisan, a descendant of Riak Core Metadata Store."},
     {vsn, "0.1.0"},
     {registered, []},
     {mod, {plum_db_app, []}},
@@ -16,7 +16,8 @@
         partisan,
         plumtree,
         eleveldb,
-        sext
+        sext,
+        gproc
     ]},
     {env, [
         {data_dir, "data"}
@@ -24,5 +25,5 @@
     {modules, []},
     {maintainers, ["Alejandro M. Ramallo"]},
     {licenses, ["Apache 2.0"]},
-    {links, []}
+    {links, [{"Gitlab", "https://gitlab.com/leapsight/plum_db"}]}
 ]}.

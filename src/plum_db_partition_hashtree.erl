@@ -516,7 +516,7 @@ build(Partition, PrefixIt, ObjIt) ->
             build(Partition, plum_db:iterate(PrefixIt));
         false ->
             FullPrefix = plum_db:base_iterator_prefix(ObjIt),
-            {Key, Obj} = plum_db:iterator_value(ObjIt),
+            {{_, Key}, Obj} = plum_db:iterator_object(ObjIt),
             Hash = plum_db_object:hash(Obj),
             %% insert only if missing to not clash w/ newer writes during build
             ?MODULE:insert({FullPrefix, Key}, Hash, true),
