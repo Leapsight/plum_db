@@ -550,7 +550,7 @@ iterator_done(#base_iterator{}) ->
 
 iterator_key_values(#iterator{base_iterator = Base, opts = Opts} = I) ->
     Default = iterator_default(I),
-    {Key, Obj} = iterator_value(Base),
+    {Key, Obj} = iterator_object(Base),
     AllowPut = get_option(allow_put, Opts, true),
     case get_option(resolver, Opts, undefined) of
         undefined ->
@@ -585,7 +585,7 @@ iterator_key(#iterator{base_iterator = Base}) ->
 -spec iterator_values(iterator()) -> [plum_db_value() | plum_db_tombstone()].
 iterator_values(#iterator{base_iterator = Base} = I) ->
     Default = iterator_default(I),
-    {_, Obj} = iterator_value(Base),
+    {_, Obj} = iterator_object(Base),
     maybe_tombstones(plum_db_object:values(Obj), Default).
 
 
@@ -607,16 +607,13 @@ iterator_values(#iterator{base_iterator = Base} = I) ->
 %% can be called once more).
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator_value
-    (iterator()) ->
-        plum_db_value() | plum_db_tombstone() | {error, conflict};
-    (base_iterator() | remote_base_iterator()) ->
-        {plum_db_key(), plum_db_object()} | plum_db_prefix() | binary() | atom().
+-spec iterator_value(iterator() | remote_base_iterator() | base_iterator()) ->
+    plum_db_value() | plum_db_tombstone() | {error, conflict}.
 
 
 iterator_value(#iterator{base_iterator = Base, opts = Opts} = I) ->
     Default = iterator_default(I),
-    {Key, Obj} = iterator_value(Base),
+    {Key, Obj} = iterator_object(Base),
     AllowPut = get_option(allow_put, Opts, true),
     case get_option(resolver, Opts, undefined) of
         undefined ->
@@ -655,6 +652,12 @@ iterator_prefix(#base_iterator{obj = {{Prefix, _}, _}}) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
+-spec iterator_object(base_iterator() | remote_base_iterator()) ->
+        {plum_db_key(), plum_db_object()}
+        | plum_db_prefix()
+        | binary()
+        | atom().
+
 iterator_object(#remote_base_iterator{ref = Ref, node = Node}) ->
     gen_server:call({?MODULE, Node}, {iterator_object, Ref}, infinity);
 
