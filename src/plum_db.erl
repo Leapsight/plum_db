@@ -678,7 +678,11 @@ iterator_default(#iterator{opts = Opts} = I) ->
         Fun when is_function(Fun) ->
             Fun(iterator_key(I));
         Val -> Val
-    end.
+    end;
+
+iterator_default(#base_iterator{}) ->
+    ?TOMBSTONE.
+
 
 
 %% -----------------------------------------------------------------------------
