@@ -29,7 +29,7 @@
 
 -record(state, {
     partition                           ::  non_neg_integer(),
-    db_ref 								::	eleveldb:db_ref(),
+    db_ref 								::	eleveldb:db_ref() | undefined,
 	config = []							::	opts(),
 	data_root							::	file:filename(),
 	open_opts = []						::	opts(),
@@ -238,8 +238,8 @@ init([Partition, Opts]) ->
                 {error, Reason} ->
                     {stop, Reason}
             end;
-		{error, _R} = Error ->
-		 	Error
+		{error, Reason} ->
+		 	{stop, Reason}
     end.
 
 
@@ -275,7 +275,7 @@ handle_call(byte_size, _From, State) ->
 
 handle_call(is_empty, _From, State) ->
     DbRef = State#state.db_ref,
-    Result = result(eleveldb:is_empty(DbRef)),
+    Result = eleveldb:is_empty(DbRef),
     {reply, Result, State};
 
 handle_call({iterator, Pid}, _From, State) ->
