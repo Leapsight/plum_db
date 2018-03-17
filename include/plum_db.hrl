@@ -1,4 +1,4 @@
--type plum_db_prefix()     :: {binary(), binary()}.
+-type plum_db_prefix()     :: {binary() | atom(), binary() | atom()}.
 -type plum_db_key()        :: any().
 -type plum_db_pkey()       :: {plum_db_prefix(), plum_db_key()}.
 -type plum_db_value()      :: any().
