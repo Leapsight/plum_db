@@ -3,15 +3,14 @@
 
 -record(state, {
     %% node the exchange is taking place with
-    peer                        :: node(),
-    %%  the partitions left
-    partitions                  :: [plum_db:partition()],
+    peer                            :: node(),
+    %% the remaining partitions to cover
+    partitions                      :: [plum_db:partition()],
     %% count of trees that have been buit
-    local_tree_updated = false   ::  boolean(),
-    remote_tree_updated = false ::  boolean(),
-    %% length of time waited to aqcuire remote lock or
-    %% update trees
-    timeout                     :: pos_integer()
+    local_tree_updated = false      ::  boolean(),
+    remote_tree_updated = false     ::  boolean(),
+    %% length of time waited to aqcuire remote lock or update trees
+    timeout                         :: pos_integer()
 }).
 
 -record(exchange, {
@@ -27,6 +26,7 @@
 
 %% API
 -export([start/2]).
+-export([start_link/2]).
 
 %% gen_statem callbacks
 -export([init/1]).
@@ -53,10 +53,23 @@
 %% the process will wait to aqcuire the remote lock or to upate both trees.
 %% @end
 %% -----------------------------------------------------------------------------
--spec start(node(), pos_integer()) -> {ok, pid()} | ignore | {error, term()}.
+-spec start(node(), list() | map()) -> {ok, pid()} | ignore | {error, term()}.
 
-start(Peer, Timeout) ->
-    gen_statem:start(?MODULE, [Peer, Timeout], []).
+start(Peer, Opts) when is_list(Opts) ->
+    start(Peer, maps:from_list(Opts));
+
+start(Peer, Opts) when is_map(Opts) ->
+    gen_statem:start(?MODULE, [Peer, Opts], []).
+
+
+-spec start_link(node(), list() | map()) ->
+    {ok, pid()} | ignore | {error, term()}.
+
+start_link(Peer, Opts) when is_list(Opts) ->
+    start_link(Peer, maps:from_list(Opts));
+
+start_link(Peer, Opts) when is_map(Opts) ->
+    gen_statem:start_link(?MODULE, [Peer, Opts], []).
 
 
 
@@ -66,11 +79,11 @@ start(Peer, Timeout) ->
 
 
 
-init([Peer, Timeout]) ->
+init([Peer, Opts]) ->
     State = #state{
         peer = Peer,
-        partitions = plum_db:partitions(),
-        timeout = Timeout
+        partitions = maps:get(partitions, Opts, plum_db:partitions()),
+        timeout = maps:get(timeout, Opts, 60000)
     },
     {ok, acquiring_locks, State, [{next_event, internal, start}]}.
 
@@ -251,6 +264,7 @@ exchanging_data(timeout, _, State) ->
     ok = release_locks(State),
     case State#state.partitions of
         [Partition] ->
+            %% This was the last partition, so we stop
             {stop, normal, State};
         [Partition|T] ->
             %% We carry on with the remaining partitions

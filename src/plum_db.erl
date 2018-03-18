@@ -1060,15 +1060,26 @@ graft(Context, Obj) ->
             {ok, Obj}
     end.
 
-
 %% -----------------------------------------------------------------------------
-%% @doc Trigger an exchange
+%% @doc Triggers an asynchronous exchange
 %% @end
 %% -----------------------------------------------------------------------------
 -spec exchange(node()) -> {ok, pid()} | {error, term()}.
 
 exchange(Peer) ->
-    case plum_db_exchange_statem:start(Peer, 60000) of
+    exchange(Peer, #{}).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Triggers an asynchronous exchange
+%% @end
+%% -----------------------------------------------------------------------------
+-spec exchange(node(), map()) -> {ok, pid()} | {error, term()}.
+
+exchange(Peer, Opts0) ->
+    Opts1 = maps:merge(#{timeout => 60000}, Opts0),
+
+    case plum_db_exchange_statem:start(Peer, Opts1) of
         {ok, Pid} ->
             {ok, Pid};
         {error, Reason} ->
