@@ -48,7 +48,7 @@ plum_db3@127.0.0.1> plum_db_peer_service:members().
 On node 1 do:
 
 ```erlang
-> plum_db:put({foo, bar}, foo, 1).
+> [plum_db:put({foo, bar}, foo, 1).
 ```
 
 On node 2 do:

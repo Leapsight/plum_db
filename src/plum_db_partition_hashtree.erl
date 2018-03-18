@@ -488,39 +488,25 @@ maybe_build_async(State) ->
 build_async(State) ->
     {_Pid, Ref} = spawn_monitor(fun() ->
         Partition = State#state.partition,
-        PrefixIt = plum_db:base_iterator(
-            {undefined, undefined}, undefined, Partition),
-        build(Partition, PrefixIt)
+        %% We iterate over the whole database
+        FullPrefix = {undefined, undefined},
+        Iterator = plum_db:iterator(FullPrefix, [{partitions, [Partition]}]),
+        build(Partition, Iterator)
     end),
-    State#state{built=Ref}.
-
-
-
-%% @private
-build(Partition, PrefixIt) ->
-    case plum_db:iterator_done(PrefixIt) of
-        true ->
-            plum_db:iterator_close(PrefixIt);
-        false ->
-            Prefix = plum_db:iterator_prefix(PrefixIt),
-            ObjIt = plum_db:base_iterator(Prefix, undefined, Partition),
-            build(Partition, PrefixIt, ObjIt)
-    end.
+    State#state{built = Ref}.
 
 
 %% @private
-build(Partition, PrefixIt, ObjIt) ->
-    case plum_db:iterator_done(ObjIt) of
+build(Partition, Iterator) ->
+    case plum_db:iterator_done(Iterator) of
         true ->
-            plum_db:iterator_close(ObjIt),
-            build(Partition, plum_db:iterate(PrefixIt));
+            plum_db:iterator_close(Iterator);
         false ->
-            FullPrefix = plum_db:base_iterator_prefix(ObjIt),
-            {{_, Key}, Obj} = plum_db:iterator_object(ObjIt),
+            {{FullPrefix, Key}, Obj} = plum_db:iterator_element(Iterator),
             Hash = plum_db_object:hash(Obj),
             %% insert only if missing to not clash w/ newer writes during build
-            ?MODULE:insert({FullPrefix, Key}, Hash, true),
-            build(Partition, PrefixIt, plum_db:iterate(ObjIt))
+            ?MODULE:insert(Partition, {FullPrefix, Key}, Hash, true),
+            build(Partition, plum_db:iterate(Iterator))
     end.
 
 %% @private

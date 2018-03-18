@@ -30,46 +30,53 @@
     iterators  :: ets:tab()
 }).
 
+
 -record(iterator, {
-    base_iterator           ::  base_iterator(),
-    opts                    ::  it_opts()
-}).
-
--record(base_iterator, {
+    %% The query
+    match_prefix            ::  plum_db_prefix(),
+    match_key               ::  term() | undefined,
+    %% The actual db iterator
+    db_iter                 ::  plum_db_partition_server:iterator() | undefined,
+    %% Pointers :: The current position decomposed into prefix, key and object
     prefix                  ::  plum_db_prefix() | undefined,
-    match                   ::  term() | undefined,
+    key                     ::  plum_db_key() | undefined,
+    object                  ::  plum_db_object() | undefined,
+    %% Options
     keys_only = false       ::  boolean(),
-    obj                     ::  {plum_db_key(), plum_db_object()}
-                                | plum_db_key()
-                                | undefined,
-    ref                     ::  plum_db_partition_server:iterator(),
-    partitions              ::  [non_neg_integer()]
+    partitions              ::  [partition()],
+    opts = []               ::  it_opts() | undefined
 }).
 
--record(remote_base_iterator, {
-    node   :: node(),
-    ref    :: reference(),
-    prefix :: plum_db_prefix() | atom() | binary()
+-record(remote_iterator, {
+    node                    ::  node(),
+    ref                     ::  reference(),
+    match_prefix            ::  plum_db_prefix() | atom() | binary()
 }).
 
 -type state()               ::  #state{}.
--type remote_base_iterator()     ::  #remote_base_iterator{}.
--opaque base_iterator()      ::  #base_iterator{}.
+-type remote_iterator()     ::  #remote_iterator{}.
+-opaque iterator()          ::  #iterator{}.
 
 
 
 %% Get Option Types
+-type iterator_element()    ::  {plum_db_pkey(), plum_db_object()}.
 -type value_or_values()     ::  [plum_db_value() | plum_db_tombstone()]
                                 | plum_db_value() | plum_db_tombstone().
 -type fold_fun()            ::  fun(
                                 ({plum_db_key(), value_or_values()}, any()) ->
                                     any()
                                 ).
+-type fold_elements_fun()    ::  fun(
+                                ({plum_db_key(), plum_db_object()}, any()) ->
+                                    any()
+                                ).
 -type get_opt_default_val() ::  {default, plum_db_value()}.
 -type get_opt_resolver()    ::  {resolver, plum_db_resolver()}.
 -type get_opt_allow_put()   ::  {allow_put, boolean()}.
 -type get_opt()             ::  get_opt_default_val()
-                                | get_opt_resolver() | get_opt_allow_put().
+                                | get_opt_resolver()
+                                | get_opt_allow_put().
 -type get_opts()            ::  [get_opt()].
 
 %% Iterator Types
@@ -77,12 +84,15 @@
 -type it_opt_default_fun()  ::  fun((plum_db_key()) -> plum_db_value()).
 -type it_opt_default()      ::  {default, plum_db_value() | it_opt_default_fun()}.
 -type it_opt_keymatch()     ::  {match, term()}.
+-type it_opt_keys_only()    ::  {keys_only, boolean()}.
+-type it_opt_partitions()   ::  {partitions, [partition()]}.
 -type it_opt()              ::  it_opt_resolver()
                                 | it_opt_default()
-                                | it_opt_keymatch().
+                                | it_opt_keymatch()
+                                | it_opt_keys_only()
+                                | it_opt_partitions().
 -type it_opts()             ::  [it_opt()].
 -type fold_opts()           ::  it_opts().
--type iterator()            ::  #iterator{}.
 -type partition()           ::  non_neg_integer().
 
 %% Put Option Types
@@ -93,7 +103,6 @@
 
 
 -export_type([partition/0]).
--export_type([base_iterator/0]).
 -export_type([iterator/0]).
 
 -export([decode_key/1]).
@@ -101,6 +110,8 @@
 -export([delete/3]).
 -export([fold/3]).
 -export([fold/4]).
+-export([fold_objects/3]).
+-export([fold_objects/4]).
 -export([get/2]).
 -export([get/3]).
 -export([get_object/1]).
@@ -114,18 +125,12 @@
 -export([iterator_key/1]).
 -export([iterator_key_values/1]).
 -export([iterate/1]).
--export([iterator_value/1]).
--export([iterator_object/1]).
+-export([iterator_key_value/1]).
+-export([iterator_element/1]).
 -export([iterator_prefix/1]).
--export([iterator_values/1]).
--export([base_iterator/0]).
--export([base_iterator/1]).
--export([base_iterator/2]).
--export([base_iterator/3]).
--export([base_iterator_prefix/1]).
--export([remote_base_iterator/1]).
--export([remote_base_iterator/2]).
--export([prefix_hash/1]).
+-export([remote_iterator/1]).
+-export([remote_iterator/2]).
+-export([prefix_hash/2]).
 -export([put/3]).
 -export([put/4]).
 -export([to_list/1]).
@@ -180,7 +185,7 @@ start_link() ->
 %% @doc Returns the server identifier assigned to the FullPrefix of the PKey
 %% @end
 %% -----------------------------------------------------------------------------
--spec get_partition(term()) -> non_neg_integer().
+-spec get_partition(term()) -> partition().
 
 get_partition(PKey) ->
     erlang:phash2(PKey, partition_count()).
@@ -190,7 +195,7 @@ get_partition(PKey) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec partitions() -> [non_neg_integer()].
+-spec partitions() -> [partition()].
 
 partitions() ->
     [X || X <- lists:seq(0, partition_count())].
@@ -210,7 +215,7 @@ partition_count() ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec is_partition(non_neg_integer()) -> boolean().
+-spec is_partition(partition()) -> boolean().
 
 is_partition(Id) ->
     Id >= 0 andalso Id =< partition_count().
@@ -251,7 +256,8 @@ get(FullPrefix, Key) ->
 %% concurrenct writes during resolution are not resolved
 %% @end
 %% -----------------------------------------------------------------------------
--spec get(plum_db_prefix(), plum_db_key(), get_opts()) -> plum_db_value() | undefined.
+-spec get(plum_db_prefix(), plum_db_key(), get_opts()) ->
+    plum_db_value() | undefined.
 
 get({Prefix, SubPrefix} = FullPrefix, Key, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
@@ -351,6 +357,44 @@ fold_it(Fun, Acc, It) ->
 
 
 %% -----------------------------------------------------------------------------
+%% @doc Same as fold_objects(Fun, Acc0, FullPrefix, []).
+%% @end
+%% -----------------------------------------------------------------------------
+-spec fold_objects(fold_elements_fun(), any(), plum_db_prefix()) -> any().
+fold_objects(Fun, Acc0, FullPrefix) ->
+    fold(Fun, Acc0, FullPrefix, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Fold over all keys and values stored under a given prefix/subprefix.
+%% Available options are the same as those provided to iterator/2. To return
+%% early, throw {break, Result} in your fold function.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec fold_objects(fold_elements_fun(), any(), plum_db_prefix(), fold_opts()) ->
+    any().
+fold_objects(Fun, Acc0, FullPrefix, Opts) ->
+    It = iterator(FullPrefix, Opts),
+    try
+        do_fold_objects(Fun, Acc0, It)
+    catch
+        {break, Result} -> Result
+    after
+        ok = iterator_close(It)
+    end.
+
+%% @private
+do_fold_objects(Fun, Acc, It) ->
+    case iterator_done(It) of
+        true ->
+            Acc;
+        false ->
+            Next = Fun(iterator_element(It), Acc),
+            fold_it(Fun, Next, iterate(It))
+    end.
+
+
+%% -----------------------------------------------------------------------------
 %% @doc Same as to_list(FullPrefix, [])
 %% @end
 %% -----------------------------------------------------------------------------
@@ -365,24 +409,36 @@ to_list(FullPrefix) ->
 %% iterator/2.
 %% @end
 %% -----------------------------------------------------------------------------
--spec to_list(plum_db_prefix(), fold_opts()) -> [{plum_db_key(), value_or_values()}].
-to_list(FullPrefix, Opts) ->
+-spec to_list(FullPrefix :: plum_db_prefix(), Opts :: fold_opts()) ->
+    [{plum_db_key(), value_or_values()}].
+
+to_list({undefined, _} = P, Opts) ->
+    error(badarg, [P, Opts]);
+
+to_list({_, _} = FullPrefix, Opts) ->
     fold(fun({Key, ValOrVals}, Acc) ->
                  [{Key, ValOrVals} | Acc]
          end, [], FullPrefix, Opts).
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Same as iterator({undefined, undefined}).
+%% @doc Returns a full-prefix iterator: an iterator for all full-prefixes that
+%% have keys stored under them.
+%% When done with the iterator, iterator_close/1 must be called.
+%% This iterator works across all existing store partitions, treating the set
+%% of partitions as a single logical database. As a result, ordering is partial
+%% per partition and not global across them.
+%%
+%% Same as calling `iterator({undefined, undefined})'.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec iterator() -> iterator().
 iterator() ->
-    iterator({undefined, undefined}, []).
+    iterator({undefined, undefined}).
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Same as iterator(FullPrefix, []).
+%% @doc Same as calling `iterator(FullPrefix, [])'.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec iterator(plum_db_prefix()) -> iterator().
@@ -393,11 +449,11 @@ iterator(FullPrefix) ->
 %% -----------------------------------------------------------------------------
 %% @doc Return an iterator pointing to the first key stored under a prefix
 %%
-%% iterator/2 can take the following options:
+%% This function can take the following options:
 %%
 %% * resolver: either the atom `lww' or a function that resolves conflicts if
 %% they are encounted (see get/3 for more details). Conflict resolution is
-%% performed when values are retrieved (see iterator_value/1 and iterator_key_values/1).
+%% performed when values are retrieved (see iterator_key_value/1 and iterator_key_values/1).
 %% If no resolver is provided no resolution is performed. The default is to not
 %% provide a resolver.
 %% * allow_put: whether or not to write and broadcast a resolved value.
@@ -407,9 +463,18 @@ iterator(FullPrefix) ->
 %% iterator points to is passed as the argument and the result is returned in
 %% place of the tombstone. If default is a value, the value is returned in
 %% place of the tombstone. This applies when using functions such as
-%% iterator_values/1 and iterator_key_values/1.
-%% * match: A tuple containing erlang terms and '_'s. Match can be used to
-%% iterate over a subset of keys -- assuming the keys stored are tuples
+%% iterator_key_values/1 and iterator_key_values/1.
+%% * match: Match can be used to iterate over a subset of keys -- assuming the
+%% keys stored are tuples. If
+%% match is undefined then all keys will may be visted by the iterator, match
+%% can be:
+%%     * an erlang term - which will be matched exactly against a key
+%%     * '_' - which is equivalent to undefined
+%%     * an erlang tuple containing terms and '_' - if tuples are used as keys
+%%     this can be used to iterate over some subset of keys
+%% * partitions: The list of partitions this iterator should cover. If
+%% undefined it will cover all partitions (`pdb:partitions/0')
+%% * keys_only: wether to iterate only on keys (default: false)
 %%
 %% @end
 %% -----------------------------------------------------------------------------
@@ -418,122 +483,228 @@ iterator(FullPrefix) ->
 iterator({Prefix, SubPrefix} = FullPrefix, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
-    KeyMatch = proplists:get_value(match, Opts),
-    Base = base_iterator(FullPrefix, KeyMatch),
-    #iterator{base_iterator = Base, opts = Opts}.
+    new_iterator(FullPrefix, Opts).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Create an iterator on `Node'. This allows for remote iteration by having
+%% the worker keep track of the actual iterator (since ets
+%% continuations cannot cross node boundaries). The iterator created iterates
+%% all full-prefixes.
+%% Once created the rest of the iterator API may be used as usual. When done
+%% with the iterator, iterator_close/1 must be called
+%% @end
+%% -----------------------------------------------------------------------------
+-spec remote_iterator(node()) -> remote_iterator().
+remote_iterator(Node) ->
+    remote_iterator(Node, {undefined, undefined}).
+
+
+-spec remote_iterator(node(), plum_db_prefix()) -> remote_iterator().
+remote_iterator(Node, FullPrefix) ->
+    remote_iterator(Node, FullPrefix, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Create an iterator on `Node'. This allows for remote iteration
+%% by having the worker keep track of the actual iterator
+%% (since ets continuations cannot cross node boundaries). When
+%% `Perfix' is not a full prefix, the iterator created iterates all
+%% sub-prefixes under `Prefix'. Otherse, the iterator iterates all keys
+%% under a prefix. Once created the rest of the iterator API may be used as
+%% usual.
+%% When done with the iterator, iterator_close/1 must be called
+%% @end
+%% -----------------------------------------------------------------------------
+-spec remote_iterator(node(), plum_db_prefix(), it_opts()) -> remote_iterator().
+
+remote_iterator(Node, FullPrefix, Opts) when is_tuple(FullPrefix) ->
+    Ref = gen_server:call(
+        {?MODULE, Node},
+        {open_remote_iterator, self(), FullPrefix, Opts},
+        infinity
+    ),
+    #remote_iterator{ref = Ref, match_prefix = FullPrefix, node = Node}.
+
 
 
 %% -----------------------------------------------------------------------------
 %% @doc Advances the iterator by one key, full-prefix or sub-prefix
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterate
-    (iterator()) ->
-        iterator();
-    (base_iterator() | remote_base_iterator()) ->
-        base_iterator() | remote_base_iterator().
+-spec iterate(iterator() | remote_iterator()) -> iterator() | remote_iterator().
 
-iterate(#iterator{base_iterator = Base0} = I) ->
-    I#iterator{base_iterator = iterate(Base0)};
-
-iterate(#remote_base_iterator{ref = Ref, node = Node} = I) ->
+iterate(#remote_iterator{ref = Ref, node = Node} = I) ->
     _ = gen_server:call({?MODULE, Node}, {iterate, Ref}, infinity),
     I;
 
-iterate(#base_iterator{ref = undefined, partitions = []} = I) ->
+iterate(#iterator{db_iter = undefined, partitions = []} = I) ->
     %% We are done
-    %% '$end_of_table';
     I;
 
-iterate(#base_iterator{ref = undefined, partitions = [H|_]} = I0) ->
+iterate(#iterator{db_iter = undefined, partitions = [H|_]} = I0) ->
     %% We finished with the previous partition and we have
     %% more partitions to cover
-    First = first_key(I0#base_iterator.prefix),
-    Ref = case I0#base_iterator.keys_only of
+    First = first_key(I0#iterator.match_prefix),
+    DBIter = case I0#iterator.keys_only of
         true ->
             plum_db_partition_server:key_iterator(H);
         false ->
             plum_db_partition_server:iterator(H)
     end,
-    iterate(eleveldb:iterator_move(Ref, First), I0#base_iterator{ref = Ref});
+    Res = eleveldb:iterator_move(DBIter, First),
+    iterate(Res, I0#iterator{db_iter = DBIter});
 
-iterate(#base_iterator{ref = Ref} = I) ->
-    iterate(eleveldb:iterator_move(Ref, prefetch), I).
+iterate(#iterator{db_iter = DBIter} = I) ->
+    iterate(eleveldb:iterator_move(DBIter, prefetch), I).
 
 
-iterate({error, _}, #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
+%% @private
+iterate({error, _}, #iterator{db_iter = DBIter, partitions = [H|T]} = I) ->
     %% There are no more elements in the partition
-    ok = plum_db_partition_server:iterator_close(H, Ref),
-    iterate(I#base_iterator{ref = undefined, partitions = T});
+    ok = plum_db_partition_server:iterator_close(H, DBIter),
+    I1 = iterator_reset_pointers(
+        I#iterator{db_iter = undefined, partitions = T}),
+    iterate(I1);
 
-iterate({ok, K}, #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
+iterate({ok, K}, #iterator{db_iter = DBIter, partitions = [H|T]} = I0) ->
     PKey = plum_db:decode_key(K),
-    case prefixed_key_matches(PKey, I) of
+    case prefixed_key_matches(PKey, I0) of
         true ->
-            I#base_iterator{obj = PKey};
+            {Prefix, Key} = PKey,
+            I0#iterator{prefix = Prefix, key = Key, object = undefined};
         false ->
-            ok = plum_db_partition_server:iterator_close(H, Ref),
-            iterate(I#base_iterator{ref = undefined, partitions = T})
+            I1 = iterator_reset_pointers(I0),
+            ok = plum_db_partition_server:iterator_close(H, DBIter),
+            iterate(I1#iterator{db_iter = undefined, partitions = T})
     end;
 
-iterate({ok, K, V},  #base_iterator{ref = Ref, partitions = [H|T]} = I) ->
+iterate({ok, K, V},  #iterator{db_iter = DBIter, partitions = [H|T]} = I0) ->
     PKey = plum_db:decode_key(K),
-    case prefixed_key_matches(PKey, I) of
+    case prefixed_key_matches(PKey, I0) of
         true ->
-            I#base_iterator{obj = {PKey, binary_to_term(V)}};
+            {Prefix, Key} = PKey,
+            I0#iterator{prefix = Prefix, key = Key, object = binary_to_term(V)};
         false ->
-            ok = plum_db_partition_server:iterator_close(H, Ref),
-            iterate(I#base_iterator{ref = undefined, partitions = T})
+            %% We have no more matches in this partition
+            I1 = iterator_reset_pointers(I0),
+            ok = plum_db_partition_server:iterator_close(H, DBIter),
+            iterate(I1#iterator{db_iter = undefined, partitions = T})
     end.
+
+
+
+
 
 
 %% -----------------------------------------------------------------------------
 %% @doc Closes the iterator. This function must be called on all open iterators
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator_close(iterator() | base_iterator() | remote_base_iterator()) ->
-    ok.
+-spec iterator_close(iterator() | iterator() | remote_iterator()) -> ok.
 
-iterator_close(#iterator{base_iterator = Base}) ->
-    iterator_close(Base);
-
-iterator_close(#remote_base_iterator{ref = Ref, node = Node}) ->
+iterator_close(#remote_iterator{ref = Ref, node = Node}) ->
     gen_server:call({?MODULE, Node}, {iterator_close, Ref}, infinity);
 
-iterator_close(#base_iterator{ref = undefined}) ->
+iterator_close(#iterator{db_iter = undefined}) ->
     ok;
 
-iterator_close(#base_iterator{partitions = [H|_], ref = Ref}) ->
-    plum_db_partition_server:iterator_close(H, Ref).
+iterator_close(#iterator{db_iter = DBIter, partitions = [H|_]}) ->
+    plum_db_partition_server:iterator_close(H, DBIter).
 
 
 %% -----------------------------------------------------------------------------
 %% @doc Returns true if there is nothing more to iterate over
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator_done(iterator() | base_iterator() | remote_base_iterator()) ->
-    boolean().
+-spec iterator_done(iterator() | iterator() | remote_iterator()) -> boolean().
 
-iterator_done(#iterator{base_iterator = Base}) ->
-    iterator_done(Base);
-
-iterator_done(#remote_base_iterator{ref = Ref, node = Node}) ->
+iterator_done(#remote_iterator{ref = Ref, node = Node}) ->
     gen_server:call({?MODULE, Node}, {iterator_done, Ref}, infinity);
 
-iterator_done(#base_iterator{ref = undefined, partitions = []}) ->
+iterator_done(#iterator{db_iter = undefined, partitions = []}) ->
     true;
 
-iterator_done(#base_iterator{}) ->
+iterator_done(#iterator{}) ->
     false.
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Return the key and value(s) pointed at by the iterator. Before calling
-%% this function, check the iterator is not complete w/ iterator_done/1. If a
-%% resolver was passed to iterator/0 when creating the given iterator, siblings
-%% will be resolved using the given function or last-write-wins (if `lww' is
-%% passed as the resolver). If no resolver was used then no conflict resolution
-%% will take place. If conflicts are resolved, the resolved value is written to
+%% @doc Returns the full-prefix being iterated by this iterator.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec iterator_prefix(iterator() | remote_iterator()) -> plum_db_prefix().
+
+iterator_prefix(#remote_iterator{ref = Ref, node = Node}) ->
+    gen_server:call({?MODULE, Node}, {prefix, Ref}, infinity);
+
+iterator_prefix(#iterator{prefix = Prefix}) ->
+    Prefix.
+
+
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Return the key pointed at by the iterator. Before calling this function,
+%% check the iterator is not complete w/ iterator_done/1. No conflict resolution
+%% will be performed as a result of calling this function.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec iterator_key(iterator()) -> plum_db_key() | undefined.
+iterator_key(#iterator{key = Key}) ->
+    Key.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Returns a single value pointed at by the iterator.
+%% If there are conflicts and a resolver was
+%% specified in the options when creating this iterator, they will be resolved.
+%% Otherwise, and error is returned.
+%% If conflicts are resolved, the resolved value is written locally and a
+%% broadcast is performed to update other nodes
+%% in the cluster if `allow_put' is `true' (the default value). If `allow_put'
+%% is `false', values are resolved but not written or broadcast.
+%%
+%% NOTE: if resolution may be performed this function must be called at most
+%% once before calling iterate/1 on the iterator (at which point the function
+%% can be called once more).
+%% @end
+%% -----------------------------------------------------------------------------
+-spec iterator_key_value(iterator() | remote_iterator() | iterator()) ->
+    {plum_db_key() , plum_db_value()} | {error, conflict}.
+
+
+iterator_key_value(#iterator{opts = Opts} = I) ->
+    Default = iterator_default(I),
+    PKey = {I#iterator.prefix, I#iterator.key},
+    Obj = I#iterator.object,
+    AllowPut = get_option(allow_put, Opts, true),
+    case get_option(resolver, Opts, undefined) of
+        undefined ->
+            case plum_db_object:value_count(Obj) of
+                1 ->
+                    maybe_tombstone(plum_db_object:value(Obj), Default);
+                _ ->
+                    {error, conflict}
+            end;
+        Resolver ->
+            maybe_tombstone(
+                maybe_resolve(PKey, Obj, Resolver, AllowPut), Default)
+    end;
+
+iterator_key_value(#remote_iterator{ref = Ref, node = Node}) ->
+    gen_server:call({?MODULE, Node}, {iterator_key_value, Ref}, infinity).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Return the key and all sibling values pointed at by the iterator.
+%% Before calling this function, check the iterator is not complete w/
+%% iterator_done/1.
+%% If a resolver was passed to iterator/0 when creating the given iterator,
+%% siblings will be resolved using the given function or last-write-wins (if
+%% `lww' is passed as the resolver). If no resolver was used then no conflict
+%% resolution will take place.
+%% If conflicts are resolved, the resolved value is written to
 %% local store and a broadcast is submitted to update other nodes in the
 %% cluster if `allow_put' is `true'. If `allow_put' is `false' the values are
 %% resolved but are not written or broadcast. A single value is returned as the
@@ -548,121 +719,34 @@ iterator_done(#base_iterator{}) ->
 %% -----------------------------------------------------------------------------
 -spec iterator_key_values(iterator()) -> {plum_db_key(), value_or_values()}.
 
-iterator_key_values(#iterator{base_iterator = Base, opts = Opts} = I) ->
+iterator_key_values(#iterator{opts = Opts} = I) ->
     Default = iterator_default(I),
-    {Key, Obj} = iterator_object(Base),
+    Key = I#iterator.key,
+    Obj = I#iterator.object,
     AllowPut = get_option(allow_put, Opts, true),
     case get_option(resolver, Opts, undefined) of
         undefined ->
             {Key, maybe_tombstones(plum_db_object:values(Obj), Default)};
         Resolver ->
-            Prefix = base_iterator_prefix(Base),
-            PKey = prefixed_key(Prefix, Key),
-            Value = maybe_tombstone(maybe_resolve(PKey, Obj, Resolver, AllowPut), Default),
+            Prefix = I#iterator.prefix,
+            Value = maybe_tombstone(
+                maybe_resolve({Prefix, Key}, Obj, Resolver, AllowPut), Default),
             {Key, Value}
     end.
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Return the key pointed at by the iterator. Before calling this function,
-%%  check the iterator is not complete w/ iterator_done/1. No conflict resolution
-%% will be performed as a result of calling this function.
-%% @end
-%% -----------------------------------------------------------------------------
--spec iterator_key(iterator()) -> plum_db_key().
-iterator_key(#iterator{base_iterator = Base}) ->
-    {Key, _} = iterator_value(Base),
-    Key.
-
-
-%% -----------------------------------------------------------------------------
-%% @doc Return all sibling values pointed at by the iterator. Before
-%% calling this function, check the iterator is not complete w/ iterator_done/1.
-%% No conflict resolution will be performed as a result of calling this
-%% function.
-%% @end
-%% -----------------------------------------------------------------------------
--spec iterator_values(iterator()) -> [plum_db_value() | plum_db_tombstone()].
-iterator_values(#iterator{base_iterator = Base} = I) ->
-    Default = iterator_default(I),
-    {_, Obj} = iterator_object(Base),
-    maybe_tombstones(plum_db_object:values(Obj), Default).
-
-
-%% -----------------------------------------------------------------------------
-%% @doc In case of an iterator(), returns a single value pointed at by the
-%% iterator. In case of a base_iterator() returns the key and object or the
-%% prefix pointed to by the iterator.
-%%
-%% In case of an iterator(), if there are conflicts and a resolver was
-%% specified in the options when creating this iterator, they will be resolved.
-%% Otherwise, and error is returned.
-%% If conflicts are resolved, the resolved value is written locally and a
-%% broadcast is performed to update other nodes
-%% in the cluster if `allow_put' is `true' (the default value). If `allow_put'
-%% is `false', values are resolved but not written or broadcast.
-%%
-%% NOTE: if resolution may be performed this function must be called at most
-%% once before calling iterate/1 on the iterator (at which point the function
-%% can be called once more).
-%% @end
-%% -----------------------------------------------------------------------------
--spec iterator_value(iterator() | remote_base_iterator() | base_iterator()) ->
-    plum_db_value() | plum_db_tombstone() | {error, conflict}.
-
-
-iterator_value(#iterator{base_iterator = Base, opts = Opts} = I) ->
-    Default = iterator_default(I),
-    {Key, Obj} = iterator_object(Base),
-    AllowPut = get_option(allow_put, Opts, true),
-    case get_option(resolver, Opts, undefined) of
-        undefined ->
-            case plum_db_object:value_count(Obj) of
-                1 ->
-                    maybe_tombstone(plum_db_object:value(Obj), Default);
-                _ ->
-                    {error, conflict}
-            end;
-        Resolver ->
-            Prefix = base_iterator_prefix(Base),
-            PKey = prefixed_key(Prefix, Key),
-            maybe_tombstone(maybe_resolve(PKey, Obj, Resolver, AllowPut), Default)
-    end;
-
-iterator_value(#remote_base_iterator{ref = Ref, node = Node}) ->
-    gen_server:call({?MODULE, Node}, {iterator_value, Ref}, infinity);
-
-iterator_value(#base_iterator{obj = {{_Prefix, K}, Obj}} = I) ->
-    {K, maybe_tombstone(plum_db_object:value(Obj), iterator_default(I))}.
-
-
-
-%% -----------------------------------------------------------------------------
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-iterator_prefix(#remote_base_iterator{ref = Ref, node = Node}) ->
-    gen_server:call({?MODULE, Node}, {iterator_prefix, Ref}, infinity);
+-spec iterator_element(iterator() | iterator() | remote_iterator()) ->
+    iterator_element().
 
-iterator_prefix(#base_iterator{obj = {{Prefix, _}, _}}) ->
-    Prefix.
+iterator_element(#remote_iterator{ref = Ref, node = Node}) ->
+    gen_server:call({?MODULE, Node}, {iterator_element, Ref}, infinity);
 
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
--spec iterator_object(base_iterator() | remote_base_iterator()) ->
-        {plum_db_key(), plum_db_object()}
-        | plum_db_prefix()
-        | binary()
-        | atom().
-
-iterator_object(#remote_base_iterator{ref = Ref, node = Node}) ->
-    gen_server:call({?MODULE, Node}, {iterator_object, Ref}, infinity);
-
-iterator_object(#base_iterator{obj = Obj}) ->
-    Obj.
+iterator_element(#iterator{prefix = P, key = K, object = Obj}) ->
+    {{P, K}, Obj}.
 
 
 %% -----------------------------------------------------------------------------
@@ -673,19 +757,18 @@ iterator_object(#base_iterator{obj = Obj}) ->
 %% This function should only be called after checking iterator_done/1.
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator_default(iterator()) ->
+-spec iterator_default(iterator() | iterator()) ->
     plum_db_tombstone() | plum_db_value() | it_opt_default_fun().
+
+iterator_default(#iterator{opts = []}) ->
+    ?TOMBSTONE;
 
 iterator_default(#iterator{opts = Opts} = I) ->
     case proplists:get_value(default, Opts, ?TOMBSTONE) of
         Fun when is_function(Fun) ->
             Fun(iterator_key(I));
         Val -> Val
-    end;
-
-iterator_default(#base_iterator{}) ->
-    ?TOMBSTONE.
-
+    end.
 
 
 %% -----------------------------------------------------------------------------
@@ -697,18 +780,18 @@ iterator_default(#base_iterator{}) ->
 %% (full-)prefix. `undefined' is returned.
 %% @end
 %% -----------------------------------------------------------------------------
--spec prefix_hash(plum_db_prefix() | binary() | atom()) -> binary() | undefined.
+-spec prefix_hash(partition(), plum_db_prefix()) -> binary() | undefined.
 
-prefix_hash(Prefix)
-when is_tuple(Prefix) or is_atom(Prefix) or is_binary(Prefix) ->
-    plum_db_partition_hashtree:prefix_hash(Prefix).
+prefix_hash(Partition, {_, _} = Prefix) ->
+    plum_db_partition_hashtree:prefix_hash(Partition, Prefix).
 
 
 %% -----------------------------------------------------------------------------
 %% @doc Same as put(FullPrefix, Key, Value, [])
 %% @end
 %% -----------------------------------------------------------------------------
--spec put(plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier()) -> ok.
+-spec put(
+    plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier()) -> ok.
 put(FullPrefix, Key, ValueOrFun) ->
     put(FullPrefix, Key, ValueOrFun, []).
 
@@ -723,7 +806,11 @@ put(FullPrefix, Key, ValueOrFun) ->
 %% To store functions wrap them in another type like a tuple.
 %% @end
 %% -----------------------------------------------------------------------------
--spec put(plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier(), put_opts()) ->
+-spec put(
+    plum_db_prefix(),
+    plum_db_key(),
+    plum_db_value() | plum_db_modifier(),
+    put_opts()) ->
     ok.
 
 put({Prefix, SubPrefix} = FullPrefix, Key, ValueOrFun, _Opts)
@@ -733,15 +820,6 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     Context = current_context(PKey),
     Updated = put_with_context(PKey, Context, ValueOrFun),
     broadcast(PKey, Updated).
-
-
-
-
-%% -----------------------------------------------------------------------------
-%% @doc Sets the value of a prefixed key.
-%% @end
-%% -----------------------------------------------------------------------------
-
 
 
 %% -----------------------------------------------------------------------------
@@ -764,179 +842,6 @@ delete(FullPrefix, Key) ->
 -spec delete(plum_db_prefix(), plum_db_key(), delete_opts()) -> ok.
 delete(FullPrefix, Key, _Opts) ->
     put(FullPrefix, Key, ?TOMBSTONE, []).
-
-
-
-
-
-%% =============================================================================
-%% BASE (former plumtree_manager)
-%% =============================================================================
-
-
-%% -----------------------------------------------------------------------------
-%% @doc Returns a full-prefix iterator: an iterator for all full-prefixes that
-%% have keys stored under them.
-%% When done with the iterator, iterator_close/1 must be called.
-%% This iterator works across all existing store partitions, treating the set
-%% of partitions as a single logical database. As a result, ordering is partial
-%% per partition and not global across them.
-%% @end
-%% -----------------------------------------------------------------------------
--spec base_iterator() -> base_iterator().
-base_iterator() ->
-    base_iterator(undefined).
-
-
-%% -----------------------------------------------------------------------------
-%% @doc Returns a sub-prefix iterator for a given prefix.
-%% When done with the iterator, iterator_close/1 must be called
-%% @end
-%% -----------------------------------------------------------------------------
--spec base_iterator(binary() | atom()) -> base_iterator().
-base_iterator(Prefix) when is_binary(Prefix) or is_atom(Prefix) ->
-    new_base_iterator({Prefix, undefined}, undefined).
-
-
-%% -----------------------------------------------------------------------------
-%% @doc Return an iterator for keys stored under a prefix. If KeyMatch is
-%% undefined then all keys will may be visted by the iterator. Otherwise only
-%% keys matching KeyMatch will be visited.
-%%
-%% KeyMatch can be either:
-%%
-%% * an erlang term - which will be matched exactly against a key
-%% * '_' - which is equivalent to undefined
-%% * an erlang tuple containing terms and '_' - if tuples are used as keys
-%% * this can be used to iterate over some subset of keys
-%%
-%% When done with the iterator, iterator_close/1 must be called.
-%% @end
-%% -----------------------------------------------------------------------------
--spec base_iterator(plum_db_prefix(), term()) -> base_iterator().
-
-base_iterator({Prefix, SubPrefix} = FullPrefix, KeyMatch)
-when (is_binary(Prefix) orelse is_atom(Prefix))
-andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
-    new_base_iterator(FullPrefix, KeyMatch).
-
-
--spec base_iterator(undefined | plum_db_prefix(), term(), non_neg_integer()) ->
-    base_iterator().
-
-base_iterator(undefined, Prefix, Partition) ->
-    base_iterator({Prefix, undefined}, undefined, Partition);
-
-base_iterator({Prefix, SubPrefix} = FullPrefix, KeyMatch, Partition)
-when (is_binary(Prefix) orelse is_atom(Prefix))
-andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix))
-andalso is_integer(Partition) ->
-    new_base_iterator(FullPrefix, KeyMatch, Partition).
-
-
-%% -----------------------------------------------------------------------------
-%% @doc Create an iterator on `Node'. This allows for remote iteration by having
-%% the worker keep track of the actual iterator (since ets
-%% continuations cannot cross node boundaries). The iterator created iterates
-%% all full-prefixes.
-%% Once created the rest of the iterator API may be used as usual. When done
-%% with the iterator, iterator_close/1 must be called
-%% @end
-%% -----------------------------------------------------------------------------
--spec remote_base_iterator(node()) -> remote_base_iterator().
-remote_base_iterator(Node) ->
-    remote_base_iterator(Node, undefined).
-
-
-
-%% -----------------------------------------------------------------------------
-%% @doc Create an iterator on `Node'. This allows for remote iteration
-%% by having the worker keep track of the actual iterator
-%% (since ets continuations cannot cross node boundaries). When
-%% `Perfix' is not a full prefix, the iterator created iterates all
-%% sub-prefixes under `Prefix'. Otherse, the iterator iterates all keys
-%% under a prefix. Once created the rest of the iterator API may be used as
-%% usual.
-%% When done with the iterator, iterator_close/1 must be called
-%% @end
-%% -----------------------------------------------------------------------------
--spec remote_base_iterator(
-    node(), plum_db_prefix() | binary() | atom() | undefined) ->
-    remote_base_iterator().
-
-remote_base_iterator(Node, Prefix) when is_atom(Prefix); is_binary(Prefix) ->
-    Ref = gen_server:call(
-        {?MODULE, Node},
-        {open_remote_base_iterator, self(), undefined, Prefix},
-        infinity
-    ),
-    #remote_base_iterator{ref = Ref, prefix = Prefix, node = Node};
-
-remote_base_iterator(Node, FullPrefix) when is_tuple(FullPrefix) ->
-    Ref = gen_server:call(
-        {?MODULE, Node},
-        {open_remote_base_iterator, self(), FullPrefix, undefined},
-        infinity
-    ),
-    #remote_base_iterator{ref = Ref, prefix = FullPrefix, node = Node}.
-
-
-
-
-
-
-prefixed_key_matches(PKey, #base_iterator{prefix = P, match = M}) ->
-    prefixed_key_matches(PKey, P, M).
-
-%% @private
-prefixed_key_matches({_, _}, {undefined, undefined}, undefined) ->
-    true;
-prefixed_key_matches({_, Key}, {undefined, undefined}, Fun) ->
-    Fun(Key);
-
-prefixed_key_matches({{Prefix, _}, _}, {Prefix, undefined}, undefined) ->
-    true;
-prefixed_key_matches({{Prefix, _}, Key}, {Prefix, undefined}, Fun) ->
-    Fun(Key);
-
-prefixed_key_matches({{_, SubPrefix}, _}, {undefined, SubPrefix}, undefined) ->
-    true;
-prefixed_key_matches({{_, SubPrefix}, Key}, {undefined, SubPrefix}, Fun) ->
-    Fun(Key);
-
-prefixed_key_matches({FullPrefix, _}, FullPrefix, undefined) ->
-    true;
-prefixed_key_matches({{_, SubPrefix}, Key}, {undefined, SubPrefix}, Fun) ->
-    Fun(Key);
-
-prefixed_key_matches(_, _, _) ->
-    false.
-
-
-%% -----------------------------------------------------------------------------
-%% @doc Returns the full-prefix or prefix being iterated by this iterator. If
-%% the iterator is a full-prefix iterator undefined is returned.
-%% @end
-%% -----------------------------------------------------------------------------
--spec base_iterator_prefix(base_iterator() | remote_base_iterator()) ->
-    plum_db_prefix() | undefined | binary() | atom().
-
-base_iterator_prefix(#remote_base_iterator{prefix = Prefix}) ->
-    Prefix;
-base_iterator_prefix(#base_iterator{prefix = undefined, match = undefined}) ->
-    undefined;
-base_iterator_prefix(#base_iterator{prefix = undefined, match = Prefix}) ->
-    Prefix;
-base_iterator_prefix(#base_iterator{prefix = Prefix}) ->
-    Prefix.
-
-
-
-
-
-
-
-
 
 
 
@@ -972,29 +877,29 @@ init([]) ->
     | {stop, term(), term(), state()}
     | {stop, term(), state()}.
 
-handle_call({open_remote_base_iterator, Pid, FullPrefix, KeyMatch}, _From, State) ->
-    Iterator = new_remote_base_iterator(Pid, FullPrefix, KeyMatch, State),
+handle_call({open_remote_iterator, Pid, FullPrefix, Opts}, _From, State) ->
+    Iterator = new_remote_iterator(Pid, FullPrefix, Opts, State),
     {reply, Iterator, State};
 
 handle_call({iterate, RemoteRef}, _From, State) ->
-    Next = iterate(RemoteRef, State),
-    {reply, Next, State};
-
-handle_call({iterator_value, RemoteRef}, _From, State) ->
-    Res = from_remote_base_iterator(fun iterator_value/1, RemoteRef, State),
+    Res = from_remote_iterator(fun iterate/1, RemoteRef, State),
     {reply, Res, State};
 
-handle_call({iterator_object, RemoteRef}, _From, State) ->
-    Res = from_remote_base_iterator(fun iterator_object/1, RemoteRef, State),
+handle_call({iterator_key_value, RemoteRef}, _From, State) ->
+    Res = from_remote_iterator(fun iterator_key_value/1, RemoteRef, State),
+    {reply, Res, State};
+
+handle_call({iterator_element, RemoteRef}, _From, State) ->
+    Res = from_remote_iterator(fun iterator_element/1, RemoteRef, State),
     {reply, Res, State};
 
 handle_call({iterator_prefix, RemoteRef}, _From, State) ->
-    Res = from_remote_base_iterator(fun iterator_prefix/1, RemoteRef, State),
+    Res = from_remote_iterator(fun iterator_prefix/1, RemoteRef, State),
     {reply, Res, State};
 
 handle_call({iterator_done, RemoteRef}, _From, State) ->
     Res = case
-        from_remote_base_iterator(fun iterator_done/1, RemoteRef, State)
+        from_remote_iterator(fun iterator_done/1, RemoteRef, State)
     of
         undefined -> true; % if we don't know about iterator, treat it as done
         Other -> Other
@@ -1002,7 +907,7 @@ handle_call({iterator_done, RemoteRef}, _From, State) ->
     {reply, Res, State};
 
 handle_call({iterator_close, RemoteRef}, _From, State) ->
-    close_remote_base_iterator(RemoteRef, State),
+    close_remote_iterator(RemoteRef, State),
     {reply, ok, State}.
 
 
@@ -1023,7 +928,7 @@ handle_cast(_Msg, State) ->
     | {stop, term(), state()}.
 
 handle_info({'DOWN', ItRef, process, _Pid, _Reason}, State) ->
-    close_remote_base_iterator(ItRef, State),
+    close_remote_iterator(ItRef, State),
     {noreply, State}.
 
 
@@ -1048,8 +953,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Deconstructs are broadcast that is sent using
-%% `plum_db_partition_worker' as the handling module returning the message id
+%% @doc Deconstructs a broadcast that is sent using
+%% `broadcast/2' as the handling module returning the message id
 %% and payload.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1085,7 +990,10 @@ merge({PKey, _Context}, Obj) ->
 %% @doc Same as merge/2 but merges the object on `Node'
 %% @end
 %% -----------------------------------------------------------------------------
--spec merge(node(), {plum_db_pkey(), undefined | plum_db_context()}, plum_db_object()) ->
+-spec merge(
+    node(),
+    {plum_db_pkey(), undefined | plum_db_context()},
+    plum_db_object()) ->
     boolean().
 
 merge(Node, {PKey, _Context}, Obj) ->
@@ -1116,11 +1024,11 @@ is_stale({PKey, Context}) ->
 
 %% -----------------------------------------------------------------------------
 %% @doc Returns the object associated with the given key and context
-%% (message id) if the currently stored version has an equal context. otherwise
+%% (message id) if the currently stored version has an equal context. Otherwise
 %% stale is returned.
 %% Because it assumed that a grafted context can only be causally older than
 %% the local view a stale response means there is another message that subsumes
-%% the grafted one
+%% the grafted one.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec graft({plum_db_pkey(), plum_db_context()}) ->
@@ -1133,7 +1041,7 @@ graft({PKey, Context}) ->
             %% this case.
             %% Catch if here b/c it would be much harder to detect
             _ = lager:error(
-                "object not found during graft for key: ~p", [PKey]),
+                "Object not found during graft; key=~p", [PKey]),
             {error, {not_found, PKey}};
          Obj ->
             graft(Context, Obj)
@@ -1160,7 +1068,6 @@ graft(Context, Obj) ->
 -spec exchange(node()) -> {ok, pid()} | {error, term()}.
 
 exchange(Peer) ->
-    %%
     case plum_db_exchange_statem:start(Peer, 60000) of
         {ok, Pid} ->
             {ok, Pid};
@@ -1179,6 +1086,40 @@ exchange(Peer) ->
 
 
 
+
+%% @private
+prefixed_key_matches(PKey, #iterator{match_prefix = P, match_key = M}) ->
+    prefixed_key_matches(P, M, PKey).
+
+
+%% @private
+prefixed_key_matches({undefined, undefined}, undefined, {_, _}) ->
+    true;
+prefixed_key_matches({undefined, undefined}, Fun, {_, Key})
+when is_function(Fun) ->
+    Fun(Key);
+
+prefixed_key_matches({Prefix, undefined}, undefined, {{Prefix, _}, _}) ->
+    true;
+prefixed_key_matches({Prefix, undefined}, Fun, {{Prefix, _}, Key})
+when is_function(Fun) ->
+    Fun(Key);
+
+prefixed_key_matches(FullPrefix, undefined, {FullPrefix, _}) ->
+    true;
+prefixed_key_matches(FullPrefix, Fun, {FullPrefix, Key})
+when is_function(Fun) ->
+    Fun(Key);
+
+prefixed_key_matches(_, _, _) ->
+    false.
+
+
+%% @private
+iterator_reset_pointers(#iterator{} = I) ->
+    I#iterator{prefix = undefined, key = undefined, object = undefined}.
+
+
 %% @private
 current_context(PKey) ->
     case plum_db_partition_server:get(PKey) of
@@ -1195,7 +1136,13 @@ current_context(PKey) ->
 %% Context is a dvvset.
 %% @end
 %% -----------------------------------------------------------------------------
-put_with_context(PKey, undefined, ValueOrFun) ->
+-spec put_with_context(
+    plum_db_pkey(), undefined | plum_db_context(), term()) -> plum_db_object().
+
+put_with_context({undefined, _} = PKey, _, _) ->
+    error(badarg, [PKey]);
+
+put_with_context({{_, _}, _} = PKey, undefined, ValueOrFun) ->
     %% empty list is an empty dvvset
     put_with_context(PKey, [], ValueOrFun);
 
@@ -1232,9 +1179,11 @@ maybe_resolve(PKey, Existing, _, Method, AllowPut) ->
     end,
     RValue.
 
+
 %% @private
 maybe_tombstones(Values, Default) ->
     [maybe_tombstone(Value, Default) || Value <- Values].
+
 
 %% @private
 maybe_tombstone(?TOMBSTONE, Default) ->
@@ -1242,9 +1191,10 @@ maybe_tombstone(?TOMBSTONE, Default) ->
 maybe_tombstone(Value, _Default) ->
     Value.
 
+
 %% @private
 broadcast(PKey, Obj) ->
-    Broadcast = #plum_db_broadcast{pkey = PKey, obj  = Obj},
+    Broadcast = #plum_db_broadcast{pkey = PKey, obj = Obj},
     plumtree_broadcast:broadcast(Broadcast, plum_db).
 
 
@@ -1264,36 +1214,22 @@ get_option(Key, Opts, Default) ->
     end.
 
 
-
-
-
-%% =============================================================================
-%% PRIVATE: BASE
-%% =============================================================================
-
-
-
-%% =============================================================================
-%% PRIVATE
-%% =============================================================================
-
-first_key(undefined) -> first;
+%% @private
 first_key({undefined, undefined}) -> first;
 first_key({Prefix, undefined}) -> sext:encode({{Prefix, ''}, ''});
 first_key({_, _} = FullPrefix) -> sext:encode({FullPrefix, ''}).
 
 
 %% @private
-new_remote_base_iterator(
-    Pid, FullPrefix, KeyMatch, #state{iterators = Iterators}) ->
+new_remote_iterator(Pid, FullPrefix, Opts, #state{iterators = Iterators}) ->
     Ref = monitor(process, Pid),
-    Iterator = new_base_iterator(FullPrefix, KeyMatch),
+    Iterator = new_iterator(FullPrefix, Opts),
     ets:insert(Iterators, [{Ref, Iterator}]),
     Ref.
 
 
 %% @private
-from_remote_base_iterator(Fun, Ref, State) ->
+from_remote_iterator(Fun, Ref, State) ->
     case ets:lookup(State#state.iterators, Ref) of
         [] ->
             undefined;
@@ -1303,27 +1239,28 @@ from_remote_base_iterator(Fun, Ref, State) ->
 
 
 %% @private
-close_remote_base_iterator(Ref, #state{iterators = Iterators} = State) ->
-    from_remote_base_iterator(fun iterator_close/1, Ref, State),
+close_remote_iterator(Ref, #state{iterators = Iterators} = State) ->
+    from_remote_iterator(fun iterator_close/1, Ref, State),
     ets:delete(Iterators, Ref).
 
 
 %% @private
-new_base_iterator(FullPrefix, KeyMatch) ->
-    new_base_iterator(FullPrefix, KeyMatch, plum_db:partitions(), false).
-
-%% @private
-new_base_iterator(FullPrefix, KeyMatch, Partition) ->
-    new_base_iterator(FullPrefix, KeyMatch, [Partition], false).
-
-%% @private
-new_base_iterator(FullPrefix, KeyMatch, Partitions, KeysOnly) ->
-    I = #base_iterator{
-        prefix = FullPrefix,
-        match = KeyMatch,
+new_iterator(FullPrefix, Opts) ->
+    KeyMatch = proplists:get_value(match, Opts, undefined),
+    KeysOnly = proplists:get_value(keys_only, Opts, false),
+    Partitions = case get_option(partitions, Opts, undefined) of
+        undefined ->
+            plum_db:partitions();
+        L ->
+            All = sets:from_list(plum_db:partitions()),
+            sets:is_subset(sets:from_list(L), All) orelse
+            error(badarg, partitions),
+            L
+    end,
+    I = #iterator{
+        match_prefix = FullPrefix,
+        match_key = KeyMatch,
         keys_only = KeysOnly,
-        obj = undefined,
-        ref = undefined,
         partitions = Partitions
     },
     %% We fetch the first key

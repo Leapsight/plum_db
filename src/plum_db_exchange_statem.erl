@@ -365,39 +365,25 @@ repair(Peer, {key_diffs, Prefix, Diffs}) ->
 
 %% @private
 repair_prefix(Peer, Type, [Prefix]) ->
-    ItType = repair_iterator_type(Type),
-    repair_sub_prefixes(
-        Type, Peer, Prefix, repair_iterator(ItType, Peer, Prefix));
+    repair_prefix(Peer, Type, [Prefix, undefined]);
 
 repair_prefix(Peer, Type, [Prefix, SubPrefix]) ->
     FullPrefix = {Prefix, SubPrefix},
     ItType = repair_iterator_type(Type),
-    repair_full_prefix(Type, Peer, FullPrefix, repair_iterator(ItType, Peer, FullPrefix)).
+    Iterator = repair_iterator(ItType, Peer, FullPrefix),
+    repair_full_prefix(Type, Peer, Iterator).
 
 
 %% @private
-repair_sub_prefixes(Type, Peer, Prefix, It) ->
-    case plum_db:iterator_done(It) of
+repair_full_prefix(Type, Peer, Iterator) ->
+    case plum_db:iterator_done(Iterator) of
         true ->
-            plum_db:iterator_close(It);
+            plum_db:iterator_close(Iterator);
         false ->
-            FullPrefix = {Prefix, _} = plum_db:iterator_prefix(It),
-            ItType = repair_iterator_type(Type),
-            ObjIt = repair_iterator(ItType, Peer, FullPrefix),
-            repair_full_prefix(Type, Peer, FullPrefix, ObjIt),
-            repair_sub_prefixes(Type, Peer, Prefix, plum_db:iterate(It))
-    end.
-
-
-%% @private
-repair_full_prefix(Type, Peer, FullPrefix, ObjIt) ->
-    case plum_db:iterator_done(ObjIt) of
-        true ->
-            plum_db:iterator_close(ObjIt);
-        false ->
-            {{_, Key}, Obj} = plum_db:iterator_object(ObjIt),
+            {{FullPrefix, Key}, Obj} = plum_db:iterator_element(Iterator),
             repair_other(Type, Peer, {FullPrefix, Key}, Obj),
-            repair_full_prefix(Type, Peer, FullPrefix, plum_db:iterate(ObjIt))
+            repair_full_prefix(
+                Type, Peer, plum_db:iterate(Iterator))
     end.
 
 
@@ -432,13 +418,11 @@ merge(Peer, PKey, LocalObj) ->
 
 
 %% @private
-repair_iterator(local, _, Prefix)
-when is_atom(Prefix) orelse is_binary(Prefix) ->
-    plum_db:base_iterator(Prefix);
-repair_iterator(local, _, FullPrefix) when is_tuple(FullPrefix) ->
-    plum_db:base_iterator(FullPrefix, undefined);
-repair_iterator(remote, Peer, PrefixOrFull) ->
-    plum_db:remote_base_iterator(Peer, PrefixOrFull).
+repair_iterator(local, _, {_, _} = FullPrefix) ->
+    plum_db:iterator(FullPrefix);
+
+repair_iterator(remote, Peer, FullPrefix) ->
+    plum_db:remote_iterator(Peer, FullPrefix).
 
 
 %% @private
