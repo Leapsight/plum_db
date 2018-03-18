@@ -188,7 +188,8 @@ start_link() ->
 -spec get_partition(term()) -> partition().
 
 get_partition(PKey) ->
-    erlang:phash2(PKey, partition_count()).
+    % phash2 range starts in 0, thus partition_count - 1
+    erlang:phash2(PKey, partition_count() - 1).
 
 
 %% -----------------------------------------------------------------------------
@@ -198,7 +199,7 @@ get_partition(PKey) ->
 -spec partitions() -> [partition()].
 
 partitions() ->
-    [X || X <- lists:seq(0, partition_count())].
+    [X || X <- lists:seq(0, partition_count() - 1)].
 
 
 %% -----------------------------------------------------------------------------
@@ -218,7 +219,7 @@ partition_count() ->
 -spec is_partition(partition()) -> boolean().
 
 is_partition(Id) ->
-    Id >= 0 andalso Id =< partition_count().
+    Id >= 0 andalso Id =< (partition_count() - 1).
 
 
 
