@@ -35,6 +35,7 @@
     %% The query
     match_prefix            ::  plum_db_prefix(),
     match_key               ::  term() | undefined,
+    match_spec              ::  ets:comp_match_spec() | undefined,
     %% The actual db iterator
     db_iter                 ::  plum_db_partition_server:iterator() | undefined,
     %% Pointers :: The current position decomposed into prefix, key and object
@@ -352,8 +353,8 @@ fold_it(Fun, Acc, It) ->
         true ->
             Acc;
         false ->
-            Next = Fun(iterator_key_values(It), Acc),
-            fold_it(Fun, Next, iterate(It))
+            Acc1 = Fun(iterator_key_values(It), Acc),
+            fold_it(Fun, Acc1, iterate(It))
     end.
 
 
@@ -1100,11 +1101,17 @@ exchange(Peer, Opts0) ->
 
 
 %% @private
-prefixed_key_matches(PKey, #iterator{match_prefix = P, match_key = M}) ->
-    prefixed_key_matches(P, M, PKey).
+prefixed_key_matches(PKey, #iterator{match_spec = undefined} = I) ->
+    prefixed_key_matches(I#iterator.match_prefix, I#iterator.match_key, PKey);
+
+prefixed_key_matches(PKey, #iterator{} = I) ->
+    ets:match_spec_run([PKey], I#iterator.match_spec) == [true].
 
 
 %% @private
+prefixed_key_matches(P, '_', PKey) ->
+    prefixed_key_matches(P, undefined, PKey) ;
+
 prefixed_key_matches({undefined, undefined}, undefined, {_, _}) ->
     true;
 prefixed_key_matches({undefined, undefined}, Fun, {_, Key})
@@ -1269,11 +1276,31 @@ new_iterator(FullPrefix, Opts) ->
             error(badarg, partitions),
             L
     end,
+    MS = case is_tuple(KeyMatch) of
+        true ->
+            PrefixMatch = prefix_to_ets_match(FullPrefix),
+            ets:match_spec_compile([{ {PrefixMatch, KeyMatch}, [], [true] }]);
+        false ->
+            undefined
+    end,
     I = #iterator{
         match_prefix = FullPrefix,
         match_key = KeyMatch,
+        match_spec = MS,
         keys_only = KeysOnly,
-        partitions = Partitions
+        partitions = Partitions,
+        opts = Opts
     },
     %% We fetch the first key
     iterate(I).
+
+
+%% @private
+prefix_to_ets_match({undefined, Term}) ->
+    prefix_to_ets_match({'_', Term});
+
+prefix_to_ets_match({Term, undefined}) ->
+    prefix_to_ets_match({Term , '_'});
+
+prefix_to_ets_match({_, _} = FullPrefix) ->
+    FullPrefix.
