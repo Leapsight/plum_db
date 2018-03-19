@@ -111,8 +111,8 @@
 -export([delete/3]).
 -export([fold/3]).
 -export([fold/4]).
--export([fold_objects/3]).
--export([fold_objects/4]).
+-export([fold_elements/3]).
+-export([fold_elements/4]).
 -export([get/2]).
 -export([get/3]).
 -export([get_object/1]).
@@ -359,26 +359,27 @@ fold_it(Fun, Acc, It) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Same as fold_objects(Fun, Acc0, FullPrefix, []).
+%% @doc Same as fold_elements(Fun, Acc0, FullPrefix, []).
 %% @end
 %% -----------------------------------------------------------------------------
--spec fold_objects(fold_elements_fun(), any(), plum_db_prefix()) -> any().
-fold_objects(Fun, Acc0, FullPrefix) ->
+-spec fold_elements(fold_elements_fun(), any(), plum_db_prefix()) -> any().
+fold_elements(Fun, Acc0, FullPrefix) ->
     fold(Fun, Acc0, FullPrefix, []).
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Fold over all keys and values stored under a given prefix/subprefix.
+%% @doc Fold over all elements stored under a given prefix/subprefix.
 %% Available options are the same as those provided to iterator/2. To return
 %% early, throw {break, Result} in your fold function.
 %% @end
 %% -----------------------------------------------------------------------------
--spec fold_objects(fold_elements_fun(), any(), plum_db_prefix(), fold_opts()) ->
+-spec fold_elements(
+    fold_elements_fun(), any(), plum_db_prefix(), fold_opts()) ->
     any().
-fold_objects(Fun, Acc0, FullPrefix, Opts) ->
+fold_elements(Fun, Acc0, FullPrefix, Opts) ->
     It = iterator(FullPrefix, Opts),
     try
-        do_fold_objects(Fun, Acc0, It)
+        do_fold_elements(Fun, Acc0, It)
     catch
         {break, Result} -> Result
     after
@@ -386,7 +387,7 @@ fold_objects(Fun, Acc0, FullPrefix, Opts) ->
     end.
 
 %% @private
-do_fold_objects(Fun, Acc, It) ->
+do_fold_elements(Fun, Acc, It) ->
     case iterator_done(It) of
         true ->
             Acc;
