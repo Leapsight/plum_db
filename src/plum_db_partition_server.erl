@@ -36,26 +36,31 @@
 	read_opts = []						::	opts(),
     write_opts = []						::	opts(),
     fold_opts = [{fill_cache, false}]	::	opts(),
-    iterators = #{}                     ::  iterators()
+    iterators = []                      ::  iterators()
 }).
 
 
 -type opts() 				            :: 	[{atom(), term()}].
--type iterator()                        ::  eleveldb:itr_ref().
--type iterators()                       ::  #{pid() => reference()}.
+-type iterator()                        ::  {reference(), eleveldb:itr_ref()}.
+-type iterators()                       ::  [iterator()].
+-type iterator_action()                 ::  first
+                                            | last | next | prev
+                                            | prefetch | prefetch_stop
+                                            | binary().
 
 -export_type([iterator/0]).
 
+-export([byte_size/1]).
 -export([delete/1]).
 -export([delete/2]).
--export([name/1]).
 -export([get/1]).
 -export([get/2]).
 -export([is_empty/1]).
--export([byte_size/1]).
 -export([iterator/1]).
 -export([iterator_close/2]).
+-export([iterator_move/2]).
 -export([key_iterator/1]).
+-export([name/1]).
 -export([put/2]).
 -export([put/3]).
 -export([start_link/2]).
@@ -96,8 +101,6 @@ start_link(Partition, Opts) ->
 name(Partition) ->
     list_to_atom(
         "plum_db_partition_" ++ integer_to_list(Partition) ++ "_server").
-
-
 
 
 %% -----------------------------------------------------------------------------
@@ -208,8 +211,24 @@ key_iterator(Store) when is_pid(Store); is_atom(Store) ->
 iterator_close(Id, Iter) when is_integer(Id) ->
     iterator_close(name(valid_partition(Id)), Iter);
 
-iterator_close(Store, Iter) when is_pid(Store); is_atom(Store) ->
+iterator_close(Store, {OwnerRef, _DbIter} = Iter)
+when (is_pid(Store) orelse is_atom(Store)) andalso is_reference(OwnerRef) ->
     gen_server:call(Store, {iterator_close, Iter}, infinity).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec iterator_move(iterator(), iterator_action()) ->
+    {ok, Key :: binary(), Value :: binary()}
+    | {ok, Key :: binary()}
+    | {error, invalid_iterator}
+    | {error, iterator_closed}.
+
+iterator_move({OwnerRef, DbIter}, Action) when is_reference(OwnerRef) ->
+    eleveldb:iterator_move(DbIter, Action).
+
 
 
 
@@ -280,20 +299,23 @@ handle_call(is_empty, _From, State) ->
 
 handle_call({iterator, Pid}, _From, State) ->
     DbRef = State#state.db_ref,
-    Ref = monitor(process, Pid),
-    {ok, Iter} = eleveldb:iterator(DbRef, State#state.fold_opts),
-    {reply, Iter, add_iterator(Ref, Iter, State)};
+    Ref = erlang:monitor(process, Pid),
+    {ok, DbIter} = eleveldb:iterator(DbRef, State#state.fold_opts),
+    Iter = {Ref, DbIter},
+    {reply, Iter, add_iterator(Iter, State)};
 
 handle_call({key_iterator, Pid}, _From, State) ->
     DbRef = State#state.db_ref,
-    Ref = monitor(process, Pid),
-    {ok, Iter} = eleveldb:iterator(DbRef, State#state.fold_opts, keys_only),
-    {reply, Iter, add_iterator(Ref, Iter, State)};
+    Ref = erlang:monitor(process, Pid),
+    {ok, DbIter} = eleveldb:iterator(DbRef, State#state.fold_opts, keys_only),
+    Iter = {Ref, DbIter},
+    {reply, Iter, add_iterator(Iter, State)};
 
 handle_call({iterator_close, Iter}, _From, State0) ->
     case take_iterator(Iter, State0) of
-        {{Ref, Iter}, State1} ->
-            _ = demonitor(Ref, [flush]),
+        {{Ref, DbIter}, State1} ->
+            _ = erlang:demonitor(Ref, [flush]),
+            _ = eleveldb:iterator_close(DbIter),
             {reply, ok, State1};
         error ->
             {reply, ok, State0}
@@ -306,8 +328,8 @@ handle_cast(_Msg, State) ->
 
 handle_info({'DOWN', Ref, process, _, _}, State0) ->
     case take_iterator(Ref, State0) of
-        {{Ref, Iter}, State1} ->
-            _ = eleveldb:iterator_close(Iter),
+        {{Ref, DbIter}, State1} ->
+            _ = eleveldb:iterator_close(DbIter),
             {noreply, State1};
         error ->
             {noreply, State0}
@@ -460,26 +482,20 @@ valid_partition(Id) ->
 
 
 %% @private
-add_iterator(Ref, Iter, #state{iterators = Map} = State) ->
-    State#state{iterators = Map#{Iter => Ref, Ref => Iter}}.
+add_iterator({OwnerRef, _DbIter} = Iter, State) when is_reference(OwnerRef) ->
+    Iterators1 = lists:keystore(OwnerRef, 1, State#state.iterators, Iter),
+    State#state{iterators = Iterators1}.
 
 
 %% @private
-take_iterator(Ref, State) when is_reference(Ref) ->
-    case maps:take(Ref, State#state.iterators) of
-        {Iter, Map0} ->
-            Map1 = maps:without([Iter], Map0),
-            {{Ref, Iter}, State#state{iterators = Map1}};
-        error ->
-            error
-    end;
+take_iterator({OwnerRef, _DbIter}, State) ->
+    take_iterator(OwnerRef, State);
 
-take_iterator(Iter, State) ->
-    case maps:take(Iter, State#state.iterators) of
-        {Ref, Map0} ->
-            Map1 = maps:without([Ref], Map0),
-            {{Ref, Iter}, State#state{iterators = Map1}};
-        error ->
+take_iterator(OwnerRef, State) when is_reference(OwnerRef) ->
+    case lists:keytake(OwnerRef, 1, State#state.iterators) of
+        {value, {OwnerRef, _} = Iter, Iterators1} ->
+            {Iter, State#state{iterators = Iterators1}};
+        false ->
             error
     end.
 

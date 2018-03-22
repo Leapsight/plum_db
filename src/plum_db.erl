@@ -555,11 +555,11 @@ iterate(#iterator{db_iter = undefined, partitions = [H|_]} = I0) ->
         false ->
             plum_db_partition_server:iterator(H)
     end,
-    Res = eleveldb:iterator_move(DBIter, First),
+    Res = plum_db_partition_server:iterator_move(DBIter, First),
     iterate(Res, I0#iterator{db_iter = DBIter});
 
 iterate(#iterator{db_iter = DBIter} = I) ->
-    iterate(eleveldb:iterator_move(DBIter, prefetch), I).
+    iterate(plum_db_partition_server:iterator_move(DBIter, prefetch), I).
 
 
 %% @private
