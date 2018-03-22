@@ -85,6 +85,7 @@ init([Peer, Opts]) ->
         partitions = maps:get(partitions, Opts, plum_db:partitions()),
         timeout = maps:get(timeout, Opts, 60000)
     },
+    _ = lager:info("Starting exchange fsm ~p", [self()]),
     {ok, acquiring_locks, State, [{next_event, internal, start}]}.
 
 
@@ -129,7 +130,7 @@ acquiring_locks(internal, start, State) ->
 acquiring_locks(
     timeout, _, #state{partitions = [H|T], peer = Peer} = State) ->
     %% getting remote lock timed out
-    ok = release_local_lock(State),
+    ok = release_local_lock(H),
     _ = lager:info(
         "Exchange with peer timed out acquiring locks; peer=~p, partition=~p",
         [Peer, H]
@@ -138,12 +139,14 @@ acquiring_locks(
     NewState = State#state{partitions = T},
     {next_state, acquiring_locks, NewState, [{next_event, internal, start}]};
 
-acquiring_locks(cast, {remote_lock, ok}, State) ->
+acquiring_locks(
+    cast, {remote_lock_acquired, P}, #state{partitions = [P|_]} = State) ->
     {next_state, updating_hashtrees, State, [{next_event, internal, start}]};
 
-acquiring_locks(cast, {remote_lock, Reason}, State) ->
-    ok = release_local_lock(State),
+acquiring_locks(cast, {remote_lock_error, Reason}, State) ->
     [H|T] = State#state.partitions,
+    ok = release_local_lock(H),
+
     _ = lager:info(
         "Failed to acquire remote lock; peer=~p, partition=~p, reason=~p",
         [State#state.peer, H, Reason]
@@ -153,7 +156,7 @@ acquiring_locks(cast, {remote_lock, Reason}, State) ->
     {next_state, acquiring_locks, NewState, [{next_event, internal, start}]};
 
 acquiring_locks(Type, Content, State) ->
-    _ = log_event(acquiring_locks, Type, Content, State),
+    _ = handle_event(acquiring_locks, Type, Content, State),
     {next_state, acquiring_locks, State}.
 
 
@@ -163,9 +166,9 @@ acquiring_locks(Type, Content, State) ->
 %% -----------------------------------------------------------------------------
 updating_hashtrees(internal, start, State) ->
     Partition = hd(State#state.partitions),
-    %% Update local hastree
+    %% Update local hashtree
     ok = update_request(node(), Partition),
-    %% Update remote hastree
+    %% Update remote hashtree
     ok = update_request(State#state.peer, Partition),
     {next_state, updating_hashtrees, State, State#state.timeout};
 
@@ -174,7 +177,7 @@ updating_hashtrees(
     _ = lager:error(
         "Exchange timed out updating trees; peer=~p, partition=~p",
         [Peer, H]),
-    ok = release_locks(State),
+    ok = release_locks(H, Peer),
     %% We try again with the remaining partitions
     NewState = State#state{partitions = T},
     {next_state, acquiring_locks, NewState, [{next_event, internal, start}]};
@@ -198,8 +201,8 @@ updating_hashtrees(cast, remote_tree_updated, State0) ->
     end;
 
 updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
-    ok = release_locks(State),
     [H|T] = State#state.partitions,
+    ok = release_locks(H, State#state.peer),
     _ = lager:info(
         "Error while updating ~p hashtree; peer=~p, partition=~p, response=~p",
         [LocOrRemote, State#state.peer, H, Reason]
@@ -209,7 +212,7 @@ updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
     {next_state, acquiring_locks, NewState, [{next_event, internal, start}]};
 
 updating_hashtrees(Type, Content, State) ->
-    _ = log_event(updating_hashtrees, Type, Content, State),
+    _ = handle_event(updating_hashtrees, Type, Content, State),
     {next_state, updating_hashtrees, State}.
 
 
@@ -223,9 +226,11 @@ exchanging_data(timeout, _, State) ->
 
     RemoteFun = fun
         (Prefixes, {get_bucket, {Level, Bucket}}) ->
-            plum_db_partition_hashtree:get_bucket(Peer, Partition, Prefixes, Level, Bucket);
+            plum_db_partition_hashtree:get_bucket(
+                Peer, Partition, Prefixes, Level, Bucket);
         (Prefixes, {key_hashes, Segment}) ->
-            plum_db_partition_hashtree:key_hashes(Peer, Partition, Prefixes, Segment)
+            plum_db_partition_hashtree:key_hashes(
+                Peer, Partition, Prefixes, Segment)
     end,
     HandlerFun = fun(Diff, Acc) ->
         repair(Peer, Diff),
@@ -255,18 +260,19 @@ exchanging_data(timeout, _, State) ->
             );
         false ->
             _ = lager:info(
-                "Completed data exchange;"
-                " partition=~p, peer=~p, missing_local_prefixes=0,"
-                " missing_remote_prefixes=0, keys=0",
+                "Completed data exchange; partition=~p, peer=~p",
                 [Partition, Peer]
             )
     end,
-    ok = release_locks(State),
-    case State#state.partitions of
-        [Partition] ->
-            %% This was the last partition, so we stop
+
+    [H|T] = State#state.partitions,
+    ok = release_locks(H, Peer),
+
+    case T of
+        [] ->
+            %% H was the last partition, so we stop
             {stop, normal, State};
-        [Partition|T] ->
+        _ ->
             %% We carry on with the remaining partitions
             NewState = State#state{partitions = T},
             {next_state, acquiring_locks, NewState, [
@@ -275,7 +281,7 @@ exchanging_data(timeout, _, State) ->
     end;
 
 exchanging_data(Type, Content, State) ->
-    _ = log_event(exchanging_data, Type, Content, State),
+    _ = handle_event(exchanging_data, Type, Content, State),
     {next_state, exchanging_data, State}.
 
 
@@ -285,6 +291,7 @@ exchanging_data(Type, Content, State) ->
 %% =============================================================================
 
 
+
 reset_state(State) ->
     State#state{
         local_tree_updated = false,
@@ -292,12 +299,17 @@ reset_state(State) ->
     }.
 
 
-log_event(StateLabel, Type, Event, State) ->
-    lager:info(
+handle_event(_, cast, {remote_lock_acquired, Partition}, State) ->
+    %% We received a late respose to an async_acquire_remote_lock
+    %% Unlock it.
+    release_remote_lock(Partition, State#state.peer);
+
+handle_event(StateLabel, Type, Event, State) ->
+    _ = lager:info(
         "Invalid event; state=~p, type=~p, event=~p, state=~p",
         [Type, Event, StateLabel, State]
-    ).
-
+    ),
+    ok.
 
 
 acquire_local_lock(#state{partitions = [H|T]} = State) ->
@@ -321,21 +333,29 @@ acquire_local_lock(#state{partitions = []} = State) ->
 async_acquire_remote_lock(Peer, Partition) ->
     Self = self(),
     do_async(fun() ->
-        Res = plum_db_partition_hashtree:lock(Peer, Partition, Self),
-        {remote_lock, Res}
+        case plum_db_partition_hashtree:lock(Peer, Partition, Self) of
+            ok ->
+                {remote_lock_acquired, Partition};
+            Res ->
+                {remote_lock_error, Res}
+        end
     end).
 
 
-release_locks(State) ->
-    Partition = hd(State#state.partitions),
-    %% Release remote lock
-    _ = plum_db_partition_hashtree:release_lock(State#state.peer, Partition),
-    release_local_lock(State).
+%% @private
+release_locks(Partition, Peer) ->
+    ok = release_remote_lock(Partition, Peer),
+    release_local_lock(Partition).
 
 
-release_local_lock(State) ->
-    _ = plum_db_partition_hashtree:release_lock(hd(State#state.partitions)),
+%% @private
+release_local_lock(Partition) ->
+    _ = plum_db_partition_hashtree:release_lock(Partition),
     ok.
+
+%% @private
+release_remote_lock(Partition, Peer) ->
+    plum_db_partition_hashtree:release_lock(Peer, Partition).
 
 
 %% @private
