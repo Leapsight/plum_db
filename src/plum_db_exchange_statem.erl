@@ -85,7 +85,6 @@ init([Peer, Opts]) ->
         partitions = maps:get(partitions, Opts, plum_db:partitions()),
         timeout = maps:get(timeout, Opts, 60000)
     },
-    _ = lager:info("Starting exchange fsm ~p", [self()]),
     {ok, acquiring_locks, State, [{next_event, internal, start}]}.
 
 
