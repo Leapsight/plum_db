@@ -68,3 +68,7 @@ Do the following on each node to check they now all have the three elements:
 ``` erlang
 > plum_db:fold(fun({K, V}, Acc) -> [{K, V}|Acc] end, [], {undefined, undefined}).
 ```
+
+```
+[plum_db:put({foo, 3}, integer_to_binary(X), 1) || X <- lists:seq(1, 1000)].
+```
