@@ -117,30 +117,30 @@
 -export([get/3]).
 -export([get_object/1]).
 -export([get_object/2]).
+-export([get_partition/1]).
+-export([is_partition/1]).
+-export([iterate/1]).
 -export([iterator/0]).
 -export([iterator/1]).
 -export([iterator/2]).
 -export([iterator_close/1]).
 -export([iterator_default/1]).
 -export([iterator_done/1]).
--export([iterator_key/1]).
--export([iterator_key_values/1]).
--export([iterate/1]).
--export([iterator_key_value/1]).
 -export([iterator_element/1]).
+-export([iterator_key/1]).
+-export([iterator_key_value/1]).
+-export([iterator_key_values/1]).
 -export([iterator_prefix/1]).
--export([remote_iterator/1]).
--export([remote_iterator/2]).
+-export([merge/3]).
+-export([partition_count/0]).
+-export([partitions/0]).
 -export([prefix_hash/2]).
 -export([put/3]).
 -export([put/4]).
+-export([remote_iterator/1]).
+-export([remote_iterator/2]).
 -export([to_list/1]).
 -export([to_list/2]).
--export([get_partition/1]).
--export([partitions/0]).
--export([partition_count/0]).
--export([is_partition/1]).
--export([merge/3]).
 
 
 -export([start_link/0]).
@@ -835,9 +835,9 @@ delete(FullPrefix, Key) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Removes the value associated with the given prefix and key locally and
-%% then triggers a broradcast to notify other nodes in the cluster. Currently
-%% there are no delete options
+%% @doc Logically deletes the value associated with the given prefix
+%% and key locally and then triggers a broradcast to notify other nodes in the
+%% cluster. Currently there are no delete options.
 %%
 %% NOTE: currently deletion is logical and no GC is performed.
 %% @end
