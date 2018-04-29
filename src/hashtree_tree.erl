@@ -19,8 +19,8 @@
 %% -------------------------------------------------------------------
 
 %% @doc This module implements a specialized hash tree that is used
-%% primarily by cluster anti-entropy exchanges and by
-%% clients for determining when groups of keys have
+%% primarily by cluster metadata's anti-entropy exchanges and by
+%% metadata clients for determining when groups of metadata keys have
 %% changed locally. The tree can be used, generally, for determining
 %% the differences in groups of keys, or to find missing groups, between
 %% two stores.
@@ -119,12 +119,6 @@
 
 -export_type([tree/0, tree_node/0, handler_fun/1, remote_fun/0]).
 
--ifdef(namespaced_types).
--type hashtree_gb_set() :: gb_sets:set().
--else.
--type hashtree_gb_set() :: gb_set().
--endif.
-
 -record(hashtree_tree, {
           %% the identifier for this tree. used as part of the ids
           %% passed to hashtree.erl and in keys used to store nodes in
@@ -144,7 +138,7 @@
           snapshot   :: ets:tab(),
 
           %% set of dirty leaves
-          dirty      :: hashtree_gb_set()
+          dirty      :: gb_sets:set()
          }).
 
 -define(ROOT, '$ht_root').
@@ -187,7 +181,7 @@ new(TreeId, Opts) ->
                           data_root = DataRoot,
                           num_levels = NumLevels,
                           %% table needs to be public to allow async update
-                          nodes = ets:new(TreeId, [public]),
+                          nodes = ets:new(undefined, [public]),
                           snapshot = undefined,
                           dirty = gb_sets:new()},
     get_node(?ROOT, Tree),
@@ -274,7 +268,6 @@ local_compare(T1, T2) ->
     RemoteFun = fun(Prefixes, {get_bucket, {Level, Bucket}}) ->
                         hashtree_tree:get_bucket(Prefixes, Level, Bucket, T2);
                    (Prefixes, {key_hashes, Segment}) ->
-
                         [{_, Hashes}] = hashtree_tree:key_hashes(Prefixes, Segment, T2),
                         Hashes
                 end,
@@ -528,7 +521,7 @@ node_key_to_name({_TreeId, NodeName}) ->
 node_id(?ROOT, #hashtree_tree{id=TreeId}) ->
     {TreeId, <<0:176/integer>>};
 node_id(NodeName, #hashtree_tree{id=TreeId}) ->
-    <<NodeMD5:128/integer>> = crypto:hash(md5, term_to_binary(NodeName)),
+    <<NodeMD5:128/integer>> = crypto:hash(md5, (term_to_binary(NodeName))),
     {TreeId, <<NodeMD5:176/integer>>}.
 
 %% @private
@@ -566,8 +559,7 @@ data_root(Opts) ->
     case proplists:get_value(data_dir, Opts) of
         undefined ->
             Base = "/tmp/hashtree_tree",
-            <<P:128/integer>> = crypto:hash(
-                md5, term_to_binary(erlang:monotonic_time())),
+            <<P:128/integer>> = crypto:hash(md5, term_to_binary(erlang:timestamp())),
             filename:join(Base, integer_to_list(P, 16));
         Root -> Root
     end.
