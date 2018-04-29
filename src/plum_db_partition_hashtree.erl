@@ -18,8 +18,14 @@
 %%
 %% -------------------------------------------------------------------
 -module(plum_db_partition_hashtree).
-
 -behaviour(gen_server).
+
+
+%% default value for aae_hashtree_ttl config option
+%% Time in milliseconds after which the hashtree will be reset
+%% i.e. destroyed and rebuilt
+-define(DEFAULT_TTL, 604800000). %% 1 week
+
 
 %% API
 -export([compare/4]).
@@ -39,6 +45,8 @@
 -export([start_link/1]).
 -export([update/1]).
 -export([update/2]).
+-export([reset/1]).
+-export([reset/2]).
 
 %% gen_server callbacks
 -export([init/1]).
@@ -52,18 +60,22 @@
 
 
 -record(state, {
-    partition   :: non_neg_integer(),
-
+    data_root       ::  file:filename(),
+    %% the plum_db partition this hashtree represents
+    partition       ::  non_neg_integer(),
     %% the tree managed by this process
-    tree        :: hashtree_tree:tree(),
-
+    tree            ::  hashtree_tree:tree(),
     %% whether or not the tree has been built or a monitor ref
     %% if the tree is being built
-    built       :: boolean() | reference(),
-
+    built           ::  boolean() | reference(),
+    %% Timestamp when the tree was build. To be used together with ttl
+    %% to calculate if the hashtree has expired
+    build_timestamp ::  non_neg_integer() | undefined,
+    %% Time in milliseconds after which the hashtree will be reset
+    ttl             ::  non_neg_integer(),
     %% a monitor reference for a process that currently holds a
-    %% lock on the tree. undefined otherwise
-    lock        :: {internal | external, reference(), pid()} | undefined
+    %% lock on the tree
+    lock            ::  {internal | external, reference(), pid()} | undefined
 }).
 
 
@@ -132,7 +144,8 @@ insert(Partition, PKey, Hash, IfMissing) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec prefix_hash(
-    plum_db:partition() | pid() | atom(), plum_db_prefix() | binary() | atom()) ->
+    plum_db:partition() | pid() | atom(),
+    plum_db_prefix() | binary() | atom()) ->
     undefined | binary().
 
 prefix_hash(Partition, Prefix) when is_integer(Partition) ->
@@ -248,10 +261,8 @@ release_lock(Node, Partition) ->
 
 release_lock(Node, Partition, Pid) ->
     Type = case node() of
-        Node ->
-            internal;
-        _ ->
-            external
+        Node -> internal;
+        _ -> external
     end,
     gen_server:call(
         {name(Partition), Node}, {release_lock, Type, Pid}, infinity).
@@ -262,7 +273,9 @@ release_lock(Node, Partition, Pid) ->
 %% @see update/2
 %% @end
 %% -----------------------------------------------------------------------------
--spec update(plum_db:partition()) -> ok | not_locked | not_built | ongoing_update.
+-spec update(plum_db:partition()) ->
+    ok | not_locked | not_built | ongoing_update.
+
 update(Partition) ->
     update(node(), Partition).
 
@@ -284,6 +297,24 @@ update(Partition) ->
 
 update(Node, Partition) ->
     gen_server:call({name(Partition), Node}, update, infinity).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Destroys the partition's hashtrees on the local node and rebuilds it.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec reset(plum_db:partition()) -> ok.
+reset(Partition) ->
+    reset(node(), Partition).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Destroys the partition's hashtrees on node `Node' and rebuilds it.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec reset(node(), plum_db:partition()) -> ok.
+reset(Node, Partition) ->
+    gen_server:cast({name(Partition), Node}, reset).
 
 
 %% -----------------------------------------------------------------------------
@@ -321,16 +352,8 @@ compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
 
 init([Partition, DataRoot]) ->
     schedule_tick(),
-    TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
-    Tree = hashtree_tree:new(TreeId, [{data_dir, DataRoot}, {num_levels, 2}]),
-    State = #state{
-        partition = Partition,
-        tree = Tree,
-        built = false,
-        lock = undefined
-    },
-    State1 = build_async(State),
-    {ok, State1}.
+    State = init_async(#state{data_root = DataRoot, partition = Partition}),
+    {ok, State}.
 
 handle_call({compare, RemoteFun, HandlerFun, HandlerAcc}, From, State) ->
     maybe_compare_async(From, RemoteFun, HandlerFun, HandlerAcc, State),
@@ -356,28 +379,37 @@ handle_call({key_hashes, Prefixes, Segment}, _From, State) ->
     [{_, Res}] = hashtree_tree:key_hashes(Prefixes, Segment, State#state.tree),
     {reply, Res, State};
 
-handle_call({prefix_hash, Prefix}, _From, State=#state{tree = Tree}) ->
+handle_call({prefix_hash, Prefix}, _From, #state{tree = Tree} = State) ->
     PrefixList = prefix_to_prefix_list(Prefix),
     PrefixHash = hashtree_tree:prefix_hash(PrefixList, Tree),
     {reply, PrefixHash, State};
 
-handle_call({insert, PKey, Hash, IfMissing}, _From, State=#state{tree = Tree}) ->
+handle_call(
+    {insert, PKey, Hash, IfMissing}, _From, #state{tree = Tree} = State) ->
     {Prefixes, Key} = prepare_pkey(PKey),
     Tree1 = hashtree_tree:insert(Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree),
     {reply, ok, State#state{tree=Tree1}}.
 
+
+handle_cast(reset, State0) ->
+    _ = lager:info(
+        "Resetting hashtree at node ~p due to user request", [node()]),
+    State = reset_async(State0),
+    {noreply, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
 
 handle_info(
-    {'DOWN', BuildRef, process, _Pid, normal}, State=#state{built=BuildRef}) ->
+    {'DOWN', BuildRef, process, _Pid, normal},
+    #state{built=BuildRef} = State) ->
     State1 = build_done(State),
     {noreply, State1};
 
 handle_info(
-    {'DOWN', BuildRef, process, _Pid, Reason}, State=#state{built=BuildRef}) ->
+    {'DOWN', BuildRef, process, _Pid, Reason},
+    #state{built=BuildRef} = State) ->
     lager:error("building tree failed: ~p", [Reason]),
     State1 = build_error(State),
     {noreply, State1};
@@ -390,9 +422,10 @@ handle_info(
 
 handle_info(tick, State) ->
     schedule_tick(),
-    State1 = maybe_build_async(State),
-    State2 = maybe_update_async(State1),
-    {noreply, State2}.
+    State1 = maybe_reset_async(State),
+    State2 = maybe_build_async(State1),
+    State3 = maybe_update_async(State2),
+    {noreply, State3}.
 
 
 terminate(_Reason, State0) ->
@@ -413,9 +446,35 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
+init_async(#state{data_root = DataRoot, partition = Partition} = State0) ->
+    TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
+    Tree = hashtree_tree:new(TreeId, [{data_dir, DataRoot}, {num_levels, 2}]),
+    TTL = application:get_env(plumtree, aae_hashtree_ttl, ?DEFAULT_TTL),
+    State = State0#state{
+        tree = Tree,
+        built = false,
+        build_timestamp = undefined,
+        ttl = TTL,
+        lock = undefined
+    },
+    build_async(State).
+
+
+%% @private
+reset_async(State) ->
+    _ = hashtree_tree:destroy(State#state.tree),
+    _ = lager:info(
+        "Hashtree destroyed; partition=~p, node=~p",
+        [State#state.partition, node()]
+    ),
+    schedule_tick(),
+    init_async(State).
+
+
+%% @private
 maybe_compare_async(
     From, RemoteFun, HandlerFun, HandlerAcc,
-    State=#state{built = true, lock = {external, _, _}}) ->
+    #state{built = true, lock = {external, _, _}} = State) ->
     compare_async(From, RemoteFun, HandlerFun, HandlerAcc, State);
 
 maybe_compare_async(From, _, _, HandlerAcc, _State) ->
@@ -431,15 +490,17 @@ compare_async(From, RemoteFun, HandlerFun, HandlerAcc, #state{tree = Tree}) ->
 
 
 %% @private
-maybe_external_update(From, State=#state{built = true, lock = undefined}) ->
+maybe_external_update(From, #state{built = true, lock = undefined} = State) ->
     gen_server:reply(From, not_locked),
     State;
 
-maybe_external_update(From, State=#state{built = true, lock = {internal, _, _}}) ->
+maybe_external_update(
+    From, #state{built = true, lock = {internal, _, _}} = State) ->
     gen_server:reply(From, ongoing_update),
     State;
 
-maybe_external_update(From, State=#state{built = true, lock = {external, _, _}}) ->
+maybe_external_update(
+    From, #state{built = true, lock = {external, _, _}} = State) ->
     update_async(From, false, State);
 
 maybe_external_update(From, State) ->
@@ -448,7 +509,7 @@ maybe_external_update(From, State) ->
 
 
 %% @private
-maybe_update_async(State=#state{built = true, lock = undefined}) ->
+maybe_update_async(#state{built = true, lock = undefined} = State) ->
     update_async(State);
 
 maybe_update_async(State) ->
@@ -461,7 +522,7 @@ update_async(State) ->
 
 
 %% @private
-update_async(From, Lock, State=#state{tree = Tree}) ->
+update_async(From, Lock, #state{tree = Tree} = State) ->
     Tree2 = hashtree_tree:update_snapshot(Tree),
     Pid = spawn_link(fun() ->
         hashtree_tree:update_perform(Tree2),
@@ -478,9 +539,22 @@ update_async(From, Lock, State=#state{tree = Tree}) ->
 
 
 %% @private
-maybe_build_async(State=#state{built=false}) ->
+maybe_build_async(#state{built = false} = State) ->
     build_async(State);
+
 maybe_build_async(State) ->
+    State.
+
+maybe_reset_async(#state{built = true} = State) ->
+    Diff = timer:now_diff(os:timestamp(), State#state.build_timestamp),
+    case Diff >= State#state.ttl of
+        true ->
+            reset_async(State);
+        false ->
+            State
+    end;
+
+maybe_reset_async(State) ->
     State.
 
 
@@ -491,7 +565,16 @@ build_async(State) ->
         %% We iterate over the whole database
         FullPrefix = {undefined, undefined},
         Iterator = plum_db:iterator(FullPrefix, [{partitions, [Partition]}]),
-        build(Partition, Iterator)
+        _ = lager:info(
+            "Starting hashtree build; partition=~p, node=~p",
+            [Partition, node()]
+        ),
+        Res = build(Partition, Iterator),
+        _ = lager:info(
+            "Finished hashtree build; partition=~p, node=~p",
+            [Partition, node()]
+        ),
+        Res
     end),
     State#state{built = Ref}.
 
@@ -511,7 +594,7 @@ build(Partition, Iterator) ->
 
 %% @private
 build_done(State) ->
-    State#state{built = true}.
+    State#state{built = true, build_timestamp = os:timestamp()}.
 
 %% @private
 build_error(State) ->
@@ -519,10 +602,10 @@ build_error(State) ->
 
 
 %% @private
-maybe_external_lock(Pid, State=#state{lock = undefined, built = true}) ->
+maybe_external_lock(Pid, #state{lock = undefined, built = true} = State) ->
     {ok, do_lock(Pid, external, State)};
 
-maybe_external_lock(_Pid, State=#state{built = true}) ->
+maybe_external_lock(_Pid, #state{built = true} = State) ->
     {locked, State};
 
 maybe_external_lock(_Pid, State) ->
