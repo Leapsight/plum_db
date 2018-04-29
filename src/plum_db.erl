@@ -1080,15 +1080,20 @@ exchange(Peer) ->
 -spec exchange(node(), map()) -> {ok, pid()} | {error, term()}.
 
 exchange(Peer, Opts0) ->
-    Opts1 = maps:merge(#{timeout => 60000}, Opts0),
+    case application:get_env(plum_db, aae_enabled, true) of
+        true ->
+            Opts1 = maps:merge(#{timeout => 60000}, Opts0),
 
-    case plum_db_exchange_statem:start(Peer, Opts1) of
-        {ok, Pid} ->
-            {ok, Pid};
-        {error, Reason} ->
-            {error, Reason};
-        ignore ->
-            {error, ignore}
+            case plum_db_exchange_statem:start(Peer, Opts1) of
+                {ok, Pid} ->
+                    {ok, Pid};
+                {error, Reason} ->
+                    {error, Reason};
+                ignore ->
+                    {error, ignore}
+            end;
+        false ->
+            {error, aae_disabled}
     end.
 
 
@@ -1214,8 +1219,13 @@ maybe_tombstone(Value, _Default) ->
 
 %% @private
 broadcast(PKey, Obj) ->
-    Broadcast = #plum_db_broadcast{pkey = PKey, obj = Obj},
-    plumtree_broadcast:broadcast(Broadcast, plum_db).
+    case application:get_env(plum_db, aae_enabled, true) of
+        true ->
+            Broadcast = #plum_db_broadcast{pkey = PKey, obj = Obj},
+            plumtree_broadcast:broadcast(Broadcast, plum_db);
+        false ->
+            ok
+    end.
 
 
 %% @private

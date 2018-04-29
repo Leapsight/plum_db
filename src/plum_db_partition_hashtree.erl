@@ -449,7 +449,7 @@ code_change(_OldVsn, State, _Extra) ->
 init_async(#state{data_root = DataRoot, partition = Partition} = State0) ->
     TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
     Tree = hashtree_tree:new(TreeId, [{data_dir, DataRoot}, {num_levels, 2}]),
-    TTL = application:get_env(plumtree, aae_hashtree_ttl, ?DEFAULT_TTL),
+    TTL = application:get_env(plum_db, aae_hashtree_ttl, ?DEFAULT_TTL),
     State = State0#state{
         tree = Tree,
         built = false,
@@ -560,23 +560,28 @@ maybe_reset_async(State) ->
 
 %% @private
 build_async(State) ->
-    {_Pid, Ref} = spawn_monitor(fun() ->
-        Partition = State#state.partition,
-        %% We iterate over the whole database
-        FullPrefix = {undefined, undefined},
-        Iterator = plum_db:iterator(FullPrefix, [{partitions, [Partition]}]),
-        _ = lager:info(
-            "Starting hashtree build; partition=~p, node=~p",
-            [Partition, node()]
-        ),
-        Res = build(Partition, Iterator),
-        _ = lager:info(
-            "Finished hashtree build; partition=~p, node=~p",
-            [Partition, node()]
-        ),
-        Res
-    end),
-    State#state{built = Ref}.
+    case application:get_env(plum_db, aae_enabled, true) of
+        true ->
+            {_Pid, Ref} = spawn_monitor(fun() ->
+                Partition = State#state.partition,
+                %% We iterate over the whole database
+                FullPrefix = {undefined, undefined},
+                Iterator = plum_db:iterator(FullPrefix, [{partitions, [Partition]}]),
+                _ = lager:info(
+                    "Starting hashtree build; partition=~p, node=~p",
+                    [Partition, node()]
+                ),
+                Res = build(Partition, Iterator),
+                _ = lager:info(
+                    "Finished hashtree build; partition=~p, node=~p",
+                    [Partition, node()]
+                ),
+                Res
+            end),
+            State#state{built = Ref};
+        false ->
+            State
+    end.
 
 
 %% @private
