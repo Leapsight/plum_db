@@ -97,7 +97,7 @@
 
 start_link(Partition) ->
     PRoot = app_helper:get_env(plum_db, data_dir),
-    DataRoot = filename:join([PRoot, "trees", integer_to_list(Partition)]),
+    DataRoot = filename:join([PRoot, "hashtrees", integer_to_list(Partition)]),
     Name = name(Partition),
     gen_server:start_link({local, Name}, ?MODULE, [Partition, DataRoot], []).
 

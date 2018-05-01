@@ -244,7 +244,7 @@ init([Partition, Opts]) ->
 
     DataRoot = filename:join([
         app_helper:get_prop_or_env(data_dir, Opts, plum_db),
-        "leveldb",
+        "db",
         integer_to_list(Partition)
     ]),
 
