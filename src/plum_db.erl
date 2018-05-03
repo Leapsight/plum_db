@@ -577,6 +577,7 @@ iterate({ok, K}, #iterator{db_iter = DBIter, partitions = [H|T]} = I0) ->
             {Prefix, Key} = PKey,
             I0#iterator{prefix = Prefix, key = Key, object = undefined};
         false ->
+            %% We have no more matches in this partition
             I1 = iterator_reset_pointers(I0),
             ok = plum_db_partition_server:iterator_close(H, DBIter),
             iterate(I1#iterator{db_iter = undefined, partitions = T})
