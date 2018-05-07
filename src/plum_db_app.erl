@@ -63,10 +63,15 @@
 %% @end
 %% -----------------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
-    {ok, Pid} = plum_db_sup:start_link(),
-    %% We set the pubsub handler
-    ok = plum_db_events:add_pubsub_handler(),
-    {ok, Pid}.
+    case plum_db_sup:start_link() of
+        {ok, Pid} ->
+            %% We set the pubsub handler
+            ok = plum_db_events:add_pubsub_handler(),
+            ok = setup_partisan(),
+            {ok, Pid};
+        Other ->
+            Other
+    end.
 
 
 %% -----------------------------------------------------------------------------
@@ -77,3 +82,15 @@ stop(_State) ->
     ok.
 
 
+
+
+
+%% =============================================================================
+%% PRIVATE
+%% =============================================================================
+
+
+%% @private
+setup_partisan() ->
+    Channels0 = partisan_config:get(channels, []),
+    partisan_config:set(channels, [aae_messages | Channels0]).
