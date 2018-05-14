@@ -680,20 +680,23 @@ iterator_key(#iterator{key = Key}) ->
 
 iterator_key_value(#iterator{opts = Opts} = I) ->
     Default = iterator_default(I),
-    PKey = {I#iterator.prefix, I#iterator.key},
+    Key = I#iterator.key,
+    PKey = {I#iterator.prefix, Key},
     Obj = I#iterator.object,
     AllowPut = get_option(allow_put, Opts, true),
     case get_option(resolver, Opts, undefined) of
         undefined ->
             case plum_db_object:value_count(Obj) of
                 1 ->
-                    maybe_tombstone(plum_db_object:value(Obj), Default);
+                    Value = maybe_tombstone(plum_db_object:value(Obj), Default),
+                    {Key, Value};
                 _ ->
                     {error, conflict}
             end;
         Resolver ->
-            maybe_tombstone(
-                maybe_resolve(PKey, Obj, Resolver, AllowPut), Default)
+            Value = maybe_tombstone(
+                maybe_resolve(PKey, Obj, Resolver, AllowPut), Default),
+            {Key, Value}
     end;
 
 iterator_key_value(#remote_iterator{ref = Ref, node = Node}) ->
