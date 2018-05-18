@@ -33,6 +33,7 @@
 -export([add_callback/1]).
 -export([add_sup_callback/1]).
 -export([update/1]).
+-export([notify/2]).
 
 %% gen_event callbacks
 -export([init/1]).
@@ -157,15 +158,15 @@ unsubscribe(EventType) ->
 %% @end
 %% -----------------------------------------------------------------------------
 update(PObject) ->
-    notify({object_update, PObject}).
+    notify(object_update, PObject).
 
 
 %% -----------------------------------------------------------------------------
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-notify(Event) ->
-    gen_event:notify(?MODULE, Event).
+notify(Event, Message) ->
+    gen_event:notify(?MODULE, {Event, Message}).
 
 
 %% =============================================================================
