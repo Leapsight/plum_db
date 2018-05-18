@@ -85,6 +85,10 @@ init([Peer, Opts]) ->
         partitions = maps:get(partitions, Opts, plum_db:partitions()),
         timeout = maps:get(timeout, Opts, 60000)
     },
+
+    %% We notify subscribers
+    _ = plum_db_events:notify(exchange_started),
+
     {ok, acquiring_locks, State, [{next_event, internal, start}]}.
 
 
@@ -93,6 +97,8 @@ callback_mode() ->
 
 
 terminate(_Reason, _StateName, _State) ->
+    %% We notify subscribers
+    _ = plum_db_events:notify(exchange_finished),
     ok.
 
 

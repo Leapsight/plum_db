@@ -57,7 +57,8 @@ start_link() ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc Ads itself as an event handler. This is to implement the pubsub
+%% capabilities provided by this module
 %% @end
 %% -----------------------------------------------------------------------------
 add_pubsub_handler() ->
@@ -65,7 +66,8 @@ add_pubsub_handler() ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc Adds an event handler.
+%% Calls `gen_event:add_handler(?MODULE, Handler, Args)'.
 %% @end
 %% -----------------------------------------------------------------------------
 add_handler(Handler, Args) ->
@@ -73,7 +75,8 @@ add_handler(Handler, Args) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc Adds a supervised event handler.
+%% Calls `gen_event:add_sup_handler(?MODULE, Handler, Args)'.
 %% @end
 %% -----------------------------------------------------------------------------
 add_sup_handler(Handler, Args) ->
@@ -81,7 +84,9 @@ add_sup_handler(Handler, Args) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc Adds a callback function.
+%% The function needs to have a single argument representing the event that has
+%% been fired.
 %% @end
 %% -----------------------------------------------------------------------------
 add_callback(Fn) when is_function(Fn, 1) ->
@@ -89,7 +94,9 @@ add_callback(Fn) when is_function(Fn, 1) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc Adds a supervised callback function.
+%% The function needs to have a single argument representing the event that has
+%% been fired.
 %% @end
 %% -----------------------------------------------------------------------------
 add_sup_callback(Fn) when is_function(Fn, 1) ->
@@ -98,15 +105,15 @@ add_sup_callback(Fn) when is_function(Fn, 1) ->
 
 %% -----------------------------------------------------------------------------
 %% @doc Subscribe to events of type Event.
-%% Any events published  through update/1 will delivered to the current process,
+%% Any events published through update/1 will delivered to the calling process,
 %% along with all other subscribers.
 %% This function will raise an exception if you try to subscribe to the same
 %% event twice from the same process.
 %% This function uses plum_db_pubsub:subscribe/2.
 %% @end
 %% -----------------------------------------------------------------------------
-subscribe(Event) ->
-    true = plum_db_pubsub:subscribe(l, Event),
+subscribe(EventType) ->
+    true = plum_db_pubsub:subscribe(l, EventType),
     ok.
 
 
@@ -127,8 +134,8 @@ subscribe(Event) ->
 %% This function uses `plum_db_pubsub:subscribe_cond/2'.
 %% @end
 %% -----------------------------------------------------------------------------
-subscribe(Event, MatchSpec) ->
-    true = plum_db_pubsub:subscribe_cond(l, Event, MatchSpec),
+subscribe(EventType, MatchSpec) ->
+    true = plum_db_pubsub:subscribe_cond(l, EventType, MatchSpec),
     ok.
 
 
@@ -136,8 +143,8 @@ subscribe(Event, MatchSpec) ->
 %% @doc Remove subscription created using `subscribe/1,2'
 %% @end
 %% -----------------------------------------------------------------------------
-unsubscribe(Event) ->
-    true = plum_db_pubsub:unsubscribe(l, Event),
+unsubscribe(EventType) ->
+    true = plum_db_pubsub:unsubscribe(l, EventType),
     ok.
 
 
@@ -150,8 +157,15 @@ unsubscribe(Event) ->
 %% @end
 %% -----------------------------------------------------------------------------
 update(PObject) ->
-    ok = gen_event:notify(?MODULE, {object_update, PObject}).
+    notify({object_update, PObject}).
 
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+notify(Event) ->
+    gen_event:notify(?MODULE, Event).
 
 
 %% =============================================================================

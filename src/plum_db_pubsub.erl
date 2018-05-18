@@ -83,8 +83,9 @@
 %% exception if you try to subscribe to the same event twice from the same
 %% process.
 %% @end
-subscribe(Scope, Event) when Scope==l; Scope==g ->
-    gproc:reg({p,Scope,{?ETag, Event}}).
+subscribe(Scope, Event) when Scope == l; Scope == g ->
+    gproc:reg({p, Scope, {?ETag, Event}}).
+
 
 -spec subscribe_cond(scope(), event(), undefined | ets:match_spec()) -> true.
 %% @doc Subscribe conditionally to events of type `Event'
