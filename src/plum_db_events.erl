@@ -182,15 +182,15 @@ init([Fn]) when is_function(Fn, 1) ->
     {ok, #state{callback = Fn}}.
 
 
-handle_event({object_update, PObj}, #state{callback = undefined} = State) ->
+handle_event({Event, Message}, #state{callback = undefined} = State) ->
     %% This is the pubsub handler instance
     %% We notify gproc conditional subscribers
-    _ = plum_db_pubsub:publish_cond(l, object_update, PObj),
+    _ = plum_db_pubsub:publish_cond(l, Event, Message),
     {ok, State};
 
-handle_event({object_update, PObj}, State) ->
+handle_event({Event, Message}, State) ->
     %% We notify gen_event handlers and callback funs
-    (State#state.callback)(PObj),
+    (State#state.callback)({Event, Message}),
     {ok, State}.
 
 
