@@ -87,7 +87,7 @@ init([Peer, Opts]) ->
     },
 
     %% We notify subscribers
-    _ = plum_db_events:notify(exchange_started, self()),
+    _ = plum_db_events:notify(exchange_started, {self(), Peer}),
 
     {ok, acquiring_locks, State, [{next_event, internal, start}]}.
 
@@ -98,7 +98,7 @@ callback_mode() ->
 
 terminate(Reason, _StateName, _State) ->
     %% We notify subscribers
-    _ = plum_db_events:notify(exchange_finished, self(), Reason),
+    _ = plum_db_events:notify(exchange_finished, {self(), Reason}),
     ok.
 
 
