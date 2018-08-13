@@ -50,7 +50,8 @@
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Start plum_db_partition_worker for the partition Id and link to calling process.
+%% @doc Start plum_db_partition_worker for the partition Id and link to calling
+%% process.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec start_link(non_neg_integer()) -> {ok, pid()} | ignore | {error, term()}.
