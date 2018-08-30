@@ -189,7 +189,7 @@ handle_event({Event, Message}, #state{callback = undefined} = State) ->
     {ok, State};
 
 handle_event({Event, Message}, State) ->
-    %% We notify gen_event handlers and callback funs
+    %% We notify callback funs
     (State#state.callback)({Event, Message}),
     {ok, State}.
 
