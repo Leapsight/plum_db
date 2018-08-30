@@ -68,6 +68,10 @@
                                 ({plum_db_key(), value_or_values()}, any()) ->
                                     any()
                                 ).
+-type foreach_fun()         ::  fun(
+                                    ({plum_db_key(), value_or_values()}) ->
+                                    any()
+                                ).
 -type fold_elements_fun()    ::  fun(
                                 ({plum_db_key(), plum_db_object()}, any()) ->
                                     any()
@@ -111,6 +115,8 @@
 -export([delete/3]).
 -export([fold/3]).
 -export([fold/4]).
+-export([foreach/2]).
+-export([foreach/3]).
 -export([fold_elements/3]).
 -export([fold_elements/4]).
 -export([get/2]).
@@ -355,6 +361,43 @@ fold_it(Fun, Acc, It) ->
         false ->
             Acc1 = Fun(iterator_key_values(It), Acc),
             fold_it(Fun, Acc1, iterate(It))
+    end.
+
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Same as fold(Fun, Acc0, FullPrefix, []).
+%% @end
+%% -----------------------------------------------------------------------------
+-spec foreach(foreach_fun(), plum_db_prefix()) -> any().
+foreach(Fun, FullPrefix) ->
+    foreach(Fun, FullPrefix, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Fold over all keys and values stored under a given prefix/subprefix.
+%% Available options are the same as those provided to iterator/2. To return
+%% early, throw {break, Result} in your fold function.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec foreach(foreach_fun(), plum_db_prefix(), fold_opts()) -> any().
+foreach(Fun, FullPrefix, Opts) ->
+    It = iterator(FullPrefix, Opts),
+    try
+        do_foreach(Fun, It)
+    after
+        ok = iterator_close(It)
+    end.
+
+
+%% @private
+do_foreach(Fun, It) ->
+    case iterator_done(It) of
+        true ->
+            ok;
+        false ->
+            _ = Fun(iterator_key_values(It)),
+            do_foreach(Fun, iterate(It))
     end.
 
 
