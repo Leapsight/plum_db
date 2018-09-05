@@ -3,9 +3,6 @@
     {vsn, "0.1.0"},
     {registered, []},
     {mod, {plum_db_app, []}},
-    {start_phases, [
-        {build_hashtrees, []}
-    ]},
     {applications, [
         kernel,
         stdlib,
