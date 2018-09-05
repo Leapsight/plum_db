@@ -49,6 +49,8 @@
 -behaviour(application).
 
 -export([start/2]).
+-export([start_phase/3]).
+-export([prep_stop/1]).
 -export([stop/1]).
 
 
@@ -63,6 +65,11 @@
 %% @end
 %% -----------------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
+    %% We disable it until the build_hashtrees start phase
+    Enabled = application:get_env(plum_db, aae_enabled, true),
+    ok = application:set_env(plum_db, priv_aae_enabled, Enabled),
+    ok = application:set_env(plum_db, aae_enabled, false),
+
     case plum_db_sup:start_link() of
         {ok, Pid} ->
             %% We set the pubsub handler
@@ -72,6 +79,25 @@ start(_StartType, _StartArgs) ->
         Other ->
             Other
     end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+start_phase(build_hashtrees, normal, []) ->
+    {ok, Enabled} = application:get_env(plum_db, priv_aae_enabled),
+    ok = application:set_env(plum_db, aae_enabled, Enabled),
+    ok.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+prep_stop(_State) ->
+    ok.
+
 
 
 %% -----------------------------------------------------------------------------
