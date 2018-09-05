@@ -60,6 +60,7 @@
 
 
 -record(state, {
+    id              ::  atom(),
     data_root       ::  file:filename(),
     %% the plum_db partition this hashtree represents
     partition       ::  non_neg_integer(),
@@ -351,8 +352,11 @@ compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
 
 
 init([Partition, DataRoot]) ->
-    schedule_tick(),
-    State = init_async(#state{data_root = DataRoot, partition = Partition}),
+    Id = name(Partition),
+    State = init_async(#state{
+        id = Id, data_root = DataRoot, partition = Partition
+    }),
+    schedule_tick(State),
     {ok, State}.
 
 handle_call({compare, RemoteFun, HandlerFun, HandlerAcc}, From, State) ->
@@ -421,7 +425,7 @@ handle_info(
     {noreply, State1};
 
 handle_info(tick, State) ->
-    schedule_tick(),
+    schedule_tick(State),
     State1 = maybe_reset_async(State),
     State2 = maybe_build_async(State1),
     State3 = maybe_update_async(State2),
@@ -467,7 +471,7 @@ reset_async(State) ->
         "Hashtree destroyed; partition=~p, node=~p",
         [State#state.partition, node()]
     ),
-    schedule_tick(),
+    schedule_tick(State),
     init_async(State).
 
 
@@ -566,7 +570,8 @@ build_async(State) ->
                 Partition = State#state.partition,
                 %% We iterate over the whole database
                 FullPrefix = {undefined, undefined},
-                Iterator = plum_db:iterator(FullPrefix, [{partitions, [Partition]}]),
+                Iterator = plum_db:iterator(
+                    FullPrefix, [{partitions, [Partition]}]),
                 _ = lager:info(
                     "Starting hashtree build; partition=~p, node=~p",
                     [Partition, node()]
@@ -651,6 +656,6 @@ prepare_pkey({FullPrefix, Key}) ->
 
 
 %% @private
-schedule_tick() ->
+schedule_tick(State) ->
     TickMs = app_helper:get_env(plum_db, hashtree_timer, 10000),
-    erlang:send_after(TickMs, ?MODULE, tick).
+    erlang:send_after(TickMs, State#state.id, tick).
