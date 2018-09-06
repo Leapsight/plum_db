@@ -24,7 +24,7 @@
 %% default value for aae_hashtree_ttl config option
 %% Time in milliseconds after which the hashtree will be reset
 %% i.e. destroyed and rebuilt
--define(DEFAULT_TTL, 604800000). %% 1 week
+-define(DEFAULT_TTL, 7 * 24 * 60 * 60). %% 1 week
 
 
 %% API
@@ -69,11 +69,11 @@
     %% whether or not the tree has been built or a monitor ref
     %% if the tree is being built
     built           ::  boolean() | reference(),
-    %% Timestamp when the tree was build. To be used together with ttl
+    %% Timestamp when the tree was build. To be used together with ttl_secs
     %% to calculate if the hashtree has expired
-    build_timestamp ::  non_neg_integer() | undefined,
+    build_ts_secs   ::  non_neg_integer() | undefined,
     %% Time in milliseconds after which the hashtree will be reset
-    ttl             ::  non_neg_integer(),
+    ttl_secs             ::  non_neg_integer(),
     %% a monitor reference for a process that currently holds a
     %% lock on the tree
     lock            ::  {internal | external, reference(), pid()} | undefined
@@ -457,8 +457,8 @@ init_async(#state{data_root = DataRoot, partition = Partition} = State0) ->
     State = State0#state{
         tree = Tree,
         built = false,
-        build_timestamp = undefined,
-        ttl = TTL,
+        build_ts_secs = undefined,
+        ttl_secs = TTL,
         lock = undefined
     },
     build_async(State).
@@ -550,8 +550,8 @@ maybe_build_async(State) ->
     State.
 
 maybe_reset_async(#state{built = true} = State) ->
-    Diff = timer:now_diff(os:timestamp(), State#state.build_timestamp),
-    case Diff >= State#state.ttl of
+    Diff = erlang:system_time(second) - State#state.build_ts_secs,
+    case Diff >= State#state.ttl_secs of
         true ->
             reset_async(State);
         false ->
@@ -604,7 +604,7 @@ build(Partition, Iterator) ->
 
 %% @private
 build_done(State) ->
-    State#state{built = true, build_timestamp = os:timestamp()}.
+    State#state{built = true, build_ts_secs = erlang:system_time(second)}.
 
 %% @private
 build_error(State) ->
