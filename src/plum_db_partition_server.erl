@@ -340,7 +340,7 @@ handle_info(_Info, State) ->
 
 
 terminate(_Reason, #state{db_ref = DbRef}) ->
-    eleveldb:close(DbRef),
+    catch eleveldb:close(DbRef),
     ok.
 
 
