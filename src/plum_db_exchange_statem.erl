@@ -35,6 +35,7 @@
 -export([code_change/4]).
 
 %% gen_fsm states
+-export([starting/3]).
 -export([acquiring_locks/3]).
 -export([updating_hashtrees/3]).
 -export([exchanging_data/3]).
@@ -89,7 +90,8 @@ init([Peer, Opts]) ->
     %% We notify subscribers
     _ = plum_db_events:notify(exchange_started, {self(), Peer}),
 
-    {ok, acquiring_locks, State, [{next_event, internal, start}]}.
+    %% {ok, acquiring_locks, State, [{next_event, internal, start}]}.
+    {ok, starting, State, 0}.
 
 
 callback_mode() ->
@@ -113,11 +115,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 
 
 
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
-acquiring_locks(internal, start, State) ->
+starting(timeout, _, State) ->
     State0 = reset_state(State),
     case acquire_local_lock(State0) of
         {ok, Partition, State1} ->
@@ -130,7 +128,27 @@ acquiring_locks(internal, start, State) ->
                 [State1#state.peer]
             ),
             {stop, Reason, State1}
-    end;
+    end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+%% acquiring_locks(internal, start, State) ->
+%%     State0 = reset_state(State),
+%%     case acquire_local_lock(State0) of
+%%         {ok, Partition, State1} ->
+%%             %% get corresponding remote lock
+%%             ok = async_acquire_remote_lock(State1#state.peer, Partition),
+%%             {next_state, acquiring_locks, State1, State1#state.timeout};
+%%         {error, Reason, State1} ->
+%%             _ = lager:warning(
+%%                 "Exchange with peer timed out acquiring locks; peer=~p",
+%%                 [State1#state.peer]
+%%             ),
+%%             {stop, Reason, State1}
+%%     end;
 
 acquiring_locks(
     timeout, _, #state{partitions = [H|T], peer = Peer} = State) ->
@@ -142,11 +160,11 @@ acquiring_locks(
     ),
     %% We try again with the remaining partitions
     NewState = State#state{partitions = T},
-    {next_state, acquiring_locks, NewState, [{next_event, internal, start}]};
+    {next_state, starting, NewState, 0};
 
 acquiring_locks(
     cast, {remote_lock_acquired, P}, #state{partitions = [P|_]} = State) ->
-    {next_state, updating_hashtrees, State, [{next_event, internal, start}]};
+    {next_state, updating_hashtrees, State, [{timeout, 0, start}]};
 
 acquiring_locks(cast, {remote_lock_error, Reason}, State) ->
     [H|T] = State#state.partitions,
@@ -158,7 +176,7 @@ acquiring_locks(cast, {remote_lock_error, Reason}, State) ->
     ),
     %% We try again with the remaining partitions
     NewState = State#state{partitions = T},
-    {next_state, acquiring_locks, NewState, [{next_event, internal, start}]};
+    {next_state, starting, NewState, 0};
 
 acquiring_locks(Type, Content, State) ->
     _ = handle_event(acquiring_locks, Type, Content, State),
@@ -169,7 +187,7 @@ acquiring_locks(Type, Content, State) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-updating_hashtrees(internal, start, State) ->
+updating_hashtrees(timeout, start, State) ->
     Partition = hd(State#state.partitions),
     %% Update local hashtree
     ok = update_request(node(), Partition),
@@ -185,7 +203,7 @@ updating_hashtrees(
     ok = release_locks(H, Peer),
     %% We try again with the remaining partitions
     NewState = State#state{partitions = T},
-    {next_state, acquiring_locks, NewState, [{next_event, internal, start}]};
+    {next_state, starting, NewState, 0};
 
 updating_hashtrees(cast, local_tree_updated, State0) ->
     State1 = State0#state{local_tree_updated = true},
@@ -214,7 +232,7 @@ updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
     ),
     %% We carry on with the remaining partitions
     NewState = State#state{partitions = T},
-    {next_state, acquiring_locks, NewState, [{next_event, internal, start}]};
+    {next_state, starting, NewState, 0};
 
 updating_hashtrees(Type, Content, State) ->
     _ = handle_event(updating_hashtrees, Type, Content, State),
@@ -280,9 +298,7 @@ exchanging_data(timeout, _, State) ->
         _ ->
             %% We carry on with the remaining partitions
             NewState = State#state{partitions = T},
-            {next_state, acquiring_locks, NewState, [
-                {next_event, internal, start}]
-            }
+            {next_state, starting, NewState, 0}
     end;
 
 exchanging_data(Type, Content, State) ->
