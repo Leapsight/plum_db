@@ -458,8 +458,8 @@ to_list(FullPrefix) ->
 -spec to_list(FullPrefix :: plum_db_prefix(), Opts :: fold_opts()) ->
     [{plum_db_key(), value_or_values()}].
 
-to_list({undefined, _} = P, Opts) ->
-    error(badarg, [P, Opts]);
+to_list({undefined, Term}, Opts) when Term =/= undefined ->
+    to_list({undefined, undefined}, Opts);
 
 to_list({_, _} = FullPrefix, Opts) ->
     fold(fun({Key, ValOrVals}, Acc) ->
@@ -1293,8 +1293,8 @@ get_option(Key, Opts, Default) ->
 
 %% @private
 first_key({undefined, undefined}) -> first;
-first_key({Prefix, undefined}) -> sext:encode({{Prefix, ''}, ''});
-first_key({_, _} = FullPrefix) -> sext:encode({FullPrefix, ''}).
+first_key({Prefix, undefined}) -> sext:prefix({{Prefix, '_'}, '_'});
+first_key({_, _} = FullPrefix) -> sext:prefix({FullPrefix, '_'}).
 
 
 %% @private
