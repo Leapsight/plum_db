@@ -36,7 +36,7 @@
     match_prefix            ::  plum_db_prefix(),
     match_key               ::  term() | undefined,
     match_spec              ::  ets:comp_match_spec() | undefined,
-    %% The actual db iterator
+    %% The actual partition iterator
     ref                     ::  plum_db_partition_server:iterator() | undefined,
     %% Pointers :: The current position decomposed into prefix, key and object
     prefix                  ::  plum_db_prefix() | undefined,
@@ -55,7 +55,7 @@
 }).
 
 
--type prefix_type()         ::  ram | ram_disk | cache_disk | disk.
+-type prefix_type()         ::  ram | ram_disk | disk.
 -type prefixes()            ::  #{binary() | atom() => prefix_type()}.
 
 -type state()               ::  #state{}.
@@ -91,7 +91,8 @@
 %% Iterator Types
 -type it_opt_resolver()     ::  {resolver, plum_db_resolver() | lww}.
 -type it_opt_default_fun()  ::  fun((plum_db_key()) -> plum_db_value()).
--type it_opt_default()      ::  {default, plum_db_value() | it_opt_default_fun()}.
+-type it_opt_default()      ::  {default,
+                                    plum_db_value() | it_opt_default_fun()}.
 -type it_opt_keymatch()     ::  {match, term()}.
 -type it_opt_keys_only()    ::  {keys_only, boolean()}.
 -type it_opt_partitions()   ::  {partitions, [partition()]}.
