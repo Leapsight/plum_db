@@ -1,3 +1,12 @@
+-ifdef(OTP_RELEASE). %% => OTP is 21 or higher
+-define(EXCEPTION(Class, Reason, Stacktrace), Class:Reason:Stacktrace).
+-define(STACKTRACE(Stacktrace), Stacktrace).
+-else.
+-define(EXCEPTION(Class, Reason, _), Class:Reason).
+-define(STACKTRACE(_), erlang:get_stacktrace()).
+-endif.
+
+
 -type plum_db_prefix()     :: {binary() | atom(), binary() | atom()}.
 -type plum_db_key()        :: any().
 -type plum_db_pkey()       :: {plum_db_prefix(), plum_db_key()}.

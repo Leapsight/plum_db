@@ -453,7 +453,7 @@ code_change(_OldVsn, State, _Extra) ->
 init_async(#state{data_root = DataRoot, partition = Partition} = State0) ->
     TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
     Tree = hashtree_tree:new(TreeId, [{data_dir, DataRoot}, {num_levels, 2}]),
-    TTL = application:get_env(plum_db, aae_hashtree_ttl, ?DEFAULT_TTL),
+    TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
     State = State0#state{
         tree = Tree,
         built = false,

@@ -18,6 +18,7 @@
         eleveldb,
         sext,
         gproc
+
     ]},
     {env, [
         {data_dir, "data"}

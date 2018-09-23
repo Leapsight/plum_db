@@ -27,7 +27,7 @@
 -record(state, {
     %% an ets table to hold iterators opened
     %% by other nodes
-    iterators  :: ets:tab()
+    iterators           ::  ets:tab()
 }).
 
 
@@ -37,7 +37,7 @@
     match_key               ::  term() | undefined,
     match_spec              ::  ets:comp_match_spec() | undefined,
     %% The actual db iterator
-    db_iter                 ::  plum_db_partition_server:iterator() | undefined,
+    ref                     ::  plum_db_partition_server:iterator() | undefined,
     %% Pointers :: The current position decomposed into prefix, key and object
     prefix                  ::  plum_db_prefix() | undefined,
     key                     ::  plum_db_key() | undefined,
@@ -53,6 +53,10 @@
     ref                     ::  reference(),
     match_prefix            ::  plum_db_prefix() | atom() | binary()
 }).
+
+
+-type prefix_type()         ::  ram | ram_disk | cache_disk | disk.
+-type prefixes()            ::  #{binary() | atom() => prefix_type()}.
 
 -type state()               ::  #state{}.
 -type remote_iterator()     ::  #remote_iterator{}.
@@ -107,10 +111,11 @@
 -type delete_opts()         :: [].
 
 
+-export_type([prefixes/0]).
+-export_type([prefix_type/0]).
 -export_type([partition/0]).
 -export_type([iterator/0]).
 
--export([decode_key/1]).
 -export([delete/2]).
 -export([delete/3]).
 -export([fold/3]).
@@ -141,6 +146,8 @@
 -export([partition_count/0]).
 -export([partitions/0]).
 -export([prefix_hash/2]).
+-export([prefixes/0]).
+-export([prefix_type/1]).
 -export([put/3]).
 -export([put/4]).
 -export([remote_iterator/1]).
@@ -216,7 +223,7 @@ partitions() ->
 -spec partition_count() -> non_neg_integer().
 
 partition_count() ->
-    application:get_env(plum_db, partitions, 8).
+    plum_db_config:get(partitions, 8).
 
 
 %% -----------------------------------------------------------------------------
@@ -228,14 +235,6 @@ partition_count() ->
 is_partition(Id) ->
     Id >= 0 andalso Id =< (partition_count() - 1).
 
-
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
-decode_key(Bin) ->
-    sext:decode(Bin).
 
 
 %% -----------------------------------------------------------------------------
@@ -346,7 +345,7 @@ fold(Fun, Acc0, FullPrefix) ->
 fold(Fun, Acc0, FullPrefix, Opts) ->
     It = iterator(FullPrefix, Opts),
     try
-        fold_it(Fun, Acc0, It)
+        do_fold(Fun, Acc0, It)
     catch
         {break, Result} -> Result
     after
@@ -354,13 +353,13 @@ fold(Fun, Acc0, FullPrefix, Opts) ->
     end.
 
 %% @private
-fold_it(Fun, Acc, It) ->
+do_fold(Fun, Acc, It) ->
     case iterator_done(It) of
         true ->
             Acc;
         false ->
             Acc1 = Fun(iterator_key_values(It), Acc),
-            fold_it(Fun, Acc1, iterate(It))
+            do_fold(Fun, Acc1, iterate(It))
     end.
 
 
@@ -407,7 +406,7 @@ do_foreach(Fun, It) ->
 %% -----------------------------------------------------------------------------
 -spec fold_elements(fold_elements_fun(), any(), plum_db_prefix()) -> any().
 fold_elements(Fun, Acc0, FullPrefix) ->
-    fold(Fun, Acc0, FullPrefix, []).
+    fold_elements(Fun, Acc0, FullPrefix, []).
 
 
 %% -----------------------------------------------------------------------------
@@ -436,7 +435,7 @@ do_fold_elements(Fun, Acc, It) ->
             Acc;
         false ->
             Next = Fun(iterator_element(It), Acc),
-            fold_it(Fun, Next, iterate(It))
+            do_fold_elements(Fun, Next, iterate(It))
     end.
 
 
@@ -584,59 +583,67 @@ iterate(#remote_iterator{ref = Ref, node = Node} = I) ->
     _ = gen_server:call({?MODULE, Node}, {iterate, Ref}, infinity),
     I;
 
-iterate(#iterator{db_iter = undefined, partitions = []} = I) ->
-    %% We are done
+iterate(#iterator{ref = undefined, partitions = []} = I) ->
+    %% No more partitions to cover, we are done
     I;
 
-iterate(#iterator{db_iter = undefined, partitions = [H|_]} = I0) ->
-    %% We finished with the previous partition and we have
+iterate(#iterator{ref = undefined, partitions = [H|_]} = I0) ->
+    %% We finished with the previous partition and we still have
     %% more partitions to cover
-    First = first_key(I0#iterator.match_prefix),
-    DBIter = case I0#iterator.keys_only of
+    FullPrefix = I0#iterator.match_prefix,
+    Ref = case I0#iterator.keys_only of
         true ->
-            plum_db_partition_server:key_iterator(H);
+            plum_db_partition_server:key_iterator(H, FullPrefix);
         false ->
-            plum_db_partition_server:iterator(H)
+            plum_db_partition_server:iterator(H, FullPrefix)
     end,
-    Res = plum_db_partition_server:iterator_move(DBIter, First),
-    iterate(Res, I0#iterator{db_iter = DBIter});
+    Res = plum_db_partition_server:iterator_move(Ref, FullPrefix),
+    iterate(Res, I0#iterator{ref = Ref});
 
-iterate(#iterator{db_iter = DBIter} = I) ->
-    iterate(plum_db_partition_server:iterator_move(DBIter, prefetch), I).
+iterate(#iterator{ref = Ref} = I) ->
+    iterate(plum_db_partition_server:iterator_move(Ref, prefetch), I).
 
 
 %% @private
-iterate({error, _}, #iterator{db_iter = DBIter, partitions = [H|T]} = I) ->
+iterate({error, _}, #iterator{ref = Ref, partitions = [H|T]} = I) ->
     %% There are no more elements in the partition
-    ok = plum_db_partition_server:iterator_close(H, DBIter),
+    ok = plum_db_partition_server:iterator_close(H, Ref),
     I1 = iterator_reset_pointers(
-        I#iterator{db_iter = undefined, partitions = T}),
+        I#iterator{ref = undefined, partitions = T}),
     iterate(I1);
 
-iterate({ok, K}, #iterator{db_iter = DBIter, partitions = [H|T]} = I0) ->
-    PKey = plum_db:decode_key(K),
+iterate({ok, PKey, Ref1}, #iterator{partitions = [H|T]} = I0) ->
     case prefixed_key_matches(PKey, I0) of
         true ->
             {Prefix, Key} = PKey,
-            I0#iterator{prefix = Prefix, key = Key, object = undefined};
+            I0#iterator{
+                ref = Ref1,
+                prefix = Prefix,
+                key = Key,
+                object = undefined
+            };
         false ->
             %% We have no more matches in this partition
             I1 = iterator_reset_pointers(I0),
-            ok = plum_db_partition_server:iterator_close(H, DBIter),
-            iterate(I1#iterator{db_iter = undefined, partitions = T})
+            ok = plum_db_partition_server:iterator_close(H, Ref1),
+            iterate(I1#iterator{ref = undefined, partitions = T})
     end;
 
-iterate({ok, K, V},  #iterator{db_iter = DBIter, partitions = [H|T]} = I0) ->
-    PKey = plum_db:decode_key(K),
+iterate({ok, PKey, V, Ref1},  #iterator{partitions = [H|T]} = I0) ->
     case prefixed_key_matches(PKey, I0) of
         true ->
             {Prefix, Key} = PKey,
-            I0#iterator{prefix = Prefix, key = Key, object = binary_to_term(V)};
+            I0#iterator{
+                ref = Ref1,
+                prefix = Prefix,
+                key = Key,
+                object = V
+            };
         false ->
             %% We have no more matches in this partition
             I1 = iterator_reset_pointers(I0),
-            ok = plum_db_partition_server:iterator_close(H, DBIter),
-            iterate(I1#iterator{db_iter = undefined, partitions = T})
+            ok = plum_db_partition_server:iterator_close(H, Ref1),
+            iterate(I1#iterator{ref = undefined, partitions = T})
     end.
 
 
@@ -653,10 +660,10 @@ iterate({ok, K, V},  #iterator{db_iter = DBIter, partitions = [H|T]} = I0) ->
 iterator_close(#remote_iterator{ref = Ref, node = Node}) ->
     gen_server:call({?MODULE, Node}, {iterator_close, Ref}, infinity);
 
-iterator_close(#iterator{db_iter = undefined}) ->
+iterator_close(#iterator{ref = undefined}) ->
     ok;
 
-iterator_close(#iterator{db_iter = DBIter, partitions = [H|_]}) ->
+iterator_close(#iterator{ref = DBIter, partitions = [H|_]}) ->
     plum_db_partition_server:iterator_close(H, DBIter).
 
 
@@ -669,7 +676,7 @@ iterator_close(#iterator{db_iter = DBIter, partitions = [H|_]}) ->
 iterator_done(#remote_iterator{ref = Ref, node = Node}) ->
     gen_server:call({?MODULE, Node}, {iterator_done, Ref}, infinity);
 
-iterator_done(#iterator{db_iter = undefined, partitions = []}) ->
+iterator_done(#iterator{ref = undefined, partitions = []}) ->
     true;
 
 iterator_done(#iterator{}) ->
@@ -837,6 +844,26 @@ prefix_hash(Partition, {_, _} = Prefix) ->
 
 
 %% -----------------------------------------------------------------------------
+%% @doc Returns a mapping of prefixes (the first element of a plum_db_prefix()
+%% tuple) to prefix_type() only for those prefixes for which a type was
+%% declared using the application optiont `prefixes`.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec prefixes() -> prefixes().
+prefixes() ->
+    plum_db_config:get(prefixes).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec prefix_type(term()) -> prefix_type() | undefined.
+prefix_type(Prefix) ->
+    maps:get(Prefix, plum_db_config:get(prefixes), undefined).
+
+
+%% -----------------------------------------------------------------------------
 %% @doc Same as put(FullPrefix, Key, Value, [])
 %% @end
 %% -----------------------------------------------------------------------------
@@ -916,7 +943,9 @@ init([]) ->
             {read_concurrency, true},
             {write_concurrency, true}]
     ),
-    {ok, #state{iterators = ?MODULE}}.
+    State = #state{iterators = ?MODULE},
+    {ok, State}.
+
 
 %% @private
 -spec handle_call(term(), {pid(), term()}, state()) ->
@@ -926,6 +955,7 @@ init([]) ->
     | {noreply, state(), non_neg_integer()}
     | {stop, term(), term(), state()}
     | {stop, term(), state()}.
+
 
 handle_call({open_remote_iterator, Pid, FullPrefix, Opts}, _From, State) ->
     Iterator = new_remote_iterator(Pid, FullPrefix, Opts, State),
@@ -1291,10 +1321,6 @@ get_option(Key, Opts, Default) ->
     end.
 
 
-%% @private
-first_key({undefined, undefined}) -> first;
-first_key({Prefix, undefined}) -> sext:prefix({{Prefix, '_'}, '_'});
-first_key({_, _} = FullPrefix) -> sext:prefix({FullPrefix, '_'}).
 
 
 %% @private
