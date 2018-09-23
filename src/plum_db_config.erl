@@ -46,6 +46,12 @@ init() ->
     Config = application:get_all_env(plum_db),
     %% We set configs at first level only
     _ = [set(Key, Value) || {Key, Value} <- Config],
+    case get(prefixes) of
+        undefined ->
+            set(prefixes, []);
+        _ ->
+            ok
+    end,
     ok.
 
 
@@ -141,6 +147,8 @@ get_path(_, _, Default) ->
     Default.
 
 %% @private
+validate_prefixes(undefined) ->
+    [];
 validate_prefixes(L) ->
     Fun = fun
         ({P, ram} = E, Acc) when is_binary(P) orelse is_atom(P) ->
