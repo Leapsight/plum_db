@@ -51,11 +51,11 @@
     last_key                ::  plum_db_pkey() | undefined,
     disk_done = true        ::  boolean(),
     disk                    ::  eleveldb:itr_ref() | undefined,
-    ram_done = true              ::  boolean(),
-    ram_tab                ::  atom(),
+    ram_done = true         ::  boolean(),
+    ram_tab                 ::  atom(),
     ram                     ::  key | {cont, any()} | undefined,
     ram_disk_done = true    ::  boolean(),
-    ram_disk_tab           ::  atom(),
+    ram_disk_tab            ::  atom(),
     ram_disk                ::  key | {cont, any()} | undefined
 }).
 
@@ -143,6 +143,11 @@ get(Name, {{Prefix, _}, _} = PKey) when is_atom(Name) ->
         disk ->
             gen_server:call(Name, {get, PKey}, infinity);
         Type when (Type == ram) orelse (Type == ram_disk) ->
+            %% TODO during init we would be restoring async the ram_disk
+            %% prefixes, so we need to fallback to disk until the restore is
+            %% done. The problem is that this forces us to try..catch and fall
+            %% back to disk which ads 13 microsecs or check fot the table
+            %% existance which is faster (2 microsecs)
             case ets:lookup(table_name(Name, Type), PKey) of
                 [] ->
                     {error, not_found};
@@ -648,9 +653,15 @@ init_state(Name, Partition, DataRoot, Config) ->
         {read_concurrency, true}, {write_concurrency, true}
     ],
 
+    %% TODO Ram Table should be protected by a table manager to avoid losing
+    %% data
+
     RamTab = table_name(Partition, ram),
     RamTab = ets:new(RamTab, EtsOpts),
 
+    %% TODO RamDisk Table should be restore on startup asynchronously and
+    %% during its restore all gets should go to disk, so we should not set
+    %% the table name here but later when the restore is finished
     RamDiskTab = table_name(Partition, ram_disk),
     RamDiskTab = ets:new(RamDiskTab, EtsOpts),
 
@@ -729,6 +740,7 @@ init_from_db(State) ->
     %% We create the in-memory db copy for ram and ram_disk prefixes
     Tab = State#state.ram_disk_tab,
 
+    %% TODO do this in a separate process asynchronously
     %% We load ram_disk prefixes from disk to ram
     PrefixList = maps:to_list(plum_db:prefixes()),
     {ok, DbIter} = eleveldb:iterator(State#state.db_ref, State#state.fold_opts),
