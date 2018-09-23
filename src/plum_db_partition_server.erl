@@ -139,9 +139,9 @@ get(Partition, PKey) when is_integer(Partition) ->
 get(Name, {{Prefix, _}, _} = PKey) when is_atom(Name) ->
     case plum_db:prefix_type(Prefix) of
         undefined ->
-            gen_server:call(Name, {get, PKey}, infinity);
+            gen_server:call(Name, {get, PKey, disk}, infinity);
         disk ->
-            gen_server:call(Name, {get, PKey}, infinity);
+            gen_server:call(Name, {get, PKey, disk}, infinity);
         Type when (Type == ram) orelse (Type == ram_disk) ->
             %% TODO during init we would be restoring async the ram_disk
             %% prefixes, so we need to fallback to disk until the restore is
@@ -465,7 +465,37 @@ init([Name, Partition, Opts]) ->
     end.
 
 
+
+
 handle_call({get, PKey}, _From, State) ->
+    {{Prefix, _}, _} = PKey,
+
+    Result = case plum_db:prefix_type(Prefix) of
+        Type when (Type == disk) orelse (Type == undefined) ->
+            DbRef = State#state.db_ref,
+            Opts = State#state.read_opts,
+            result(eleveldb:get(DbRef, encode_key(PKey), Opts));
+
+        Type when (Type == ram) orelse (Type == ram_disk) ->
+            %% TODO during init we would be restoring async the ram_disk
+            %% prefixes, so we need to fallback to disk until the restore is
+            %% done. The problem is that this forces us to try..catch and fall
+            %% back to disk which ads 13 microsecs or check fot the table
+            %% existance which is faster (2 microsecs)
+            Tab = case Type of
+                ram -> State#state.ram_tab;
+                ram_disk -> State#state.ram_disk_tab
+            end,
+            case ets:lookup(table_name(Tab, Type), PKey) of
+                [] ->
+                    {error, not_found};
+                [{_, Obj}] ->
+                    {ok, Obj}
+            end
+    end,
+    {reply, Result, State};
+
+handle_call({get, PKey, disk}, _From, State) ->
     DbRef = State#state.db_ref,
     Opts = State#state.read_opts,
     Result = result(eleveldb:get(DbRef, encode_key(PKey), Opts)),
