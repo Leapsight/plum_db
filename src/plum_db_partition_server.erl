@@ -412,6 +412,34 @@ iterator_move(Type, {cont, _}, Iter, prev) ->
     NewIter = update_iterator(Type, Iter, K, key),
     iterator_move(NewIter, prev);
 
+iterator_move(Type, Cont, Iter, {{_, _} = FullPrefix, undefined}) ->
+    iterator_move(Type, Cont, Iter, FullPrefix);
+
+iterator_move(Type, _, Iter, {{_, _} = Prefix, Key}) ->
+    Tab = table_name(Iter, Type),
+    Proyection = case Iter#partition_iterator.keys_only of
+        true -> {{Prefix, '$1'}};
+        false -> '$_'
+    end,
+
+    MS = [
+        {
+            {{Prefix, '$1'}, '_'},
+            [{'>=', '$1', Key}],
+            [Proyection]
+        }
+    ],
+
+    case ets:select(Tab, MS, 1) of
+        '$end_of_table' ->
+            {error, invalid_iterator};
+        {[{K, V}], _} ->
+            NewIter = update_iterator(Type, Iter, K, key),
+            {ok, K, V, NewIter};
+        {[K], _} ->
+            NewIter = update_iterator(Type, Iter, K, key),
+            {ok, K, NewIter}
+    end;
 
 iterator_move(Type, _, Iter, FullPrefix) ->
     Tab = table_name(Iter, Type),
@@ -679,7 +707,9 @@ init_state(Name, Partition, DataRoot, Config) ->
 
     %% We create two ets tables for ram and ram_disk storage levels
     EtsOpts = [
-        named_table, public,
+        named_table,
+        public,
+        ordered_set,
         {read_concurrency, true}, {write_concurrency, true}
     ],
 
@@ -902,18 +932,42 @@ prev_iterator(disk, _) ->
     undefined.
 
 %% @private
-eleveldb_action({undefined, undefined}) -> first;
-eleveldb_action({Prefix, undefined}) -> sext:prefix({{Prefix, '_'}, '_'});
-eleveldb_action({_, _} = FullPrefix) -> sext:prefix({FullPrefix, '_'});
-eleveldb_action(Action) -> Action.
+
+eleveldb_action({undefined, _}) ->
+    first;
+
+eleveldb_action({{undefined, _}, _}) ->
+    first;
+
+eleveldb_action({{Prefix, undefined}, undefined}) ->
+    sext:prefix({{Prefix, '_'}, '_'});
+
+eleveldb_action({{_, _} = FullPrefix, undefined}) ->
+    sext:prefix({FullPrefix, '_'});
+
+eleveldb_action({{_, _} = FullPrefix, Key}) ->
+    sext:prefix({FullPrefix, Key});
+
+eleveldb_action({Prefix, undefined}) ->
+    eleveldb_action({{Prefix, undefined}, undefined});
+
+eleveldb_action({_, _} = FullPrefix) ->
+    eleveldb_action({{_, _} = FullPrefix, undefined});
+
+eleveldb_action(Action) ->
+    Action.
 
 
 %% @private
-ets_match_spec({Prefix, undefined}, true) ->
+ets_match_spec(({{Prefix, undefined}, undefined}), true) ->
     [{{{{Prefix, '$1'}, '_'}, '_'}, [], [{{Prefix, '$1'}}]}];
 
-ets_match_spec({Prefix, undefined}, false) ->
+ets_match_spec(({{Prefix, undefined}, undefined}), false) ->
     [{{{{Prefix, '_'}, '_'}, '_'}, [], ['$_']}];
+
+ets_match_spec({Prefix, undefined}, Flag) ->
+    ets_match_spec({{Prefix, undefined}, undefined}, Flag);
+
 
 ets_match_spec(FullPrefix, true) ->
     [{{{FullPrefix, '_'}, '_'}, [], [{{FullPrefix, '_'}}]}];
@@ -990,6 +1044,9 @@ when is_reference(OwnerRef) ->
 
 %% @private
 take_iterator(#partition_iterator{owner_ref = OwnerRef}, State) ->
+    take_iterator(OwnerRef, State);
+
+take_iterator(OwnerRef, State) ->
     Pos = #partition_iterator.owner_ref,
     case lists:keytake(OwnerRef, Pos, State#state.iterators) of
         {value, Iter, Iterators1} ->

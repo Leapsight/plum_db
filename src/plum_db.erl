@@ -34,6 +34,7 @@
 -record(iterator, {
     %% The query
     match_prefix            ::  plum_db_prefix(),
+    first                   ::  plum_db_key() | undefined,
     match_key               ::  term() | undefined,
     match_spec              ::  ets:comp_match_spec() | undefined,
     %% The actual partition iterator
@@ -54,6 +55,12 @@
     match_prefix            ::  plum_db_prefix() | atom() | binary()
 }).
 
+-record(continuation, {
+    limit                   ::  pos_integer(),
+    last_key                ::  plum_db_pkey(),
+    iterator                ::  iterator()
+}).
+
 
 -type prefix_type()         ::  ram | ram_disk | disk.
 -type prefixes()            ::  #{binary() | atom() => prefix_type()}.
@@ -61,7 +68,7 @@
 -type state()               ::  #state{}.
 -type remote_iterator()     ::  #remote_iterator{}.
 -opaque iterator()          ::  #iterator{}.
-
+-opaque continuation()      ::  #continuation{}.
 
 
 %% Get Option Types
@@ -116,6 +123,7 @@
 -export_type([prefix_type/0]).
 -export_type([partition/0]).
 -export_type([iterator/0]).
+-export_type([continuation/0]).
 
 -export([delete/2]).
 -export([delete/3]).
@@ -143,6 +151,9 @@
 -export([iterator_key_value/1]).
 -export([iterator_key_values/1]).
 -export([iterator_prefix/1]).
+%% -export([match_object/1]).
+%% -export([match_object/2]).
+%% -export([match_object/3]).
 -export([merge/3]).
 -export([partition_count/0]).
 -export([partitions/0]).
@@ -327,6 +338,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
         infinity
     ).
 
+
 %% -----------------------------------------------------------------------------
 %% @doc Same as fold(Fun, Acc0, FullPrefix, []).
 %% @end
@@ -462,9 +474,8 @@ to_list({undefined, Term}, Opts) when Term =/= undefined ->
     to_list({undefined, undefined}, Opts);
 
 to_list({_, _} = FullPrefix, Opts) ->
-    fold(fun({Key, ValOrVals}, Acc) ->
-                 [{Key, ValOrVals} | Acc]
-         end, [], FullPrefix, Opts).
+    Fun = fun({Key, ValOrVals}, Acc) -> [{Key, ValOrVals} | Acc] end,
+    fold(Fun, [], FullPrefix, Opts).
 
 
 %% -----------------------------------------------------------------------------
@@ -510,6 +521,8 @@ iterator(FullPrefix) ->
 %% place of the tombstone. If default is a value, the value is returned in
 %% place of the tombstone. This applies when using functions such as
 %% iterator_key_values/1 and iterator_key_values/1.
+%% * first - the key this iterator should start at, equivalent to calling
+%% iterator_move/2 passing the key as the second argument.
 %% * match: Match can be used to iterate over a subset of keys -- assuming the
 %% keys stored are tuples. If
 %% match is undefined then all keys will may be visted by the iterator, match
@@ -598,7 +611,7 @@ iterate(#iterator{ref = undefined, partitions = [H|_]} = I0) ->
         false ->
             plum_db_partition_server:iterator(H, FullPrefix)
     end,
-    Res = plum_db_partition_server:iterator_move(Ref, FullPrefix),
+    Res = plum_db_partition_server:iterator_move(Ref, I0#iterator.first),
     iterate(Res, I0#iterator{ref = Ref});
 
 iterate(#iterator{ref = Ref} = I) ->
@@ -1350,7 +1363,18 @@ close_remote_iterator(Ref, #state{iterators = Iterators} = State) ->
 
 %% @private
 new_iterator(FullPrefix, Opts) ->
+    FirstKey = case proplists:get_value(first, Opts, undefined) of
+        undefined -> FullPrefix;
+        Key -> {FullPrefix, Key}
+    end,
     KeyMatch = proplists:get_value(match, Opts, undefined),
+    MS = case KeyMatch of
+        undefined ->
+            undefined;
+        KeyMatch ->
+            PrefixMatch = prefix_to_ets_match(FullPrefix),
+            ets:match_spec_compile([{ {PrefixMatch, KeyMatch}, [], [true] }])
+    end,
     KeysOnly = proplists:get_value(keys_only, Opts, false),
     Partitions = case get_option(partitions, Opts, undefined) of
         undefined ->
@@ -1361,15 +1385,9 @@ new_iterator(FullPrefix, Opts) ->
             error(badarg, partitions),
             L
     end,
-    MS = case is_tuple(KeyMatch) of
-        true ->
-            PrefixMatch = prefix_to_ets_match(FullPrefix),
-            ets:match_spec_compile([{ {PrefixMatch, KeyMatch}, [], [true] }]);
-        false ->
-            undefined
-    end,
     I = #iterator{
         match_prefix = FullPrefix,
+        first = FirstKey,
         match_key = KeyMatch,
         match_spec = MS,
         keys_only = KeysOnly,
