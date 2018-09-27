@@ -205,7 +205,7 @@ start_link() ->
 
 %% -----------------------------------------------------------------------------
 %% @private
-%% @doc Returns the server identifier assigned to the FullPrefix of the PKey
+%% @doc Returns the server identifier assigned to the Prefixed Key
 %% @end
 %% -----------------------------------------------------------------------------
 -spec get_partition(term()) -> partition().
