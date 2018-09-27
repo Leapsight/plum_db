@@ -569,7 +569,7 @@ build_async(State) ->
             {_Pid, Ref} = spawn_monitor(fun() ->
                 Partition = State#state.partition,
                 %% We iterate over the whole database
-                FullPrefix = {undefined, undefined},
+                FullPrefix = {?WILDCARD, ?WILDCARD},
                 Iterator = plum_db:iterator(
                     FullPrefix, [{partitions, [Partition]}]),
                 _ = lager:info(

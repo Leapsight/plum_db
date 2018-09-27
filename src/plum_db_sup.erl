@@ -62,6 +62,7 @@ start_link() ->
 init([]) ->
     RestartStrategy = {one_for_one, 10, 10},
     Children = [
+        ?CHILD(plum_db_table_owner, worker, []),
         ?CHILD(plum_db, worker, []),
         ?CHILD(plum_db_events, worker, []),
         ?CHILD(plum_db_partitions_sup, supervisor, [])

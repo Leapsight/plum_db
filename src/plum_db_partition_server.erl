@@ -22,6 +22,8 @@
 -behaviour(gen_server).
 -include("plum_db.hrl").
 
+-define(EOT, '$end_of_table').
+-define(IS_SEXT(X), X >= 8 andalso X =< 19).
 
 %% leveldb uses $\0 but since external term format will contain nulls
 %% we need an additional separator. We use the ASCII unit separator
@@ -46,17 +48,20 @@
 -record(partition_iterator, {
     owner_ref               ::  reference(),
     partition               ::  non_neg_integer(),
-    full_prefix             ::  plum_db_prefix(),
+    full_prefix             ::  plum_db_prefix_pattern(),
+    key_pattern             ::  term(),
+    bin_prefix              ::  binary(),
+    match_spec              ::  ets:comp_match_spec() | undefined,
     keys_only = false       ::  boolean(),
-    last_key                ::  plum_db_pkey() | undefined,
+    prev_key                ::  plum_db_pkey() | undefined,
     disk_done = true        ::  boolean(),
-    disk                    ::  eleveldb:itr_ref() | undefined,
-    ram_done = true         ::  boolean(),
-    ram_tab                 ::  atom(),
-    ram                     ::  key | {cont, any()} | undefined,
     ram_disk_done = true    ::  boolean(),
-    ram_disk_tab            ::  atom(),
-    ram_disk                ::  key | {cont, any()} | undefined
+    ram_done = true         ::  boolean(),
+    disk                    ::  eleveldb:itr_ref() | undefined,
+    ram                     ::  key | {cont, any()} | undefined,
+    ram_disk                ::  key | {cont, any()} | undefined,
+    ram_tab                 ::  atom(),
+    ram_disk_tab            ::  atom()
 }).
 
 -type opts()                :: 	[{atom(), term()}].
@@ -65,6 +70,8 @@
 -type iterator_action()     ::  first
                                 | last | next | prev
                                 | prefetch | prefetch_stop
+                                | plum_db_prefix()
+                                | plum_db_pkey()
                                 | binary().
 
 -export_type([iterator/0]).
@@ -76,9 +83,11 @@
 -export([get/2]).
 -export([is_empty/1]).
 -export([iterator/2]).
+-export([iterator/3]).
 -export([iterator_close/2]).
 -export([iterator_move/2]).
 -export([key_iterator/2]).
+-export([key_iterator/3]).
 -export([name/1]).
 -export([put/2]).
 -export([put/3]).
@@ -238,7 +247,22 @@ iterator(Id, FullPrefix) when is_integer(Id) ->
 
 
 iterator(Name, FullPrefix) when is_atom(Name) ->
-    Cmd = {iterator, self(), FullPrefix, false},
+    iterator(Name, FullPrefix, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc If the prefix is ground, it restricts the iteration on keys belonging
+%% to that prefix and the storage type of the prefix if known. If prefix is
+%% undefined or storage type of is undefined, then it starts with disk and
+%% follows with ram. It does not cover ram_disk as all data in ram_disk is in
+%% disk but not viceversa.
+%% @end
+%% -----------------------------------------------------------------------------
+iterator(Id, FullPrefix, Opts) when is_integer(Id) ->
+    iterator(name(Id), FullPrefix, Opts);
+
+iterator(Name, FullPrefix, Opts) when is_atom(Name) andalso is_list(Opts) ->
+    Cmd = {iterator, self(), FullPrefix, [{keys_only, false}|Opts]},
     Iter = gen_server:call(Name, Cmd, infinity),
     true = maybe_safe_fixtables(Iter, true),
     Iter.
@@ -252,7 +276,18 @@ key_iterator(Id, FullPrefix) when is_integer(Id) ->
     key_iterator(name(Id), FullPrefix);
 
 key_iterator(Name, FullPrefix) when is_atom(Name) ->
-    Cmd = {iterator, self(), FullPrefix, true},
+    key_iterator(Name, FullPrefix, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+key_iterator(Id, FullPrefix, Opts) when is_integer(Id) ->
+    key_iterator(name(Id), FullPrefix, Opts);
+
+key_iterator(Name, FullPrefix, Opts) when is_atom(Name) andalso is_list(Opts) ->
+    Cmd = {iterator, self(), FullPrefix, [{keys_only, true}|Opts]},
     Iter = gen_server:call(Name, Cmd, infinity),
     true = maybe_safe_fixtables(Iter, true),
     Iter.
@@ -265,7 +300,7 @@ key_iterator(Name, FullPrefix) when is_atom(Name) ->
 iterator_close(Id, Iter) when is_integer(Id) ->
     iterator_close(name(Id), Iter);
 
-iterator_close(Store, #partition_iterator{} = Iter)when is_atom(Store) ->
+iterator_close(Store, #partition_iterator{} = Iter) when is_atom(Store) ->
     Res = gen_server:call(Store, {iterator_close, Iter}, infinity),
     true = maybe_safe_fixtables(Iter, false),
     Res.
@@ -273,14 +308,15 @@ iterator_close(Store, #partition_iterator{} = Iter)when is_atom(Store) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc Iterates over the storage stack in order (disk -> ram_disk -> ram).
 %% @end
 %% -----------------------------------------------------------------------------
 -spec iterator_move(iterator(), iterator_action()) ->
     {ok, Key :: binary(), Value :: binary(), iterator()}
     | {ok, Key :: binary(), iterator()}
-    | {error, invalid_iterator}
-    | {error, iterator_closed}.
+    | {error, invalid_iterator, iterator()}
+    | {error, iterator_closed, iterator()}
+    | {error, no_match, iterator()}.
 
 iterator_move(
     #partition_iterator{disk_done = true} = Iter, {undefined, undefined}) ->
@@ -300,17 +336,32 @@ iterator_move(#partition_iterator{disk_done = false} = Iter, Action) ->
     DbIter = Iter#partition_iterator.disk,
 
     case eleveldb:iterator_move(DbIter, eleveldb_action(Action)) of
-        {ok, Key} ->
-            NewIter = Iter#partition_iterator{last_key = Key},
-            {ok, decode_key(Key), NewIter};
-        {ok, Key, Value} ->
-            NewIter = Iter#partition_iterator{last_key = Key},
-            {ok, decode_key(Key), binary_to_term(Value), NewIter};
-        {error, _} = Error ->
+        {ok, K} ->
+            NewIter = Iter#partition_iterator{prev_key = K},
+            case matches_key(K, Iter) of
+                {true, Key} ->
+                    {ok, Key, NewIter};
+                {false, _} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end;
+        {ok, K, Value} ->
+            NewIter = Iter#partition_iterator{prev_key = K},
+            case matches_key(K, Iter) of
+                {true, Key} ->
+                    {ok, Key, binary_to_term(Value), NewIter};
+                {false, _} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end;
+
+        {error, Reason}  ->
             %% No more data in eleveldb, maybe we continue with ets
             case next_iterator(disk, Iter) of
                 undefined ->
-                    Error;
+                    {error, Reason, Iter};
                 NewIter ->
                     %% We continue in ets so we need to reposition the iterator
                     %% to the first key of the full_prefix
@@ -327,8 +378,9 @@ iterator_move(#partition_iterator{ram_done = false} = Iter, Action) ->
 iterator_move(
     #partition_iterator{
         disk_done = true, ram_done = true, ram_disk_done = true
-    }, _) ->
-    {error, invalid_iterator}.
+    } = Iter,
+     _) ->
+    {error, invalid_iterator, Iter}.
 
 
 %% @private
@@ -337,39 +389,67 @@ iterator_move(Type, _, Iter, first) ->
     Tab = table_name(Iter, Type),
 
     case ets:first(Tab) of
-        '$end_of_table' ->
-            {error, invalid_iterator};
+        ?EOT ->
+            {error, invalid_iterator, Iter};
         K when KeysOnly ->
             NewIter = update_iterator(Type, Iter, K, key),
-            {ok, K, NewIter};
+            case matches_key(K, Iter) of
+                {true, K} ->
+                    {ok, K, NewIter};
+                {false, _} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end;
         K ->
             [{K, V}] = ets:lookup(Tab, K),
             NewIter = update_iterator(Type, Iter, K, key),
-            {ok, K, V, NewIter}
+            case matches_key(K, Iter) of
+                {true, K} ->
+                    {ok, K, V, NewIter};
+                {false, _} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end
     end;
 
 iterator_move(Type, key, Iter, next) ->
     KeysOnly = Iter#partition_iterator.keys_only,
     Tab = table_name(Iter, Type),
 
-    case ets:next(Tab, Iter#partition_iterator.last_key) of
-        '$end_of_table' ->
-            {error, invalid_iterator};
+    case ets:next(Tab, Iter#partition_iterator.prev_key) of
+        ?EOT ->
+            {error, invalid_iterator, Iter};
         K when KeysOnly ->
-            NewIter = update_iterator(ram_disk, Iter, K, key),
-            {ok, K, NewIter};
+            NewIter = update_iterator(Type, Iter, K, key),
+            case matches_key(K, Iter) of
+                {true, K} ->
+                    {ok, K, NewIter};
+                {false, _} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end;
         K ->
             [{K, V}] = ets:lookup(Tab, K),
-            NewIter = update_iterator(ram_disk, Iter, K, key),
-            {ok, K, V, NewIter}
+            NewIter = update_iterator(Type, Iter, K, key),
+            case matches_key(K, Iter) of
+                {true, K} ->
+                    {ok, K, V, NewIter};
+                {false, K} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end
     end;
 
 iterator_move(Type, {cont, Cont0}, Iter, next) ->
     case ets:select(Cont0) of
-        '$end_of_table' ->
+        ?EOT ->
             case next_iterator(Type, Iter) of
                 undefined ->
-                    {error, invalid_iterator};
+                    {error, invalid_iterator, Iter};
                 NewIter ->
                     %% We continue in ets so we need to reposition the iterator
                     %% to the first key of the full_prefix
@@ -387,67 +467,100 @@ iterator_move(Type, key, Iter, prev) ->
     KeysOnly = Iter#partition_iterator.keys_only,
     Tab = table_name(Iter, Type),
 
-    case ets:prev(Tab, Iter#partition_iterator.last_key) of
-        '$end_of_table' ->
+    case ets:prev(Tab, Iter#partition_iterator.prev_key) of
+        ?EOT ->
             %% No more data in ets, maybe we continue with eleveldb
             case prev_iterator(Type, Iter) of
                 undefined ->
-                    {error, invalid_iterator};
+                    {error, invalid_iterator, Iter};
                 NewIter ->
                     iterator_move(NewIter, prev)
             end;
         K when KeysOnly ->
             NewIter = update_iterator(Type, Iter, K, key),
-            {ok, K, NewIter};
+            case matches_key(K, Iter) of
+                {true, K} ->
+                    {ok, K, NewIter};
+                {false, K} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end;
         K ->
             [{K, V}] = ets:lookup(Tab, K),
             NewIter = update_iterator(Type, Iter, K, key),
-            {ok, K, V, NewIter}
+            case matches_key(K, Iter) of
+                {true, K} ->
+                    {ok, K, V, NewIter};
+                {false, K} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end
     end;
 
 iterator_move(Type, {cont, _}, Iter, prev) ->
     %% We were using ets:select/1, to go backwards we need to switch to
     %% key iteration
-    K = Iter#partition_iterator.last_key,
+    K = Iter#partition_iterator.prev_key,
     NewIter = update_iterator(Type, Iter, K, key),
     iterator_move(NewIter, prev);
 
-iterator_move(Type, Cont, Iter, {{_, _} = FullPrefix, undefined}) ->
+iterator_move(Type, Cont, Iter, {{_, _} = FullPrefix, ?WILDCARD}) ->
     iterator_move(Type, Cont, Iter, FullPrefix);
 
-iterator_move(Type, _, Iter, {{_, _} = Prefix, Key}) ->
+iterator_move(Type, _, Iter, {{_, _} = FullPrefix, PKey}) ->
     Tab = table_name(Iter, Type),
     Proyection = case Iter#partition_iterator.keys_only of
-        true -> {{Prefix, '$1'}};
+        true -> {{FullPrefix, '$1'}};
         false -> '$_'
     end,
 
     MS = [
         {
-            {{Prefix, '$1'}, '_'},
-            [{'>=', '$1', Key}],
+            {{FullPrefix, '$1'}, ?WILDCARD},
+            [{'>=', '$1', {const, PKey}}],
             [Proyection]
         }
     ],
 
+
     case ets:select(Tab, MS, 1) of
-        '$end_of_table' ->
-            {error, invalid_iterator};
+        ?EOT ->
+            {error, invalid_iterator, Iter};
         {[{K, V}], _} ->
             NewIter = update_iterator(Type, Iter, K, key),
-            {ok, K, V, NewIter};
+            case matches_key(K, Iter) of
+                {true, K} ->
+                    {ok, K, V, NewIter};
+                {false, K} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end;
         {[K], _} ->
             NewIter = update_iterator(Type, Iter, K, key),
-            {ok, K, NewIter}
+            case matches_key(K, Iter) of
+                {true, K} ->
+                    {ok, K, NewIter};
+                {false, K} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end
     end;
 
 iterator_move(Type, _, Iter, FullPrefix) ->
     Tab = table_name(Iter, Type),
-    MatchSpec = ets_match_spec(FullPrefix, Iter#partition_iterator.keys_only),
+    Pattern = case Iter#partition_iterator.key_pattern of
+        undefined -> FullPrefix;
+        KeyPattern -> {FullPrefix, KeyPattern}
+    end,
+    MatchSpec = ets_match_spec(Pattern, Iter#partition_iterator.keys_only),
 
     case ets:select(Tab, MatchSpec, 1) of
-        '$end_of_table' ->
-            {error, invalid_iterator};
+        ?EOT ->
+            {error, invalid_iterator, Iter};
         {[{K, V}], Cont1} ->
             NewIter = update_iterator(Type, Iter, K, {cont, Cont1}),
             {ok, K, V, NewIter};
@@ -586,23 +699,36 @@ handle_call(is_empty, _From, State) ->
     Result = eleveldb:is_empty(DbRef) andalso (Ram + RamDisk) == 0,
     {reply, Result, State};
 
-handle_call({iterator, Pid, FullPrefix, KeysOnly}, _From, State) ->
+handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
     Ref = erlang:monitor(process, Pid),
     {Prefix, _} = FullPrefix,
+
+    KeyPattern = proplists:get_value(match, Opts, undefined),
+    MS = case KeyPattern of
+        undefined ->
+            undefined;
+        KeyPattern ->
+            ets:match_spec_compile([{
+                {FullPrefix, KeyPattern}, [], [true]
+            }])
+    end,
 
     PartIter0 = #partition_iterator{
         partition = State#state.partition,
         owner_ref = Ref,
         full_prefix = FullPrefix,
-        keys_only = KeysOnly
+        keys_only = proplists:get_value(keys_only, Opts, false),
+        key_pattern = KeyPattern,
+        match_spec = MS,
+        bin_prefix = sext:prefix({FullPrefix, '_'})
     },
 
-    PartIter1 = case Prefix == undefined of
-        true ->
+    PartIter1 = case Prefix of
+        ?WILDCARD ->
             %% We iterate over ram and disk only since everything in ram_disk
             %% is in disk (but not everything in disk is in ram_disk)
             set_ram_iterator(set_disk_iterator(PartIter0, State), State);
-        false ->
+        _ ->
             case plum_db:prefix_type(Prefix) of
                 ram ->
                     set_ram_iterator(PartIter0, State);
@@ -713,17 +839,14 @@ init_state(Name, Partition, DataRoot, Config) ->
         {read_concurrency, true}, {write_concurrency, true}
     ],
 
-    %% TODO Ram Table should be protected by a table manager to avoid losing
-    %% data
-
     RamTab = table_name(Partition, ram),
-    RamTab = ets:new(RamTab, EtsOpts),
+    {ok, RamTab} = plum_db_table_owner:add_or_claim(RamTab, EtsOpts),
 
     %% TODO RamDisk Table should be restore on startup asynchronously and
     %% during its restore all gets should go to disk, so we should not set
     %% the table name here but later when the restore is finished
     RamDiskTab = table_name(Partition, ram_disk),
-    RamDiskTab = ets:new(RamDiskTab, EtsOpts),
+    {ok, RamDiskTab} = plum_db_table_owner:add_or_claim(RamDiskTab, EtsOpts),
 
     #state {
         name = Name,
@@ -813,7 +936,7 @@ init_from_db(State) ->
                     "Loading data from prefix ~p to ram",
                     [Prefix]
                 ),
-                First = sext:prefix({{Prefix, '_'}, '_'}),
+                First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
                 Next = eleveldb:iterator_move(DbIter, First),
                 init_prefix_iterate(
                     Next, DbIter, First, erlang:byte_size(First), Tab);
@@ -886,9 +1009,6 @@ table_name(N, ram_disk) when is_integer(N) ->
         "plum_db_partition_" ++ integer_to_list(N) ++ "_server_ram_disk").
 
 
-
-
-
 %% @private
 next_iterator(disk, #partition_iterator{ram_disk_tab = undefined} = Iter) ->
     next_iterator(ram_disk, Iter);
@@ -931,50 +1051,95 @@ prev_iterator(ram_disk, Iter) ->
 prev_iterator(disk, _) ->
     undefined.
 
+
 %% @private
-
-eleveldb_action({undefined, _}) ->
+eleveldb_action({?WILDCARD, _}) ->
     first;
 
-eleveldb_action({{undefined, _}, _}) ->
+eleveldb_action({{?WILDCARD, _}, _}) ->
     first;
 
-eleveldb_action({{Prefix, undefined}, undefined}) ->
-    sext:prefix({{Prefix, '_'}, '_'});
-
-eleveldb_action({{_, _} = FullPrefix, undefined}) ->
-    sext:prefix({FullPrefix, '_'});
-
-eleveldb_action({{_, _} = FullPrefix, Key}) ->
-    sext:prefix({FullPrefix, Key});
-
-eleveldb_action({Prefix, undefined}) ->
-    eleveldb_action({{Prefix, undefined}, undefined});
+eleveldb_action({{_, _}, _} = PKey) ->
+    sext:prefix(PKey);
 
 eleveldb_action({_, _} = FullPrefix) ->
-    eleveldb_action({{_, _} = FullPrefix, undefined});
+    eleveldb_action({{_, _} = FullPrefix, ?WILDCARD});
 
-eleveldb_action(Action) ->
-    Action.
+eleveldb_action(first) ->
+    first;
+eleveldb_action(next) ->
+    next;
+eleveldb_action(prev) ->
+    prev;
+eleveldb_action(prefetch) ->
+    prefetch;
+eleveldb_action(prefetch_stop) ->
+    prefetch_stop.
 
 
 %% @private
-ets_match_spec(({{Prefix, undefined}, undefined}), true) ->
-    [{{{{Prefix, '$1'}, '_'}, '_'}, [], [{{Prefix, '$1'}}]}];
+%% ets key ois {{{Prefix, Suffix} = FullPrefix, Key} = PKey, Object}
+ets_match_spec({{_, _} = FullPrefix, KeyPattern}, KeysOnly) ->
+    Projection =  case KeysOnly of
+        true -> {{FullPrefix, KeyPattern}};
+        false -> '$_'
+    end,
+    [{
+        {{FullPrefix, KeyPattern}, ?WILDCARD},
+        [],
+        [Projection]
+    }];
 
-ets_match_spec(({{Prefix, undefined}, undefined}), false) ->
-    [{{{{Prefix, '_'}, '_'}, '_'}, [], ['$_']}];
-
-ets_match_spec({Prefix, undefined}, Flag) ->
-    ets_match_spec({{Prefix, undefined}, undefined}, Flag);
+ets_match_spec({_, _} = FullPrefix, KeysOnly) ->
+    ets_match_spec({{_, _} = FullPrefix, '$1'}, KeysOnly).
 
 
-ets_match_spec(FullPrefix, true) ->
-    [{{{FullPrefix, '_'}, '_'}, [], [{{FullPrefix, '_'}}]}];
+%% @private
+-spec matches_key(binary() | plum_db_pkey(), iterator()) ->
+    {true, plum_db_pkey()} | false | ?EOT.
 
-ets_match_spec(FullPrefix, false) ->
-    [{{{FullPrefix, '_'}, '_'}, [], ['$_']}].
+matches_key(PKey, #partition_iterator{match_spec = undefined} = Iter) ->
+    %% We try to match the prefix and if it doesn't we stop
+    case matches_prefix(PKey, Iter) of
+        true when is_binary(PKey) -> {true, decode_key(PKey)};
+        true -> {true, PKey};
+        false -> ?EOT
+    end;
 
+matches_key(PKey0, #partition_iterator{match_spec = MS} = Iter) ->
+    PKey = case is_binary(PKey0) of
+        true -> decode_key(PKey0);
+        false -> PKey0
+    end,
+    case ets:match_spec_run([PKey], MS) of
+        [true] ->
+            {true, PKey};
+        [] ->
+            %% We try to match the prefix and if it doesn't we stop
+            case matches_prefix(PKey, Iter) of
+                true -> {false, PKey};
+                false -> ?EOT
+            end
+    end.
+
+
+%% @private
+matches_prefix(
+    {FullPrefix, _}, #partition_iterator{full_prefix = FullPrefix}) ->
+    true;
+
+matches_prefix(_, #partition_iterator{full_prefix = {'_', '_'}}) ->
+    true;
+
+matches_prefix({{P, _}, _}, #partition_iterator{full_prefix = {P, '_'}}) ->
+    true;
+
+matches_prefix(Bin, Iter) when is_binary(Bin) ->
+    Prefix = Iter#partition_iterator.bin_prefix,
+    Len = erlang:byte_size(Prefix),
+    binary:longest_common_prefix([Bin, Prefix]) == Len;
+
+matches_prefix(_, _) -> false.
 
 
 %% -----------------------------------------------------------------------------
@@ -1028,10 +1193,10 @@ set_ram_disk_iterator(#partition_iterator{} = PartIter0, State) ->
 
 %% @private
 update_iterator(ram, Iter, Key, Cont) ->
-    Iter#partition_iterator{last_key = Key, ram = Cont};
+    Iter#partition_iterator{prev_key = Key, ram = Cont};
 
 update_iterator(ram_disk, Iter, Key, Cont) ->
-    Iter#partition_iterator{last_key = Key, ram_disk = Cont}.
+    Iter#partition_iterator{prev_key = Key, ram_disk = Cont}.
 
 
 
