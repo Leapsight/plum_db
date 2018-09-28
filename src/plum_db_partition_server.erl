@@ -22,7 +22,6 @@
 -behaviour(gen_server).
 -include("plum_db.hrl").
 
--define(EOT, '$end_of_table').
 -define(IS_SEXT(X), X >= 8 andalso X =< 19).
 
 %% leveldb uses $\0 but since external term format will contain nulls

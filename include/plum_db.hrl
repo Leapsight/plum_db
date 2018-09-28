@@ -7,6 +7,7 @@
 -endif.
 
 -define(WILDCARD, '_').
+-define(EOT, '$end_of_table').
 
 -type plum_db_prefix()          ::  {binary() | atom(), binary() | atom()}.
 -type plum_db_prefix_pattern()  ::  {

@@ -31,20 +31,21 @@
 }).
 
 
+
 -record(iterator, {
     %% The query
-    match_prefix            ::  plum_db_prefix(),
-    first                   ::  plum_db_key() | undefined,
+    match_prefix            ::  plum_db_prefix_pattern(),
+    first                   ::  plum_db_pkey() | undefined,
     %% The actual partition iterator
     ref                     ::  plum_db_partition_server:iterator() | undefined,
     %% Pointers :: The current position decomposed into prefix, key and object
     prefix                  ::  plum_db_prefix() | undefined,
-    key                     ::  plum_db_key() | undefined,
+    key                     ::  plum_db_pkey() | undefined,
     object                  ::  plum_db_object() | undefined,
     %% Options
     keys_only = false       ::  boolean(),
     partitions              ::  [partition()],
-    opts = []               ::  it_opts() | undefined
+    opts = []               ::  it_opts()
 }).
 
 -record(remote_iterator, {
@@ -54,9 +55,10 @@
 }).
 
 -record(continuation, {
-    limit                   ::  pos_integer(),
-    last_key                ::  plum_db_pkey(),
-    iterator                ::  iterator()
+    match_prefix            ::  plum_db_prefix_pattern(),
+    match_key               ::  plum_db_pkey_pattern(),
+    first                   ::  plum_db_pkey() | undefined,
+    opts = []               ::  it_opts()
 }).
 
 
@@ -102,6 +104,7 @@
 -type it_opt_first()        ::  {first, term()}.
 -type it_opt_keys_only()    ::  {keys_only, boolean()}.
 -type it_opt_partitions()   ::  {partitions, [partition()]}.
+-type match_opt_limit()     ::  pos_integer() | infinity.
 -type it_opt()              ::  it_opt_resolver()
                                 | it_opt_first()
                                 | it_opt_default()
@@ -110,6 +113,7 @@
                                 | it_opt_partitions().
 -type it_opts()             ::  [it_opt()].
 -type fold_opts()           ::  it_opts().
+-type match_opts()          ::  [it_opt() | match_opt_limit()].
 -type partition()           ::  non_neg_integer().
 
 %% Put Option Types
@@ -135,6 +139,9 @@
 -export([fold_elements/4]).
 -export([get/2]).
 -export([get/3]).
+-export([match/1]).
+-export([match/2]).
+-export([match/3]).
 -export([get_object/1]).
 -export([get_object/2]).
 -export([get_partition/1]).
@@ -458,6 +465,64 @@ do_fold_elements(Fun, Acc, It) ->
 
 
 %% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec match(continuation()) ->
+    {[{plum_db_key(), value_or_values()}], continuation()}
+    | ?EOT.
+
+match(#continuation{} = Cont) ->
+    FullPrefix = Cont#continuation.match_prefix,
+    KeyPattern = Cont#continuation.match_key,
+    Opts = Cont#continuation.opts,
+    match(FullPrefix, KeyPattern, Opts).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec match(plum_db_prefix_pattern(), plum_db_pkey_pattern()) ->
+    [{plum_db_key(), value_or_values()}].
+match(FullPrefix, KeyPattern) ->
+    case match(FullPrefix, KeyPattern, []) of
+        {Matches, _} -> Matches;
+        ?EOT -> []
+    end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec match(plum_db_prefix_pattern(), plum_db_pkey_pattern(), match_opts()) ->
+    {[{plum_db_key(), value_or_values()}], continuation()} | ?EOT.
+
+match(FullPrefix0, KeyPattern, Opts0) ->
+    FullPrefix = normalise_prefix(FullPrefix0),
+    Opts1 = [{match, KeyPattern} | lists:keydelete(match, 1, Opts0)],
+    Limit = get_option(limit, Opts1, infinity),
+    Fun = fun
+        ({Key, ValOrVals}, {Acc, Cnt}) when Cnt =< Limit ->
+            {[{Key, ValOrVals} | Acc], Cnt + 1};
+        ({Key, _}, {Acc, _}) ->
+            Cont = #continuation{
+                match_prefix = FullPrefix,
+                match_key = KeyPattern,
+                opts = [{first, Key} | Opts1]
+            },
+            throw({break, {Acc, Cont}})
+        end,
+    case fold(Fun, {[], 0}, FullPrefix, Opts1) of
+        {_, #continuation{}} = Res ->
+            Res;
+        {L, _} ->
+            {L, ?EOT}
+    end.
+
+
+%% -----------------------------------------------------------------------------
 %% @doc Same as to_list(FullPrefix, [])
 %% @end
 %% -----------------------------------------------------------------------------
@@ -475,11 +540,9 @@ to_list(FullPrefix) ->
 -spec to_list(FullPrefix :: plum_db_prefix(), Opts :: fold_opts()) ->
     [{plum_db_key(), value_or_values()}].
 
-to_list({?WILDCARD, _}, Opts)  ->
-    %% If the Prefix is a wilcard the fullprefix is a wilcard
-    to_list({?WILDCARD, ?WILDCARD}, Opts);
 
-to_list({_, _} = FullPrefix, Opts) ->
+to_list(FullPrefix0, Opts) ->
+    FullPrefix = normalise_prefix(FullPrefix0),
     Fun = fun({Key, ValOrVals}, Acc) -> [{Key, ValOrVals} | Acc] end,
     fold(Fun, [], FullPrefix, Opts).
 
@@ -1360,3 +1423,11 @@ get_covering_partitions({_, '_'}) ->
     partitions();
 get_covering_partitions(FullPrefix) ->
     [get_partition(FullPrefix)].
+
+
+%% @private
+normalise_prefix({?WILDCARD, _})  ->
+    %% If the Prefix is a wilcard the fullprefix is a wilcard
+    {?WILDCARD, ?WILDCARD};
+normalise_prefix(FullPrefix) when tuple_size(FullPrefix) =:= 2 ->
+    FullPrefix.
