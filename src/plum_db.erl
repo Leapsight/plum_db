@@ -22,7 +22,7 @@
 -behaviour(plumtree_broadcast_handler).
 -include("plum_db.hrl").
 
--define(TOMBSTONE, '$deleted').
+
 
 -record(state, {
     %% an ets table to hold iterators opened
@@ -105,6 +105,7 @@
 -type it_opt_keys_only()    ::  {keys_only, boolean()}.
 -type it_opt_partitions()   ::  {partitions, [partition()]}.
 -type match_opt_limit()     ::  pos_integer() | infinity.
+-type match_opt_remove_tombstones()     ::  boolean().
 -type it_opt()              ::  it_opt_resolver()
                                 | it_opt_first()
                                 | it_opt_default()
@@ -113,7 +114,11 @@
                                 | it_opt_partitions().
 -type it_opts()             ::  [it_opt()].
 -type fold_opts()           ::  it_opts().
--type match_opts()          ::  [it_opt() | match_opt_limit()].
+-type match_opts()          ::  [
+                                    it_opt()
+                                    | match_opt_limit()
+                                    | match_opt_remove_tombstones()
+                                ].
 -type partition()           ::  non_neg_integer().
 
 %% Put Option Types
@@ -168,6 +173,8 @@
 -export([put/4]).
 -export([remote_iterator/1]).
 -export([remote_iterator/2]).
+-export([take/2]).
+-export([take/3]).
 -export([to_list/1]).
 -export([to_list/2]).
 
@@ -503,7 +510,16 @@ match(FullPrefix0, KeyPattern, Opts0) ->
     FullPrefix = normalise_prefix(FullPrefix0),
     Opts1 = [{match, KeyPattern} | lists:keydelete(match, 1, Opts0)],
     Limit = get_option(limit, Opts1, infinity),
+    RemoveTombstones = case get_option(resolver, Opts1, undefined) of
+        undefined ->
+            false;
+        _ ->
+            get_option(remove_tombstones, Opts1, false)
+    end,
     Fun = fun
+        ({_, ?TOMBSTONE}, {Acc, Cnt})
+        when Cnt =< Limit andalso RemoveTombstones ->
+            {Acc, Cnt + 1};
         ({Key, ValOrVals}, {Acc, Cnt}) when Cnt =< Limit ->
             {[{Key, ValOrVals} | Acc], Cnt + 1};
         ({Key, _}, {Acc, _}) ->
@@ -992,6 +1008,49 @@ delete(FullPrefix, Key, _Opts) ->
     put(FullPrefix, Key, ?TOMBSTONE, []).
 
 
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec take(plum_db_prefix(), plum_db_key()) -> plum_db_value() | undefined.
+
+take(FullPrefix, Key) ->
+    take(FullPrefix, Key, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec take(plum_db_prefix(), plum_db_key(), get_opts()) ->
+    plum_db_value() | undefined.
+
+take({Prefix, SubPrefix} = FullPrefix, Key, Opts)
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
+    PKey = prefixed_key(FullPrefix, Key),
+    Context = current_context(PKey),
+    {Existing, Updated} = take_with_context(PKey, Context),
+    _ = broadcast(PKey, Updated),
+
+    case Existing of
+        undefined ->
+            undefined;
+        Existing ->
+            %% Aa Dotted Version Vector Set is returned.
+            %% When reading the value for a subsequent call to put/3 the
+            %% context can be obtained using plum_db_object:context/1.
+            %% Values can obtained w/ plum_db_object:values/1.
+            Default = get_option(default, Opts, undefined),
+            ResolveMethod = get_option(resolver, Opts, lww),
+            %% We do not want to resolve, since we just deleted and broadcasted
+            AllowPut = false,
+            maybe_tombstone(
+                maybe_resolve(PKey, Existing, ResolveMethod, AllowPut), Default)
+    end.
+
+
+
 
 %% =============================================================================
 %% GEN_SERVER_ CALLBACKS
@@ -1292,6 +1351,28 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     gen_server:call(
         plum_db_partition_worker:name(get_partition(PKey)),
         {put, PKey, Context, ValueOrFun},
+        infinity
+    ).
+
+
+
+-spec take_with_context(
+    plum_db_pkey_pattern(), undefined | plum_db_context()) ->
+        {Existing :: plum_db_object(), New :: plum_db_object()}.
+
+take_with_context({?WILDCARD, _} = PKey, _) ->
+    error(badarg, [PKey]);
+
+take_with_context({{_, _}, _} = PKey, undefined) ->
+    %% empty list is an empty dvvset
+    take_with_context(PKey, []);
+
+take_with_context({{Prefix, SubPrefix}, _Key} = PKey, Context)
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
+    gen_server:call(
+        plum_db_partition_worker:name(get_partition(PKey)),
+        {take, PKey, Context},
         infinity
     ).
 

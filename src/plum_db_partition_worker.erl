@@ -105,11 +105,12 @@ handle_call({get_object, PKey}, _From, State) ->
 handle_call({put, PKey, Context, ValueOrFun}, _From, State) ->
     %% We implement puts here since we need to do a read followed by a write
     %% atomically, and we need to serialise them.
-    Existing = get_object(PKey, State),
-    ServerId = State#state.server_id,
-    Modified = plum_db_object:modify(Existing, Context, ValueOrFun, ServerId),
-    {Result, NewState} = store(PKey, Modified, State),
+    {_, Result, NewState} = put(PKey, Context, ValueOrFun, State),
     {reply, Result, NewState};
+
+handle_call({take, PKey, Context}, _From, State) ->
+    {Existing, Result, NewState} = put(PKey, Context, ?TOMBSTONE, State),
+    {reply, {Existing, Result}, NewState};
 
 handle_call({merge, PKey, Obj}, _From, State0) ->
     %% We implement puts here since we need to do a read followed by a write
@@ -179,3 +180,11 @@ store({_FullPrefix, _Key} = PKey, Obj, State) ->
         State#state.partition, PKey, Hash, false),
     ok = plum_db_partition_server:put(State#state.partition, PKey, Obj),
     {Obj, State}.
+
+
+put(PKey, Context, ValueOrFun, State) ->
+    Existing = get_object(PKey, State),
+    ServerId = State#state.server_id,
+    Modified = plum_db_object:modify(Existing, Context, ValueOrFun, ServerId),
+    {Result, NewState} = store(PKey, Modified, State),
+    {Existing, Result, NewState}.
