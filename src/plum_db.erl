@@ -504,7 +504,9 @@ match(FullPrefix, KeyPattern) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec match(plum_db_prefix_pattern(), plum_db_pkey_pattern(), match_opts()) ->
-    {[{plum_db_key(), value_or_values()}], continuation()} | ?EOT.
+    [{plum_db_key(), value_or_values()}]
+    | {[{plum_db_key(), value_or_values()}], continuation()}
+    | ?EOT.
 
 match(FullPrefix0, KeyPattern, Opts0) ->
     FullPrefix = normalise_prefix(FullPrefix0),
@@ -533,8 +535,12 @@ match(FullPrefix0, KeyPattern, Opts0) ->
     case fold(Fun, {[], 0}, FullPrefix, Opts1) of
         {_, #continuation{}} = Res ->
             Res;
+        {[], _} when is_integer(Limit) ->
+            ?EOT;
+        {L, _} when is_integer(Limit) ->
+            {L, ?EOT};
         {L, _} ->
-            {L, ?EOT}
+            L
     end.
 
 
