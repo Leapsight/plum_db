@@ -493,10 +493,7 @@ match(#continuation{} = Cont) ->
 -spec match(plum_db_prefix_pattern(), plum_db_pkey_pattern()) ->
     [{plum_db_key(), value_or_values()}].
 match(FullPrefix, KeyPattern) ->
-    case match(FullPrefix, KeyPattern, []) of
-        {Matches, _} -> Matches;
-        ?EOT -> []
-    end.
+    match(FullPrefix, KeyPattern, []).
 
 
 %% -----------------------------------------------------------------------------
