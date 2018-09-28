@@ -147,10 +147,6 @@ get(Partition, PKey) when is_integer(Partition) ->
 
 get(Name, {{Prefix, _}, _} = PKey) when is_atom(Name) ->
     case plum_db:prefix_type(Prefix) of
-        undefined ->
-            gen_server:call(Name, {get, PKey, disk}, infinity);
-        disk ->
-            gen_server:call(Name, {get, PKey, disk}, infinity);
         Type when (Type == ram) orelse (Type == ram_disk) ->
             %% TODO during init we would be restoring async the ram_disk
             %% prefixes, so we need to fallback to disk until the restore is
@@ -162,7 +158,10 @@ get(Name, {{Prefix, _}, _} = PKey) when is_atom(Name) ->
                     {error, not_found};
                 [{_, Obj}] ->
                     {ok, Obj}
-            end
+            end;
+        _ ->
+            %% Type is disk or undefined
+            gen_server:call(Name, {get, PKey, disk}, infinity)
     end.
 
 
