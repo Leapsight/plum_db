@@ -44,15 +44,17 @@
 
 init() ->
     Config = application:get_all_env(plum_db),
-    %% We set configs at first level only
-    _ = [set(Key, Value) || {Key, Value} <- Config],
-    case get(prefixes) of
-        undefined ->
-            set(prefixes, []);
-        _ ->
-            ok
-    end,
-    ok.
+    Defaults = #{
+        store_open_retries_delay => 2000,
+        store_open_retry_Limit => 30,
+        data_exchange_timeout => 60000,
+        hashtree_timer => 10000,
+        data_dir => "data",
+        partitions => erlang:system_info(schedulers),
+        prefixes => []
+    },
+    Map = maps:merge(Defaults, maps:from_list(Config)),
+    maps:fold(fun(K, V, ok) -> set(K, V) end, ok, Map).
 
 
 %% -----------------------------------------------------------------------------
