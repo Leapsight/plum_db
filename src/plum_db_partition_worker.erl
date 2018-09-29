@@ -118,11 +118,12 @@ handle_call({merge, PKey, Obj}, _From, State0) ->
     Existing = get_object(PKey, State0),
     case plum_db_object:reconcile(Obj, Existing) of
         false ->
+            %% The remote object is an anscestor of or is equal to the local one
             {reply, false, State0};
         {true, Reconciled} ->
             {Reconciled, State1} = store(PKey, Reconciled, State0),
             %% We notify local subscribers and event handlers
-            ok = plum_db_events:update({PKey, Reconciled}),
+            ok = plum_db_events:update({PKey, Reconciled, Existing}),
             {reply, true, State1}
     end.
 
