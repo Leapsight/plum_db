@@ -48,7 +48,7 @@
     owner_ref               ::  reference(),
     partition               ::  non_neg_integer(),
     full_prefix             ::  plum_db_prefix_pattern(),
-    key_pattern             ::  term(),
+    match_pattern           ::  term(),
     bin_prefix              ::  binary(),
     match_spec              ::  ets:comp_match_spec() | undefined,
     keys_only = false       ::  boolean(),
@@ -550,7 +550,7 @@ iterator_move(Type, _, Iter, {{_, _} = FullPrefix, PKey}) ->
 
 iterator_move(Type, _, Iter, FullPrefix) ->
     Tab = table_name(Iter, Type),
-    Pattern = case Iter#partition_iterator.key_pattern of
+    Pattern = case Iter#partition_iterator.match_pattern of
         undefined -> FullPrefix;
         KeyPattern -> {FullPrefix, KeyPattern}
     end,
@@ -566,9 +566,6 @@ iterator_move(Type, _, Iter, FullPrefix) ->
             NewIter = update_iterator(Type, Iter, K, {cont, Cont1}),
             {ok, K, NewIter}
     end.
-
-
-
 
 
 
@@ -716,7 +713,7 @@ handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
         owner_ref = Ref,
         full_prefix = FullPrefix,
         keys_only = proplists:get_value(keys_only, Opts, false),
-        key_pattern = KeyPattern,
+        match_pattern = KeyPattern,
         match_spec = MS,
         bin_prefix = sext:prefix({FullPrefix, '_'})
     },

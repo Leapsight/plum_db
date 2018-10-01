@@ -490,10 +490,12 @@ repair_iterator_type(remote) ->
 
 
 %% @private
-track_repair({missing_prefix, local, _}, Acc=#exchange{local=Local}) ->
+track_repair({missing_prefix, local, Prefix}, Acc=#exchange{local=Local}) ->
+    _ = lager:debug("Local store is missing data for prefix ~p", [Prefix]),
     Acc#exchange{local=Local+1};
 
-track_repair({missing_prefix, remote, _}, Acc=#exchange{remote=Remote}) ->
+track_repair({missing_prefix, remote, Prefix}, Acc=#exchange{remote=Remote}) ->
+    _ = lager:debug("Remote store is missing data for prefix ~p", [Prefix]),
     Acc#exchange{remote=Remote+1};
 
 track_repair({key_diffs, _, Diffs}, Acc=#exchange{keys=Keys}) ->

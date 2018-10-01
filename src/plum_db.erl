@@ -45,7 +45,8 @@
     %% Options
     keys_only = false       ::  boolean(),
     partitions              ::  [partition()],
-    opts = []               ::  it_opts()
+    opts = []               ::  it_opts(),
+    done = false            ::  boolean()
 }).
 
 -record(remote_iterator, {
@@ -684,9 +685,13 @@ iterate(#remote_iterator{ref = Ref, node = Node} = I) ->
     _ = gen_server:call({?MODULE, Node}, {iterate, Ref}, infinity),
     I;
 
-iterate(#iterator{ref = undefined, partitions = []} = I) ->
+iterate(#iterator{done = true} = I) ->
     %% No more partitions to cover, we are done
     I;
+
+iterate(#iterator{ref = undefined, partitions = []} = I) ->
+    %% No more partitions to cover, we are done
+    I#iterator{done = true};
 
 iterate(#iterator{ref = undefined, partitions = [H|_]} = I0) ->
     %% We finished with the previous partition and we still have
@@ -737,10 +742,6 @@ iterate({ok, PKey, V, Ref1}, I0) ->
     }.
 
 
-
-
-
-
 %% -----------------------------------------------------------------------------
 %% @doc Closes the iterator. This function must be called on all open iterators
 %% @end
@@ -765,6 +766,9 @@ iterator_close(#iterator{ref = DBIter, partitions = [H|_]}) ->
 
 iterator_done(#remote_iterator{ref = Ref, node = Node}) ->
     gen_server:call({?MODULE, Node}, {iterator_done, Ref}, infinity);
+
+iterator_done(#iterator{done = true}) ->
+    true;
 
 iterator_done(#iterator{ref = undefined, partitions = []}) ->
     true;
@@ -1443,8 +1447,6 @@ get_option(Key, Opts, Default) ->
     end.
 
 
-
-
 %% @private
 new_remote_iterator(Pid, FullPrefix, Opts, #state{iterators = Iterators}) ->
     Ref = monitor(process, Pid),
@@ -1459,7 +1461,13 @@ from_remote_iterator(Fun, Ref, State) ->
         [] ->
             undefined;
         [{Ref, It}] ->
-            Fun(It)
+            case Fun(It) of
+                #iterator{} = It1 ->
+                    true = ets:insert(State#state.iterators, [{Ref, It1}]),
+                    It1;
+                Other ->
+                    Other
+            end
     end.
 
 
