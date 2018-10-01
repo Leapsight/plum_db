@@ -73,7 +73,14 @@ when is_atom(Name) andalso Name =/= undefined andalso is_list(Opts) ->
 %% -----------------------------------------------------------------------------
 -spec delete(Name :: atom()) -> boolean().
 delete(Name) when is_atom(Name) ->
-  gen_server:call(?MODULE, {delete, Name}).
+	try ets:delete(Name) of
+		true ->
+  			gen_server:call(?MODULE, {delete, Name})
+	catch
+		_:badarg ->
+			%% Not the owner
+			false
+	end.
 
 
 %% -----------------------------------------------------------------------------
@@ -135,20 +142,14 @@ handle_call({add_or_claim, Name, Opts0}, {From, _Tag}, St) ->
 		{reply, {ok, Tab}, St}
   end;
 
-handle_call({delete, Name}, {From, _Tag}, St) ->
+handle_call({delete, Name}, {_From, _Tag}, St) ->
 	Reg = ?MODULE,
 	case ets:lookup(Reg, Name) of
 		[] ->
 			{reply, false, St};
-		[{Name, Tab} = Obj] ->
-			case ets:info(Tab, owner) of
-				From ->
-					catch ets:delete(Tab),
-					true = ets:delete_object(Reg, Obj),
-					{reply, true, St};
-				_Other ->
-					{reply, false, St}
-			end
+		[{Name, _} = Obj] ->
+			true = ets:delete_object(Reg, Obj),
+			{reply, true, St}
 	end;
 
 
