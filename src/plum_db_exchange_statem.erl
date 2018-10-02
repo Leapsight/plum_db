@@ -420,7 +420,7 @@ repair(Peer, {key_diffs, Prefix, Diffs}) ->
 
 %% @private
 repair_prefix(Peer, Type, [Prefix]) ->
-    repair_prefix(Peer, Type, [Prefix, undefined]);
+    repair_prefix(Peer, Type, [Prefix, '_']);
 
 repair_prefix(Peer, Type, [Prefix, SubPrefix]) ->
     FullPrefix = {Prefix, SubPrefix},
