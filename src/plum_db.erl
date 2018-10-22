@@ -1320,7 +1320,6 @@ exchange(Peer, Opts0) ->
 
 
 
-
 %% @private
 iterator_reset_pointers(#iterator{} = I) ->
     I#iterator{prefix = undefined, key = undefined, object = undefined}.

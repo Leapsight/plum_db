@@ -890,12 +890,31 @@ open_db(State0, RetriesLeft, _) ->
                 true ->
                     SleepFor = app_helper:get_env(
                         plum_db, store_open_retries_delay, 2000),
-                    lager:debug("Leveldb backend retrying ~p in ~p ms after error ~s\n",
-                                [State0#state.data_root, SleepFor, OpenErr]),
+                    _ = lager:debug(
+                        "Leveldb backend retrying ~p in ~p ms after error ~s\n",
+                        [State0#state.data_root, SleepFor, OpenErr]
+                    ),
                     timer:sleep(SleepFor),
                     open_db(State0, RetriesLeft - 1, Reason);
                 false ->
-                    {error, Reason}
+                    case lists:prefix("Corruption", OpenErr) of
+                        true ->
+                            _ = lager:info(
+                                "Starting repair of corrupted leveldb store; "
+                                "data_root=~p, reason=~p",
+                                [State0#state.data_root, OpenErr]
+                            ),
+                            _ = eleveldb:repair(
+                                State0#state.data_root, State0#state.open_opts),
+                            _ = lager:info(
+                                "Finished repair of corrupted leveldb store; "
+                                "data_root=~p, reason=~p",
+                                [State0#state.data_root, OpenErr]
+                            ),
+                            open_db(State0, 0, Reason);
+                        false ->
+                            {error, Reason}
+                    end
             end;
         {error, Reason} ->
             {error, Reason}
