@@ -2,7 +2,7 @@
 [{<<"acceptor_pool">>,{pkg,<<"acceptor_pool">>,<<"1.0.0-rc.0">>},1},
  {<<"eleveldb">>,
   {git,"https://github.com/Leapsight/eleveldb.git",
-       {ref,"64a73a41d15163d3d7d27de75d6a0507c19c586b"}},
+       {ref,"002e6baa58923f02a98a362650a336ea9e18e06f"}},
   0},
  {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},1},
  {<<"gproc">>,{pkg,<<"gproc">>,<<"0.6.1">>},0},
