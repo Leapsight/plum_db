@@ -1444,13 +1444,6 @@ get_option(Key, Opts, Default) ->
             Default
     end.
 
-
-%% @private
-first_key({undefined, undefined}) -> first;
-first_key({Prefix, undefined}) -> sext:prefix({{Prefix, '_'}, '_'});
-first_key({_, _} = FullPrefix) -> sext:prefix({FullPrefix, '_'}).
-
-
 %% @private
 new_remote_iterator(Pid, FullPrefix, Opts, #state{iterators = Iterators}) ->
     Ref = monitor(process, Pid),
