@@ -64,6 +64,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
+    ok = plum_db_config:init(),
     case plum_db_sup:start_link() of
         {ok, Pid} ->
             %% We set the pubsub handler

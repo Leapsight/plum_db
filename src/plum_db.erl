@@ -22,30 +22,30 @@
 -behaviour(plumtree_broadcast_handler).
 -include("plum_db.hrl").
 
--define(TOMBSTONE, '$deleted').
+
 
 -record(state, {
     %% an ets table to hold iterators opened
     %% by other nodes
-    iterators  :: ets:tab()
+    iterators           ::  ets:tab()
 }).
 
 
 -record(iterator, {
     %% The query
-    match_prefix            ::  plum_db_prefix(),
-    match_key               ::  term() | undefined,
-    match_spec              ::  ets:comp_match_spec() | undefined,
-    %% The actual db iterator
-    db_iter                 ::  plum_db_partition_server:iterator() | undefined,
+    match_prefix            ::  plum_db_prefix_pattern(),
+    first                   ::  plum_db_pkey() | undefined,
+    %% The actual partition iterator
+    ref                     ::  plum_db_partition_server:iterator() | undefined,
     %% Pointers :: The current position decomposed into prefix, key and object
     prefix                  ::  plum_db_prefix() | undefined,
-    key                     ::  plum_db_key() | undefined,
+    key                     ::  plum_db_pkey() | undefined,
     object                  ::  plum_db_object() | undefined,
     %% Options
     keys_only = false       ::  boolean(),
     partitions              ::  [partition()],
-    opts = []               ::  it_opts() | undefined
+    opts = []               ::  it_opts(),
+    done = false            ::  boolean()
 }).
 
 -record(remote_iterator, {
@@ -54,10 +54,21 @@
     match_prefix            ::  plum_db_prefix() | atom() | binary()
 }).
 
+-record(continuation, {
+    match_prefix            ::  plum_db_prefix_pattern(),
+    match_key               ::  plum_db_pkey_pattern(),
+    first                   ::  plum_db_pkey() | undefined,
+    opts = []               ::  it_opts()
+}).
+
+
+-type prefix_type()         ::  ram | ram_disk | disk.
+-type prefixes()            ::  #{binary() | atom() => prefix_type()}.
+
 -type state()               ::  #state{}.
 -type remote_iterator()     ::  #remote_iterator{}.
 -opaque iterator()          ::  #iterator{}.
-
+-opaque continuation()      ::  #continuation{}.
 
 
 %% Get Option Types
@@ -87,17 +98,27 @@
 %% Iterator Types
 -type it_opt_resolver()     ::  {resolver, plum_db_resolver() | lww}.
 -type it_opt_default_fun()  ::  fun((plum_db_key()) -> plum_db_value()).
--type it_opt_default()      ::  {default, plum_db_value() | it_opt_default_fun()}.
+-type it_opt_default()      ::  {default,
+                                    plum_db_value() | it_opt_default_fun()}.
 -type it_opt_keymatch()     ::  {match, term()}.
+-type it_opt_first()        ::  {first, term()}.
 -type it_opt_keys_only()    ::  {keys_only, boolean()}.
 -type it_opt_partitions()   ::  {partitions, [partition()]}.
+-type match_opt_limit()     ::  pos_integer() | infinity.
+-type match_opt_remove_tombstones()     ::  boolean().
 -type it_opt()              ::  it_opt_resolver()
+                                | it_opt_first()
                                 | it_opt_default()
                                 | it_opt_keymatch()
                                 | it_opt_keys_only()
                                 | it_opt_partitions().
 -type it_opts()             ::  [it_opt()].
 -type fold_opts()           ::  it_opts().
+-type match_opts()          ::  [
+                                    it_opt()
+                                    | match_opt_limit()
+                                    | match_opt_remove_tombstones()
+                                ].
 -type partition()           ::  non_neg_integer().
 
 %% Put Option Types
@@ -107,10 +128,12 @@
 -type delete_opts()         :: [].
 
 
+-export_type([prefixes/0]).
+-export_type([prefix_type/0]).
 -export_type([partition/0]).
 -export_type([iterator/0]).
+-export_type([continuation/0]).
 
--export([decode_key/1]).
 -export([delete/2]).
 -export([delete/3]).
 -export([fold/3]).
@@ -121,6 +144,9 @@
 -export([fold_elements/4]).
 -export([get/2]).
 -export([get/3]).
+-export([match/1]).
+-export([match/2]).
+-export([match/3]).
 -export([get_object/1]).
 -export([get_object/2]).
 -export([get_partition/1]).
@@ -141,10 +167,14 @@
 -export([partition_count/0]).
 -export([partitions/0]).
 -export([prefix_hash/2]).
+-export([prefixes/0]).
+-export([prefix_type/1]).
 -export([put/3]).
 -export([put/4]).
 -export([remote_iterator/1]).
 -export([remote_iterator/2]).
+-export([take/2]).
+-export([take/3]).
 -export([to_list/1]).
 -export([to_list/2]).
 
@@ -189,14 +219,22 @@ start_link() ->
 
 %% -----------------------------------------------------------------------------
 %% @private
-%% @doc Returns the server identifier assigned to the FullPrefix of the PKey
+%% @doc Returns the server identifier assigned to the FullPrefix of the provided Key
 %% @end
 %% -----------------------------------------------------------------------------
 -spec get_partition(term()) -> partition().
 
-get_partition(PKey) ->
-    % phash2 range starts in 0, thus partition_count - 1
-    erlang:phash2(PKey, partition_count() - 1).
+get_partition({{'_', _}, _}) ->
+    error(badarg);
+get_partition({{_, '_'}, _}) ->
+    error(badarg);
+get_partition({{_, _} = FP, _}) ->
+    get_partition(FP);
+get_partition({_, _} = FP) ->
+    % partition :: 0..(partition_count() - 1)
+    erlang:phash2(FP, partition_count() - 1).
+
+
 
 
 %% -----------------------------------------------------------------------------
@@ -216,7 +254,7 @@ partitions() ->
 -spec partition_count() -> non_neg_integer().
 
 partition_count() ->
-    application:get_env(plum_db, partitions, 8).
+    plum_db_config:get(partitions, 8).
 
 
 %% -----------------------------------------------------------------------------
@@ -228,14 +266,6 @@ partition_count() ->
 is_partition(Id) ->
     Id >= 0 andalso Id =< (partition_count() - 1).
 
-
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
-decode_key(Bin) ->
-    sext:decode(Bin).
 
 
 %% -----------------------------------------------------------------------------
@@ -254,14 +284,14 @@ get(FullPrefix, Key) ->
 %% get/3 can take the following options:
 %%
 %% * default: value to return if no value is found, `undefined' if not given.
-%% * resolver:  A function that resolves conflicts if they are encountered. If
+%% * resolver: A function that resolves conflicts if they are encountered. If
 %% not given last-write-wins is used to resolve the conflicts
 %% * allow_put: whether or not to write and broadcast a resolved value.
 %% defaults to `true'.
 %%
 %% NOTE: an update will be broadcast if conflicts are resolved and
 %% `allow_put' is `true'. any further conflicts generated by
-%% concurrenct writes during resolution are not resolved
+%% concurrent writes during resolution are not resolved
 %% @end
 %% -----------------------------------------------------------------------------
 -spec get(plum_db_prefix(), plum_db_key(), get_opts()) ->
@@ -280,8 +310,8 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
         Existing ->
             %% Aa Dotted Version Vector Set is returned.
             %% When reading the value for a subsequent call to put/3 the
-            %% context can be obtained using plum_db_object:context/1. Values can
-            %% obtained w/ plum_db_object:values/1.
+            %% context can be obtained using plum_db_object:context/1.
+            %% Values can obtained w/ plum_db_object:values/1.
             maybe_tombstone(
                 maybe_resolve(PKey, Existing, ResolveMethod, AllowPut), Default)
     end.
@@ -327,13 +357,14 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
         infinity
     ).
 
+
 %% -----------------------------------------------------------------------------
 %% @doc Same as fold(Fun, Acc0, FullPrefix, []).
 %% @end
 %% -----------------------------------------------------------------------------
--spec fold(fold_fun(), any(), plum_db_prefix()) -> any().
-fold(Fun, Acc0, FullPrefix) ->
-    fold(Fun, Acc0, FullPrefix, []).
+-spec fold(fold_fun(), any(), plum_db_prefix_pattern()) -> any().
+fold(Fun, Acc0, FullPrefixPattern) ->
+    fold(Fun, Acc0, FullPrefixPattern, []).
 
 
 %% -----------------------------------------------------------------------------
@@ -342,11 +373,11 @@ fold(Fun, Acc0, FullPrefix) ->
 %% early, throw {break, Result} in your fold function.
 %% @end
 %% -----------------------------------------------------------------------------
--spec fold(fold_fun(), any(), plum_db_prefix(), fold_opts()) -> any().
-fold(Fun, Acc0, FullPrefix, Opts) ->
-    It = iterator(FullPrefix, Opts),
+-spec fold(fold_fun(), any(), plum_db_prefix_pattern(), fold_opts()) -> any().
+fold(Fun, Acc0, FullPrefixPattern, Opts) ->
+    It = iterator(FullPrefixPattern, Opts),
     try
-        fold_it(Fun, Acc0, It)
+        do_fold(Fun, Acc0, It)
     catch
         {break, Result} -> Result
     after
@@ -354,13 +385,13 @@ fold(Fun, Acc0, FullPrefix, Opts) ->
     end.
 
 %% @private
-fold_it(Fun, Acc, It) ->
+do_fold(Fun, Acc, It) ->
     case iterator_done(It) of
         true ->
             Acc;
         false ->
             Acc1 = Fun(iterator_key_values(It), Acc),
-            fold_it(Fun, Acc1, iterate(It))
+            do_fold(Fun, Acc1, iterate(It))
     end.
 
 
@@ -369,9 +400,9 @@ fold_it(Fun, Acc, It) ->
 %% @doc Same as fold(Fun, Acc0, FullPrefix, []).
 %% @end
 %% -----------------------------------------------------------------------------
--spec foreach(foreach_fun(), plum_db_prefix()) -> any().
-foreach(Fun, FullPrefix) ->
-    foreach(Fun, FullPrefix, []).
+-spec foreach(foreach_fun(), plum_db_prefix_pattern()) -> any().
+foreach(Fun, FullPrefixPattern) ->
+    foreach(Fun, FullPrefixPattern, []).
 
 
 %% -----------------------------------------------------------------------------
@@ -380,9 +411,9 @@ foreach(Fun, FullPrefix) ->
 %% early, throw {break, Result} in your fold function.
 %% @end
 %% -----------------------------------------------------------------------------
--spec foreach(foreach_fun(), plum_db_prefix(), fold_opts()) -> any().
-foreach(Fun, FullPrefix, Opts) ->
-    It = iterator(FullPrefix, Opts),
+-spec foreach(foreach_fun(), plum_db_prefix_pattern(), fold_opts()) -> any().
+foreach(Fun, FullPrefixPattern, Opts) ->
+    It = iterator(FullPrefixPattern, Opts),
     try
         do_foreach(Fun, It)
     after
@@ -407,7 +438,7 @@ do_foreach(Fun, It) ->
 %% -----------------------------------------------------------------------------
 -spec fold_elements(fold_elements_fun(), any(), plum_db_prefix()) -> any().
 fold_elements(Fun, Acc0, FullPrefix) ->
-    fold(Fun, Acc0, FullPrefix, []).
+    fold_elements(Fun, Acc0, FullPrefix, []).
 
 
 %% -----------------------------------------------------------------------------
@@ -436,7 +467,77 @@ do_fold_elements(Fun, Acc, It) ->
             Acc;
         false ->
             Next = Fun(iterator_element(It), Acc),
-            fold_it(Fun, Next, iterate(It))
+            do_fold_elements(Fun, Next, iterate(It))
+    end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec match(continuation()) ->
+    {[{plum_db_key(), value_or_values()}], continuation()}
+    | ?EOT.
+
+match(#continuation{} = Cont) ->
+    FullPrefix = Cont#continuation.match_prefix,
+    KeyPattern = Cont#continuation.match_key,
+    Opts = Cont#continuation.opts,
+    match(FullPrefix, KeyPattern, Opts).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec match(plum_db_prefix_pattern(), plum_db_pkey_pattern()) ->
+    [{plum_db_key(), value_or_values()}].
+match(FullPrefix, KeyPattern) ->
+    match(FullPrefix, KeyPattern, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec match(plum_db_prefix_pattern(), plum_db_pkey_pattern(), match_opts()) ->
+    [{plum_db_key(), value_or_values()}]
+    | {[{plum_db_key(), value_or_values()}], continuation()}
+    | ?EOT.
+
+match(FullPrefix0, KeyPattern, Opts0) ->
+    FullPrefix = normalise_prefix(FullPrefix0),
+    Opts1 = [{match, KeyPattern} | lists:keydelete(match, 1, Opts0)],
+    Limit = get_option(limit, Opts1, infinity),
+    RemoveTombstones = case get_option(resolver, Opts1, undefined) of
+        undefined ->
+            false;
+        _ ->
+            get_option(remove_tombstones, Opts1, false)
+    end,
+    Fun = fun
+        ({_, ?TOMBSTONE}, {Acc, Cnt})
+        when Cnt =< Limit andalso RemoveTombstones ->
+            {Acc, Cnt + 1};
+        ({Key, ValOrVals}, {Acc, Cnt}) when Cnt =< Limit ->
+            {[{Key, ValOrVals} | Acc], Cnt + 1};
+        ({Key, _}, {Acc, _}) ->
+            Cont = #continuation{
+                match_prefix = FullPrefix,
+                match_key = KeyPattern,
+                opts = [{first, Key} | Opts1]
+            },
+            throw({break, {Acc, Cont}})
+        end,
+    case fold(Fun, {[], 0}, FullPrefix, Opts1) of
+        {_, #continuation{}} = Res ->
+            Res;
+        {[], _} when is_integer(Limit) ->
+            ?EOT;
+        {L, _} when is_integer(Limit) ->
+            {L, ?EOT};
+        {L, _} ->
+            L
     end.
 
 
@@ -458,13 +559,11 @@ to_list(FullPrefix) ->
 -spec to_list(FullPrefix :: plum_db_prefix(), Opts :: fold_opts()) ->
     [{plum_db_key(), value_or_values()}].
 
-to_list({undefined, Term}, Opts) when Term =/= undefined ->
-    to_list({undefined, undefined}, Opts);
 
-to_list({_, _} = FullPrefix, Opts) ->
-    fold(fun({Key, ValOrVals}, Acc) ->
-                 [{Key, ValOrVals} | Acc]
-         end, [], FullPrefix, Opts).
+to_list(FullPrefix0, Opts) ->
+    FullPrefix = normalise_prefix(FullPrefix0),
+    Fun = fun({Key, ValOrVals}, Acc) -> [{Key, ValOrVals} | Acc] end,
+    fold(Fun, [], FullPrefix, Opts).
 
 
 %% -----------------------------------------------------------------------------
@@ -480,7 +579,7 @@ to_list({_, _} = FullPrefix, Opts) ->
 %% -----------------------------------------------------------------------------
 -spec iterator() -> iterator().
 iterator() ->
-    iterator({undefined, undefined}).
+    iterator({?WILDCARD, ?WILDCARD}).
 
 
 %% -----------------------------------------------------------------------------
@@ -510,12 +609,12 @@ iterator(FullPrefix) ->
 %% place of the tombstone. If default is a value, the value is returned in
 %% place of the tombstone. This applies when using functions such as
 %% iterator_key_values/1 and iterator_key_values/1.
-%% * match: Match can be used to iterate over a subset of keys -- assuming the
-%% keys stored are tuples. If
-%% match is undefined then all keys will may be visted by the iterator, match
-%% can be:
+%% * first - the key this iterator should start at, equivalent to calling
+%% iterator_move/2 passing the key as the second argument.
+%% * match: If match is undefined then all keys will may be visted by the
+%% iterator, match can be:
 %%     * an erlang term - which will be matched exactly against a key
-%%     * '_' - which is equivalent to undefined
+%%     * '_' - the wilcard term which matches anything
 %%     * an erlang tuple containing terms and '_' - if tuples are used as keys
 %%     this can be used to iterate over some subset of keys
 %% * partitions: The list of partitions this iterator should cover. If
@@ -524,7 +623,7 @@ iterator(FullPrefix) ->
 %%
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator(plum_db_prefix(), it_opts()) -> iterator().
+-spec iterator(plum_db_prefix_pattern(), it_opts()) -> iterator().
 
 iterator({Prefix, SubPrefix} = FullPrefix, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
@@ -543,7 +642,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% -----------------------------------------------------------------------------
 -spec remote_iterator(node()) -> remote_iterator().
 remote_iterator(Node) ->
-    remote_iterator(Node, {undefined, undefined}).
+    remote_iterator(Node, {?WILDCARD, ?WILDCARD}).
 
 
 -spec remote_iterator(node(), plum_db_prefix()) -> remote_iterator().
@@ -562,7 +661,8 @@ remote_iterator(Node, FullPrefix) ->
 %% When done with the iterator, iterator_close/1 must be called
 %% @end
 %% -----------------------------------------------------------------------------
--spec remote_iterator(node(), plum_db_prefix(), it_opts()) -> remote_iterator().
+-spec remote_iterator(node(), plum_db_prefix_pattern(), it_opts()) ->
+    remote_iterator().
 
 remote_iterator(Node, FullPrefix, Opts) when is_tuple(FullPrefix) ->
     Ref = gen_server:call(
@@ -584,64 +684,61 @@ iterate(#remote_iterator{ref = Ref, node = Node} = I) ->
     _ = gen_server:call({?MODULE, Node}, {iterate, Ref}, infinity),
     I;
 
-iterate(#iterator{db_iter = undefined, partitions = []} = I) ->
-    %% We are done
+iterate(#iterator{done = true} = I) ->
+    %% No more partitions to cover, we are done
     I;
 
-iterate(#iterator{db_iter = undefined, partitions = [H|_]} = I0) ->
-    %% We finished with the previous partition and we have
-    %% more partitions to cover
-    First = first_key(I0#iterator.match_prefix),
-    DBIter = case I0#iterator.keys_only of
-        true ->
-            plum_db_partition_server:key_iterator(H);
-        false ->
-            plum_db_partition_server:iterator(H)
-    end,
-    Res = plum_db_partition_server:iterator_move(DBIter, First),
-    iterate(Res, I0#iterator{db_iter = DBIter});
+iterate(#iterator{ref = undefined, partitions = []} = I) ->
+    %% No more partitions to cover, we are done
+    I#iterator{done = true};
 
-iterate(#iterator{db_iter = DBIter} = I) ->
-    iterate(plum_db_partition_server:iterator_move(DBIter, prefetch), I).
+iterate(#iterator{ref = undefined, partitions = [H|_]} = I0) ->
+    %% We finished with the previous partition and we still have
+    %% more partitions to cover
+    FullPrefix = I0#iterator.match_prefix,
+    Opts = I0#iterator.opts,
+    Ref = case I0#iterator.keys_only of
+        true ->
+            plum_db_partition_server:key_iterator(H, FullPrefix, Opts);
+        false ->
+            plum_db_partition_server:iterator(H, FullPrefix, Opts)
+    end,
+    Res = plum_db_partition_server:iterator_move(Ref, I0#iterator.first),
+    iterate(Res, I0#iterator{ref = Ref});
+
+iterate(#iterator{ref = Ref} = I) ->
+    iterate(plum_db_partition_server:iterator_move(Ref, prefetch), I).
 
 
 %% @private
-iterate({error, _}, #iterator{db_iter = DBIter, partitions = [H|T]} = I) ->
+iterate({error, no_match, Ref1}, I0) ->
+    %% We carry on trying to match the remaining keys
+    iterate(I0#iterator{ref = Ref1});
+
+iterate({error, _, Ref1}, #iterator{partitions = [H|T]} = I) ->
     %% There are no more elements in the partition
-    ok = plum_db_partition_server:iterator_close(H, DBIter),
+    ok = plum_db_partition_server:iterator_close(H, Ref1),
     I1 = iterator_reset_pointers(
-        I#iterator{db_iter = undefined, partitions = T}),
+        I#iterator{ref = undefined, partitions = T}),
     iterate(I1);
 
-iterate({ok, K}, #iterator{db_iter = DBIter, partitions = [H|T]} = I0) ->
-    PKey = plum_db:decode_key(K),
-    case prefixed_key_matches(PKey, I0) of
-        true ->
-            {Prefix, Key} = PKey,
-            I0#iterator{prefix = Prefix, key = Key, object = undefined};
-        false ->
-            %% We have no more matches in this partition
-            I1 = iterator_reset_pointers(I0),
-            ok = plum_db_partition_server:iterator_close(H, DBIter),
-            iterate(I1#iterator{db_iter = undefined, partitions = T})
-    end;
+iterate({ok, PKey, Ref1}, I0) ->
+    {Prefix, Key} = PKey,
+    I0#iterator{
+        ref = Ref1,
+        prefix = Prefix,
+        key = Key,
+        object = undefined
+    };
 
-iterate({ok, K, V},  #iterator{db_iter = DBIter, partitions = [H|T]} = I0) ->
-    PKey = plum_db:decode_key(K),
-    case prefixed_key_matches(PKey, I0) of
-        true ->
-            {Prefix, Key} = PKey,
-            I0#iterator{prefix = Prefix, key = Key, object = binary_to_term(V)};
-        false ->
-            %% We have no more matches in this partition
-            I1 = iterator_reset_pointers(I0),
-            ok = plum_db_partition_server:iterator_close(H, DBIter),
-            iterate(I1#iterator{db_iter = undefined, partitions = T})
-    end.
-
-
-
-
+iterate({ok, PKey, V, Ref1}, I0) ->
+    {Prefix, Key} = PKey,
+    I0#iterator{
+        ref = Ref1,
+        prefix = Prefix,
+        key = Key,
+        object = V
+    }.
 
 
 %% -----------------------------------------------------------------------------
@@ -653,10 +750,10 @@ iterate({ok, K, V},  #iterator{db_iter = DBIter, partitions = [H|T]} = I0) ->
 iterator_close(#remote_iterator{ref = Ref, node = Node}) ->
     gen_server:call({?MODULE, Node}, {iterator_close, Ref}, infinity);
 
-iterator_close(#iterator{db_iter = undefined}) ->
+iterator_close(#iterator{ref = undefined}) ->
     ok;
 
-iterator_close(#iterator{db_iter = DBIter, partitions = [H|_]}) ->
+iterator_close(#iterator{ref = DBIter, partitions = [H|_]}) ->
     plum_db_partition_server:iterator_close(H, DBIter).
 
 
@@ -669,7 +766,10 @@ iterator_close(#iterator{db_iter = DBIter, partitions = [H|_]}) ->
 iterator_done(#remote_iterator{ref = Ref, node = Node}) ->
     gen_server:call({?MODULE, Node}, {iterator_done, Ref}, infinity);
 
-iterator_done(#iterator{db_iter = undefined, partitions = []}) ->
+iterator_done(#iterator{done = true}) ->
+    true;
+
+iterator_done(#iterator{ref = undefined, partitions = []}) ->
     true;
 
 iterator_done(#iterator{}) ->
@@ -837,6 +937,26 @@ prefix_hash(Partition, {_, _} = Prefix) ->
 
 
 %% -----------------------------------------------------------------------------
+%% @doc Returns a mapping of prefixes (the first element of a plum_db_prefix()
+%% tuple) to prefix_type() only for those prefixes for which a type was
+%% declared using the application optiont `prefixes`.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec prefixes() -> prefixes().
+prefixes() ->
+    plum_db_config:get(prefixes).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec prefix_type(term()) -> prefix_type() | undefined.
+prefix_type(Prefix) ->
+    maps:get(Prefix, plum_db_config:get(prefixes), undefined).
+
+
+%% -----------------------------------------------------------------------------
 %% @doc Same as put(FullPrefix, Key, Value, [])
 %% @end
 %% -----------------------------------------------------------------------------
@@ -894,6 +1014,49 @@ delete(FullPrefix, Key, _Opts) ->
     put(FullPrefix, Key, ?TOMBSTONE, []).
 
 
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec take(plum_db_prefix(), plum_db_key()) -> plum_db_value() | undefined.
+
+take(FullPrefix, Key) ->
+    take(FullPrefix, Key, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec take(plum_db_prefix(), plum_db_key(), get_opts()) ->
+    plum_db_value() | undefined.
+
+take({Prefix, SubPrefix} = FullPrefix, Key, Opts)
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
+    PKey = prefixed_key(FullPrefix, Key),
+    Context = current_context(PKey),
+    {Existing, Updated} = take_with_context(PKey, Context),
+    _ = broadcast(PKey, Updated),
+
+    case Existing of
+        undefined ->
+            undefined;
+        Existing ->
+            %% Aa Dotted Version Vector Set is returned.
+            %% When reading the value for a subsequent call to put/3 the
+            %% context can be obtained using plum_db_object:context/1.
+            %% Values can obtained w/ plum_db_object:values/1.
+            Default = get_option(default, Opts, undefined),
+            ResolveMethod = get_option(resolver, Opts, lww),
+            %% We do not want to resolve, since we just deleted and broadcasted
+            AllowPut = false,
+            maybe_tombstone(
+                maybe_resolve(PKey, Existing, ResolveMethod, AllowPut), Default)
+    end.
+
+
+
 
 %% =============================================================================
 %% GEN_SERVER_ CALLBACKS
@@ -916,7 +1079,9 @@ init([]) ->
             {read_concurrency, true},
             {write_concurrency, true}]
     ),
-    {ok, #state{iterators = ?MODULE}}.
+    State = #state{iterators = ?MODULE},
+    {ok, State}.
+
 
 %% @private
 -spec handle_call(term(), {pid(), term()}, state()) ->
@@ -926,6 +1091,7 @@ init([]) ->
     | {noreply, state(), non_neg_integer()}
     | {stop, term(), term(), state()}
     | {stop, term(), state()}.
+
 
 handle_call({open_remote_iterator, Pid, FullPrefix, Opts}, _From, State) ->
     Iterator = new_remote_iterator(Pid, FullPrefix, Opts, State),
@@ -994,6 +1160,7 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
 
 
 %% =============================================================================
@@ -1152,41 +1319,6 @@ exchange(Peer, Opts0) ->
 
 
 
-
-%% @private
-prefixed_key_matches(PKey, #iterator{match_spec = undefined} = I) ->
-    prefixed_key_matches(I#iterator.match_prefix, I#iterator.match_key, PKey);
-
-prefixed_key_matches(PKey, #iterator{} = I) ->
-    ets:match_spec_run([PKey], I#iterator.match_spec) == [true].
-
-
-%% @private
-prefixed_key_matches(P, '_', PKey) ->
-    prefixed_key_matches(P, undefined, PKey) ;
-
-prefixed_key_matches({undefined, undefined}, undefined, {_, _}) ->
-    true;
-prefixed_key_matches({undefined, undefined}, Fun, {_, Key})
-when is_function(Fun) ->
-    Fun(Key);
-
-prefixed_key_matches({Prefix, undefined}, undefined, {{Prefix, _}, _}) ->
-    true;
-prefixed_key_matches({Prefix, undefined}, Fun, {{Prefix, _}, Key})
-when is_function(Fun) ->
-    Fun(Key);
-
-prefixed_key_matches(FullPrefix, undefined, {FullPrefix, _}) ->
-    true;
-prefixed_key_matches(FullPrefix, Fun, {FullPrefix, Key})
-when is_function(Fun) ->
-    Fun(Key);
-
-prefixed_key_matches(_, _, _) ->
-    false.
-
-
 %% @private
 iterator_reset_pointers(#iterator{} = I) ->
     I#iterator{prefix = undefined, key = undefined, object = undefined}.
@@ -1209,9 +1341,9 @@ current_context(PKey) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec put_with_context(
-    plum_db_pkey(), undefined | plum_db_context(), term()) -> plum_db_object().
+    plum_db_pkey_pattern(), undefined | plum_db_context(), term()) -> plum_db_object().
 
-put_with_context({undefined, _} = PKey, _, _) ->
+put_with_context({?WILDCARD, _} = PKey, _, _) ->
     error(badarg, [PKey]);
 
 put_with_context({{_, _}, _} = PKey, undefined, ValueOrFun) ->
@@ -1224,6 +1356,28 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     gen_server:call(
         plum_db_partition_worker:name(get_partition(PKey)),
         {put, PKey, Context, ValueOrFun},
+        infinity
+    ).
+
+
+
+-spec take_with_context(
+    plum_db_pkey_pattern(), undefined | plum_db_context()) ->
+        {Existing :: plum_db_object(), New :: plum_db_object()}.
+
+take_with_context({?WILDCARD, _} = PKey, _) ->
+    error(badarg, [PKey]);
+
+take_with_context({{_, _}, _} = PKey, undefined) ->
+    %% empty list is an empty dvvset
+    take_with_context(PKey, []);
+
+take_with_context({{Prefix, SubPrefix}, _Key} = PKey, Context)
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
+    gen_server:call(
+        plum_db_partition_worker:name(get_partition(PKey)),
+        {take, PKey, Context},
         infinity
     ).
 
@@ -1311,7 +1465,13 @@ from_remote_iterator(Fun, Ref, State) ->
         [] ->
             undefined;
         [{Ref, It}] ->
-            Fun(It)
+            case Fun(It) of
+                #iterator{} = It1 ->
+                    true = ets:insert(State#state.iterators, [{Ref, It1}]),
+                    It1;
+                Other ->
+                    Other
+            end
     end.
 
 
@@ -1323,28 +1483,23 @@ close_remote_iterator(Ref, #state{iterators = Iterators} = State) ->
 
 %% @private
 new_iterator(FullPrefix, Opts) ->
-    KeyMatch = proplists:get_value(match, Opts, undefined),
+    FirstKey = case proplists:get_value(first, Opts, undefined) of
+        undefined -> FullPrefix;
+        Key -> {FullPrefix, Key}
+    end,
     KeysOnly = proplists:get_value(keys_only, Opts, false),
     Partitions = case get_option(partitions, Opts, undefined) of
         undefined ->
-            plum_db:partitions();
+            get_covering_partitions(FullPrefix);
         L ->
             All = sets:from_list(plum_db:partitions()),
             sets:is_subset(sets:from_list(L), All) orelse
             error(badarg, partitions),
             L
     end,
-    MS = case is_tuple(KeyMatch) of
-        true ->
-            PrefixMatch = prefix_to_ets_match(FullPrefix),
-            ets:match_spec_compile([{ {PrefixMatch, KeyMatch}, [], [true] }]);
-        false ->
-            undefined
-    end,
     I = #iterator{
         match_prefix = FullPrefix,
-        match_key = KeyMatch,
-        match_spec = MS,
+        first = FirstKey,
         keys_only = KeysOnly,
         partitions = Partitions,
         opts = Opts
@@ -1353,12 +1508,22 @@ new_iterator(FullPrefix, Opts) ->
     iterate(I).
 
 
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+get_covering_partitions({'_', _}) ->
+    partitions();
+get_covering_partitions({_, '_'}) ->
+    partitions();
+get_covering_partitions(FullPrefix) ->
+    [get_partition(FullPrefix)].
+
+
 %% @private
-prefix_to_ets_match({undefined, Term}) ->
-    prefix_to_ets_match({'_', Term});
-
-prefix_to_ets_match({Term, undefined}) ->
-    prefix_to_ets_match({Term , '_'});
-
-prefix_to_ets_match({_, _} = FullPrefix) ->
+normalise_prefix({?WILDCARD, _})  ->
+    %% If the Prefix is a wilcard the fullprefix is a wilcard
+    {?WILDCARD, ?WILDCARD};
+normalise_prefix(FullPrefix) when tuple_size(FullPrefix) =:= 2 ->
     FullPrefix.

@@ -105,11 +105,12 @@ handle_call({get_object, PKey}, _From, State) ->
 handle_call({put, PKey, Context, ValueOrFun}, _From, State) ->
     %% We implement puts here since we need to do a read followed by a write
     %% atomically, and we need to serialise them.
-    Existing = get_object(PKey, State),
-    ServerId = State#state.server_id,
-    Modified = plum_db_object:modify(Existing, Context, ValueOrFun, ServerId),
-    {Result, NewState} = store(PKey, Modified, State),
+    {_, Result, NewState} = put(PKey, Context, ValueOrFun, State),
     {reply, Result, NewState};
+
+handle_call({take, PKey, Context}, _From, State) ->
+    {Existing, Result, NewState} = put(PKey, Context, ?TOMBSTONE, State),
+    {reply, {Existing, Result}, NewState};
 
 handle_call({merge, PKey, Obj}, _From, State0) ->
     %% We implement puts here since we need to do a read followed by a write
@@ -117,11 +118,12 @@ handle_call({merge, PKey, Obj}, _From, State0) ->
     Existing = get_object(PKey, State0),
     case plum_db_object:reconcile(Obj, Existing) of
         false ->
+            %% The remote object is an anscestor of or is equal to the local one
             {reply, false, State0};
         {true, Reconciled} ->
             {Reconciled, State1} = store(PKey, Reconciled, State0),
             %% We notify local subscribers and event handlers
-            ok = plum_db_events:update({PKey, Reconciled}),
+            ok = plum_db_events:update({PKey, Reconciled, Existing}),
             {reply, true, State1}
     end.
 
@@ -175,6 +177,15 @@ get_object(PKey, State) ->
 %% @private
 store({_FullPrefix, _Key} = PKey, Obj, State) ->
     Hash = plum_db_object:hash(Obj),
-    ok = plum_db_partition_hashtree:insert(State#state.partition, PKey, Hash, false),
+    ok = plum_db_partition_hashtree:insert(
+        State#state.partition, PKey, Hash, false),
     ok = plum_db_partition_server:put(State#state.partition, PKey, Obj),
     {Obj, State}.
+
+
+put(PKey, Context, ValueOrFun, State) ->
+    Existing = get_object(PKey, State),
+    ServerId = State#state.server_id,
+    Modified = plum_db_object:modify(Existing, Context, ValueOrFun, ServerId),
+    {Result, NewState} = store(PKey, Modified, State),
+    {Existing, Result, NewState}.

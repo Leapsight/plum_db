@@ -95,7 +95,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 peer_service() ->
-    application:get_env(plum_db, peer_service, ?DEFAULT_PEER_SERVICE).
+    plum_db_config:get(peer_service, ?DEFAULT_PEER_SERVICE).
 
 
 %% -----------------------------------------------------------------------------
