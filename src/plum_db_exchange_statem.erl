@@ -35,7 +35,6 @@
 -export([code_change/4]).
 
 %% gen_fsm states
--export([starting/3]).
 -export([acquiring_locks/3]).
 -export([updating_hashtrees/3]).
 -export([exchanging_data/3]).
@@ -90,8 +89,10 @@ init([Peer, Opts]) ->
     %% We notify subscribers
     _ = plum_db_events:notify(exchange_started, {self(), Peer}),
 
+    gen_statem:send_event(self(), start),
+
     %% {ok, acquiring_locks, State, [{next_event, internal, start}]}.
-    {ok, starting, State, 0}.
+    {ok, acquiring_locks, State, 0}.
 
 
 callback_mode() ->
@@ -115,22 +116,6 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 
 
 
-starting(timeout, _, State) ->
-    State0 = reset_state(State),
-    case acquire_local_lock(State0) of
-        {ok, Partition, State1} ->
-            %% get corresponding remote lock
-            ok = async_acquire_remote_lock(State1#state.peer, Partition),
-            {next_state, acquiring_locks, State1, State1#state.timeout};
-        {error, Reason, State1} ->
-            _ = lager:warning(
-                "Exchange with peer timed out acquiring locks; peer=~p",
-                [State1#state.peer]
-            ),
-            {stop, Reason, State1}
-    end.
-
-
 %% -----------------------------------------------------------------------------
 %% @doc
 %% @end
@@ -142,25 +127,40 @@ starting(timeout, _, State) ->
 %%             %% get corresponding remote lock
 %%             ok = async_acquire_remote_lock(State1#state.peer, Partition),
 %%             {next_state, acquiring_locks, State1, State1#state.timeout};
-%%         {error, Reason, State1} ->
+%%         {error, State1} ->
 %%             _ = lager:warning(
 %%                 "Exchange with peer timed out acquiring locks; peer=~p",
 %%                 [State1#state.peer]
 %%             ),
-%%             {stop, Reason, State1}
+%%             {stop, normal, State1}
 %%     end;
 
-acquiring_locks(
-    timeout, _, #state{partitions = [H|T], peer = Peer} = State) ->
+acquiring_locks(start, _, State) ->
+    #state{partitions = [Partition|_]} = State0 = reset_state(State),
+    case acquire_local_lock(State0) of
+        {ok, State1} ->
+            %% get corresponding remote lock
+            ok = async_acquire_remote_lock(State1#state.peer, Partition),
+            {next_state, acquiring_locks, State1, State1#state.timeout};
+        {error, State1} ->
+            _ = lager:warning(
+                "Exchange with peer timed out acquiring locks; "
+                "peer=~p, partition=~p",
+                [State1#state.peer, Partition]
+            ),
+            {stop, normal, State1}
+    end;
+
+acquiring_locks(timeout, _, #state{partitions = [H|T]} = State) ->
     %% getting remote lock timed out
     ok = release_local_lock(H),
     _ = lager:info(
         "Exchange with peer timed out acquiring locks; peer=~p, partition=~p",
-        [Peer, H]
+        [State#state.peer, H]
     ),
     %% We try again with the remaining partitions
     NewState = State#state{partitions = T},
-    {next_state, starting, NewState, 0};
+    {next_state, acquiring_locks, NewState, 0};
 
 acquiring_locks(
     cast, {remote_lock_acquired, P}, #state{partitions = [P|_]} = State) ->
@@ -176,7 +176,7 @@ acquiring_locks(cast, {remote_lock_error, Reason}, State) ->
     ),
     %% We try again with the remaining partitions
     NewState = State#state{partitions = T},
-    {next_state, starting, NewState, 0};
+    {next_state, acquiring_locks, NewState, 0};
 
 acquiring_locks(Type, Content, State) ->
     _ = handle_event(acquiring_locks, Type, Content, State),
@@ -203,7 +203,7 @@ updating_hashtrees(
     ok = release_locks(H, Peer),
     %% We try again with the remaining partitions
     NewState = State#state{partitions = T},
-    {next_state, starting, NewState, 0};
+    {next_state, acquiring_locks, NewState, 0};
 
 updating_hashtrees(cast, local_tree_updated, State0) ->
     State1 = State0#state{local_tree_updated = true},
@@ -232,7 +232,7 @@ updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
     ),
     %% We carry on with the remaining partitions
     NewState = State#state{partitions = T},
-    {next_state, starting, NewState, 0};
+    {next_state, acquiring_locks, NewState, 0};
 
 updating_hashtrees(Type, Content, State) ->
     _ = handle_event(updating_hashtrees, Type, Content, State),
@@ -298,7 +298,7 @@ exchanging_data(timeout, _, State) ->
         _ ->
             %% We carry on with the remaining partitions
             NewState = State#state{partitions = T},
-            {next_state, starting, NewState, 0}
+            {next_state, acquiring_locks, NewState, 0}
     end;
 
 exchanging_data(Type, Content, State) ->
@@ -337,17 +337,17 @@ acquire_local_lock(#state{partitions = [H|T]} = State) ->
     %% get local lock
     case plum_db_partition_hashtree:lock(H) of
         ok ->
-            {ok, H, State};
-        Error ->
+            {ok, State};
+        Reason ->
             _ = lager:info(
                 "Skipping partition, could not acquire local lock;"
                 " partition=~p, reason=~p",
-                [H, Error]),
+                [H, Reason]),
             acquire_local_lock(State#state{partitions = T})
     end;
 
 acquire_local_lock(#state{partitions = []} = State) ->
-    {error, normal, State}.
+    {error, State}.
 
 
 %% @private
@@ -490,13 +490,14 @@ repair_iterator_type(remote) ->
 
 
 %% @private
-track_repair({missing_prefix, local, Prefix}, Acc=#exchange{local=Local}) ->
+track_repair({missing_prefix, local, Prefix}, Acc=#exchange{local = Local}) ->
     _ = lager:debug("Local store is missing data for prefix ~p", [Prefix]),
     Acc#exchange{local=Local+1};
 
-track_repair({missing_prefix, remote, Prefix}, Acc=#exchange{remote=Remote}) ->
+track_repair(
+    {missing_prefix, remote, Prefix}, Acc=#exchange{remote = Remote}) ->
     _ = lager:debug("Remote store is missing data for prefix ~p", [Prefix]),
     Acc#exchange{remote=Remote+1};
 
-track_repair({key_diffs, _, Diffs}, Acc=#exchange{keys=Keys}) ->
+track_repair({key_diffs, _, Diffs}, Acc=#exchange{keys = Keys}) ->
     Acc#exchange{keys = Keys + length(Diffs)}.
