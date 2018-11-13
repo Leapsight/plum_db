@@ -69,14 +69,16 @@
     %% whether or not the tree has been built or a monitor ref
     %% if the tree is being built
     built           ::  boolean() | reference(),
+    %% a monitor reference for a process that currently holds a
+    %% lock on the tree
+    lock            ::  {internal | external, reference(), pid()} | undefined,
     %% Timestamp when the tree was build. To be used together with ttl_secs
     %% to calculate if the hashtree has expired
     build_ts_secs   ::  non_neg_integer() | undefined,
     %% Time in milliseconds after which the hashtree will be reset
-    ttl_secs             ::  non_neg_integer(),
-    %% a monitor reference for a process that currently holds a
-    %% lock on the tree
-    lock            ::  {internal | external, reference(), pid()} | undefined
+    ttl_secs        ::  non_neg_integer(),
+    reset = false   ::  boolean(),
+    timer           ::  reference()
 }).
 
 
@@ -96,7 +98,7 @@
 %% -----------------------------------------------------------------------------
 -spec start_link(non_neg_integer()) -> {ok, pid()} | ignore | {error, term()}.
 
-start_link(Partition) ->
+start_link(Partition) when is_integer(Partition) ->
     PRoot = app_helper:get_env(plum_db, data_dir),
     DataRoot = filename:join([PRoot, "hashtrees", integer_to_list(Partition)]),
     Name = name(Partition),
@@ -353,27 +355,30 @@ compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
 
 init([Partition, DataRoot]) ->
     Id = name(Partition),
-    State = init_async(#state{
+    State0 = do_init(#state{
         id = Id, data_root = DataRoot, partition = Partition
     }),
-    schedule_tick(State),
-    {ok, State}.
+    State1 = schedule_tick(State0),
+    {ok, State1}.
 
 handle_call({compare, RemoteFun, HandlerFun, HandlerAcc}, From, State) ->
     maybe_compare_async(From, RemoteFun, HandlerFun, HandlerAcc, State),
     {noreply, State};
 
-handle_call(update, From, State) ->
-    State1 = maybe_external_update(From, State),
+handle_call(update, From, State0) ->
+    State1 = maybe_external_update(From, State0),
     {noreply, State1};
 
-handle_call({lock, Pid}, _From, State) ->
-    {Reply, State1} = maybe_external_lock(Pid, State),
-    {reply, Reply, State1};
+handle_call({lock, Pid}, _From, State0) ->
+    State1 = maybe_external_lock(Pid, State0),
+    State2 = maybe_reset(State1),
+    {noreply, State2};
 
-handle_call({release_lock, Type, Pid}, _From, State) ->
-    {Reply, State1} = do_release_lock(Type, Pid, State),
-    {reply, Reply, State1};
+handle_call({release_lock, Type, Pid}, From, State0) ->
+    {Reply, State1} = do_release_lock(Type, Pid, State0),
+    gen_server:reply(From, Reply),
+    State2 = maybe_reset(State1),
+    {noreply, State2};
 
 handle_call({get_bucket, Prefixes, Level, Bucket}, _From, State) ->
     Res = hashtree_tree:get_bucket(Prefixes, Level, Bucket, State#state.tree),
@@ -395,11 +400,35 @@ handle_call(
     {reply, ok, State#state{tree=Tree1}}.
 
 
-handle_cast(reset, State0) ->
+handle_cast(reset, #state{built = true, lock = undefined} = State0) ->
+    State1 = do_reset(State0),
+    {stop, normal, State1};
+
+handle_cast(reset, #state{built = true, lock = {internal, _, _}} = State) ->
     _ = lager:info(
-        "Resetting hashtree at node ~p due to user request", [node()]),
-    State = reset_async(State0),
-    {noreply, State};
+        "Scheduling hashtree reset; reason=ongoing_update, "
+        "partition=~p, node=~p",
+        [State#state.partition, node()]
+    ),
+    NewState = schedule_reset(State),
+    {noreply, NewState};
+
+handle_cast(reset, #state{built = true, lock = {external, _, _}} = State) ->
+    _ = lager:info(
+        "Scheduling hashtree reset; reason=locked, "
+        "partition=~p, node=~p",
+        [State#state.partition, node()]
+    ),
+    NewState = schedule_reset(State),
+    {noreply, NewState};
+
+handle_cast(reset, #state{built = false} = State) ->
+    _ = lager:info(
+        "Skipping hashtree reset; reason=not_built, "
+        "partition=~p, node=~p",
+        [State#state.partition, node()]
+    ),
+    {noreply, State#state{reset = false}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -414,7 +443,7 @@ handle_info(
 handle_info(
     {'DOWN', BuildRef, process, _Pid, Reason},
     #state{built=BuildRef} = State) ->
-    lager:error("building tree failed: ~p", [Reason]),
+    _ = lager:error("building tree failed: ~p", [Reason]),
     State1 = build_error(State),
     {noreply, State1};
 
@@ -424,12 +453,13 @@ handle_info(
     {_, State1} = do_release_lock(State),
     {noreply, State1};
 
-handle_info(tick, State) ->
-    schedule_tick(State),
-    State1 = maybe_reset_async(State),
-    State2 = maybe_build_async(State1),
-    State3 = maybe_update_async(State2),
-    {noreply, State3}.
+handle_info({timeout, Ref, tick}, #state{timer = Ref} = State) ->
+    State1 = maybe_reset(State),
+    %% Reset should happen before scheduling tick
+    State2 = schedule_tick(State1),
+    State3 = maybe_build_async(State2),
+    State4 = maybe_update_async(State3),
+    {noreply, State4}.
 
 
 terminate(_Reason, State0) ->
@@ -450,7 +480,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
-init_async(#state{data_root = DataRoot, partition = Partition} = State0) ->
+do_init(#state{data_root = DataRoot, partition = Partition} = State0) ->
     TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
     Tree = hashtree_tree:new(TreeId, [{data_dir, DataRoot}, {num_levels, 2}]),
     TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
@@ -459,20 +489,21 @@ init_async(#state{data_root = DataRoot, partition = Partition} = State0) ->
         built = false,
         build_ts_secs = undefined,
         ttl_secs = TTL,
-        lock = undefined
+        lock = undefined,
+        reset = false
     },
     build_async(State).
 
 
 %% @private
-reset_async(State) ->
-    _ = hashtree_tree:destroy(State#state.tree),
+do_reset(#state{lock = undefined} = State0) ->
+    _ = hashtree_tree:destroy(State0#state.tree),
     _ = lager:info(
-        "Hashtree destroyed; partition=~p, node=~p",
-        [State#state.partition, node()]
+        "Resetting hashtree; partition=~p, node=~p",
+        [State0#state.partition, node()]
     ),
-    schedule_tick(State),
-    init_async(State).
+    State1 = schedule_tick(State0),
+    do_init(State1).
 
 
 %% @private
@@ -494,7 +525,16 @@ compare_async(From, RemoteFun, HandlerFun, HandlerAcc, #state{tree = Tree}) ->
 
 
 %% @private
-maybe_external_update(From, #state{built = true, lock = undefined} = State) ->
+
+
+maybe_external_update(
+    From, #state{built = true, lock = undefined, reset = true} = State) ->
+    gen_server:reply(From, ongoing_update),
+    %% We will reset on next tick
+    State;
+
+maybe_external_update(
+    From, #state{built = true, lock = undefined} = State) ->
     gen_server:reply(From, not_locked),
     State;
 
@@ -513,7 +553,8 @@ maybe_external_update(From, State) ->
 
 
 %% @private
-maybe_update_async(#state{built = true, lock = undefined} = State) ->
+maybe_update_async(
+    #state{built = true, reset = false, lock = undefined} = State) ->
     update_async(State);
 
 maybe_update_async(State) ->
@@ -549,16 +590,24 @@ maybe_build_async(#state{built = false} = State) ->
 maybe_build_async(State) ->
     State.
 
-maybe_reset_async(#state{built = true} = State) ->
+
+%% @private
+maybe_reset(#state{built = true, reset = true, lock = undefined} = State) ->
+    do_reset(State);
+
+maybe_reset(#state{built = true, lock = undefined} = State) ->
     Diff = erlang:system_time(second) - State#state.build_ts_secs,
     case Diff >= State#state.ttl_secs of
         true ->
-            reset_async(State);
+            do_reset(State);
         false ->
             State
     end;
 
-maybe_reset_async(State) ->
+maybe_reset(#state{built = false} = State) ->
+    State#state{reset = false};
+
+maybe_reset(State) ->
     State.
 
 
@@ -608,18 +657,22 @@ build_done(State) ->
 
 %% @private
 build_error(State) ->
-    State#state{built=false}.
+    State#state{built = false}.
 
 
 %% @private
-maybe_external_lock(Pid, #state{lock = undefined, built = true} = State) ->
-    {ok, do_lock(Pid, external, State)};
+maybe_external_lock(From, #state{lock = undefined, built = true} = State) ->
+    NewState = do_lock(From, external, State),
+    gen_server:reply(From, ok),
+    NewState;
 
-maybe_external_lock(_Pid, #state{built = true} = State) ->
-    {locked, State};
+maybe_external_lock(From, #state{built = true} = State) ->
+    gen_server:reply(From, locked),
+    State;
 
-maybe_external_lock(_Pid, State) ->
-    {not_built, State}.
+maybe_external_lock(From, State) ->
+    gen_server:reply(From, not_built),
+    State.
 
 
 %% @private
@@ -647,7 +700,7 @@ do_release_lock(State) ->
 prefix_to_prefix_list(Prefix) when is_binary(Prefix) or is_atom(Prefix) ->
     [Prefix];
 prefix_to_prefix_list({Prefix, SubPrefix}) ->
-    [Prefix,SubPrefix].
+    [Prefix, SubPrefix].
 
 
 %% @private
@@ -655,7 +708,26 @@ prepare_pkey({FullPrefix, Key}) ->
     {prefix_to_prefix_list(FullPrefix), term_to_binary(Key)}.
 
 
+
+%% @private
+schedule_reset(State) ->
+    schedule_tick(State#state{reset = true}).
+
+
 %% @private
 schedule_tick(State) ->
-    TickMs = app_helper:get_env(plum_db, hashtree_timer, 10000),
-    erlang:send_after(TickMs, State#state.id, tick).
+    ok = cancel_timer(State#state.timer),
+    Ms = case State#state.reset of
+        true -> 1000;
+        false -> plum_db_config:get(hashtree_timer)
+    end,
+    Ref = erlang:start_timer(Ms, State#state.id, tick),
+    State#state{timer = Ref}.
+
+
+%% @private
+cancel_timer(undefined) ->
+    ok;
+cancel_timer(Ref) ->
+    _ = erlang:cancel_timer(Ref),
+    ok.
