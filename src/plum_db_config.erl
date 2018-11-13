@@ -44,14 +44,23 @@
 
 init() ->
     Config = application:get_all_env(plum_db),
+    DefaultWriteBufferMin = 4 * 1024 * 1024,
+    DefaultWriteBufferMax = 14 * 1024 * 1024,
     Defaults = #{
+        peer_service => plum_db_partisan_peer_service,
         store_open_retries_delay => 2000,
         store_open_retry_Limit => 30,
         data_exchange_timeout => 60000,
         hashtree_timer => 10000,
         data_dir => "data",
         partitions => erlang:system_info(schedulers),
-        prefixes => []
+        prefixes => [],
+        aae_hashtree_ttl => 7 * 24 * 60 * 60, %% 1 week
+        aae_enabled => true,
+        aae_sha_chunk => 4096,
+        aae_leveldb_opts => [
+            {write_buffer_size_min, DefaultWriteBufferMin}, {write_buffer_size_max, DefaultWriteBufferMax}
+        ]
     },
     Map = maps:merge(Defaults, maps:from_list(Config)),
     maps:fold(fun(K, V, ok) -> set(K, V) end, ok, Map).
