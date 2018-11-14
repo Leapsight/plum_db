@@ -176,9 +176,14 @@ get_object(PKey, State) ->
 
 %% @private
 store({_FullPrefix, _Key} = PKey, Obj, State) ->
-    Hash = plum_db_object:hash(Obj),
-    ok = plum_db_partition_hashtree:insert(
-        State#state.partition, PKey, Hash, false),
+    ok = case plum_db_config:get(aae_enabled) of
+        true ->
+            Hash = plum_db_object:hash(Obj),
+            plum_db_partition_hashtree:insert(
+                State#state.partition, PKey, Hash, false);
+        false ->
+            ok
+    end,
     ok = plum_db_partition_server:put(State#state.partition, PKey, Obj),
     {Obj, State}.
 

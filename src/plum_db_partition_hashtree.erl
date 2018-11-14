@@ -613,7 +613,7 @@ maybe_reset(State) ->
 
 %% @private
 build_async(State) ->
-    case application:get_env(plum_db, aae_enabled, true) of
+    case plum_db_config:get(aae_enabled, true) of
         true ->
             {_Pid, Ref} = spawn_monitor(fun() ->
                 Partition = State#state.partition,
