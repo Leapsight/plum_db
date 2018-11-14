@@ -1236,13 +1236,16 @@ take_iterator(OwnerRef, State) ->
 
 
 %% @private
-close_iterator(Iter, State0) ->
-    case take_iterator(Iter, State0) of
+close_iterator(#partition_iterator{owner_ref = OwnerRef}, State) ->
+    close_iterator(OwnerRef, State);
+
+close_iterator(Ref, State0) when is_reference(Ref) ->
+    case take_iterator(Ref, State0) of
         {#partition_iterator{disk = undefined}, State1} ->
-            _ = erlang:demonitor(Iter#partition_iterator.owner_ref, [flush]),
+            _ = erlang:demonitor(Ref, [flush]),
             State1;
         {#partition_iterator{disk = DbIter}, State1} ->
-            _ = erlang:demonitor(Iter#partition_iterator.owner_ref, [flush]),
+            _ = erlang:demonitor(Ref, [flush]),
             _ = eleveldb:iterator_close(DbIter),
             State1;
         error ->
