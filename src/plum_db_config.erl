@@ -30,6 +30,7 @@
 
 -export([get/1]).
 -export([get/2]).
+-export([set/2]).
 -export([init/0]).
 
 -compile({no_auto_import, [get/1]}).
