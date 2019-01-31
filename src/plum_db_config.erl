@@ -48,6 +48,7 @@ init() ->
     DefaultWriteBufferMin = 4 * 1024 * 1024,
     DefaultWriteBufferMax = 14 * 1024 * 1024,
     Defaults = #{
+        shard_by => prefix,
         peer_service => plum_db_partisan_peer_service,
         store_open_retries_delay => 2000,
         store_open_retry_Limit => 30,

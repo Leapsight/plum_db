@@ -9,7 +9,7 @@
     %% count of trees that have been buit
     local_tree_updated = false      ::  boolean(),
     remote_tree_updated = false     ::  boolean(),
-    %% length of time waited to aqcuire remote lock or update trees
+    %% length of time waited to acquire remote lock or update trees
     timeout                         :: pos_integer()
 }).
 
@@ -48,9 +48,9 @@
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Start an exchange of Cluster Metadata hashtrees between this node
+%% @doc Start an exchange of plum_db hashtrees between this node
 %% and `Peer' for a given `Partition'. `Timeout' is the number of milliseconds
-%% the process will wait to aqcuire the remote lock or to upate both trees.
+%% the process will wait to aqcuire the remote lock or to update both trees.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec start(node(), list() | map()) -> {ok, pid()} | ignore | {error, term()}.
@@ -89,10 +89,10 @@ init([Peer, Opts]) ->
     %% We notify subscribers
     _ = plum_db_events:notify(exchange_started, {self(), Peer}),
 
-    gen_statem:send_event(self(), start),
-
-    %% {ok, acquiring_locks, State, [{next_event, internal, start}]}.
-    {ok, acquiring_locks, State, 0}.
+    %% erlang:send(self(), start),
+    %% In OTP20.3.2 emergency release
+    {ok, acquiring_locks, State, [{next_event, internal, next}]}.
+    %% {ok, acquiring_locks, State, 0}.
 
 
 callback_mode() ->
@@ -120,50 +120,56 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-%% acquiring_locks(internal, start, State) ->
-%%     State0 = reset_state(State),
-%%     case acquire_local_lock(State0) of
-%%         {ok, Partition, State1} ->
-%%             %% get corresponding remote lock
-%%             ok = async_acquire_remote_lock(State1#state.peer, Partition),
-%%             {next_state, acquiring_locks, State1, State1#state.timeout};
-%%         {error, State1} ->
-%%             _ = lager:warning(
-%%                 "Exchange with peer timed out acquiring locks; peer=~p",
-%%                 [State1#state.peer]
-%%             ),
-%%             {stop, normal, State1}
-%%     end;
 
-acquiring_locks(start, _, State) ->
-    #state{partitions = [Partition|_]} = State0 = reset_state(State),
-    case acquire_local_lock(State0) of
-        {ok, State1} ->
+
+acquiring_locks(internal, next, #state{partitions = []} = State) ->
+    %% We finished trying all partitions
+    {stop, normal, State};
+
+acquiring_locks(internal, next, #state{partitions = [H|T]} = State) ->
+    NewState = reset_state(State),
+    case plum_db_partition_hashtree:lock(H) of
+        ok ->
+            _ = lager:debug(
+                "Successfully acquired local lock; partition=~p", [H]),
             %% get corresponding remote lock
-            ok = async_acquire_remote_lock(State1#state.peer, Partition),
-            {next_state, acquiring_locks, State1, State1#state.timeout};
-        {error, State1} ->
-            _ = lager:warning(
-                "Exchange with peer timed out acquiring locks; "
-                "peer=~p, partition=~p",
-                [State1#state.peer, Partition]
-            ),
-            {stop, normal, State1}
+            ok = async_acquire_remote_lock(NewState#state.peer, H),
+            %% We wait for a remote lock event
+            {next_state, acquiring_locks, NewState, NewState#state.timeout};
+        Reason ->
+            _ = lager:debug(
+                "Failed to acquire local lock, skipping partition; "
+                "reason=~p, partition=~p",
+                [Reason, H]),
+            _ = lager:info(
+                "Skipping exchange for partition; "
+                "reason=~p, partition=~p",
+                [Reason, H]),
+            %% We continue with the next partition
+            acquiring_locks(internal, next, NewState#state{partitions = T})
     end;
 
+acquiring_locks(timeout, _, #state{partitions = []} = State) ->
+    %% We finished trying all partitions
+    {stop, normal, State};
+
 acquiring_locks(timeout, _, #state{partitions = [H|T]} = State) ->
-    %% getting remote lock timed out
+    %% We timed out waiting for a remote lock for partition H
     ok = release_local_lock(H),
-    _ = lager:info(
-        "Exchange with peer timed out acquiring locks; peer=~p, partition=~p",
-        [State#state.peer, H]
+    _ = lager:debug(
+        "Failed to acquire remote lock; reason=timeout, partition=~p, peer=~p",
+        [H, State#state.peer]
     ),
-    %% We try again with the remaining partitions
+    %% We try with the remaining partitions
     NewState = State#state{partitions = T},
-    {next_state, acquiring_locks, NewState, 0};
+    {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
 
 acquiring_locks(
     cast, {remote_lock_acquired, P}, #state{partitions = [P|_]} = State) ->
+    _ = lager:debug(
+        "Successfully acquired remote lock; partition=~p, peer=~p, ",
+        [P, State#state.peer]
+    ),
     {next_state, updating_hashtrees, State, [{timeout, 0, start}]};
 
 acquiring_locks(cast, {remote_lock_error, Reason}, State) ->
@@ -171,16 +177,16 @@ acquiring_locks(cast, {remote_lock_error, Reason}, State) ->
     ok = release_local_lock(H),
 
     _ = lager:info(
-        "Failed to acquire remote lock; peer=~p, partition=~p, reason=~p",
-        [State#state.peer, H, Reason]
+        "Failed to acquire remote lock; reason=~p, partition=~p, peer=~p",
+        [Reason,  H, State#state.peer]
     ),
     %% We try again with the remaining partitions
     NewState = State#state{partitions = T},
-    {next_state, acquiring_locks, NewState, 0};
+    {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
 
 acquiring_locks(Type, Content, State) ->
     _ = handle_event(acquiring_locks, Type, Content, State),
-    {next_state, acquiring_locks, State}.
+    {next_state, acquiring_locks, State#state.timeout}.
 
 
 %% -----------------------------------------------------------------------------
@@ -203,7 +209,7 @@ updating_hashtrees(
     ok = release_locks(H, Peer),
     %% We try again with the remaining partitions
     NewState = State#state{partitions = T},
-    {next_state, acquiring_locks, NewState, 0};
+    {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
 
 updating_hashtrees(cast, local_tree_updated, State0) ->
     State1 = State0#state{local_tree_updated = true},
@@ -232,7 +238,7 @@ updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
     ),
     %% We carry on with the remaining partitions
     NewState = State#state{partitions = T},
-    {next_state, acquiring_locks, NewState, 0};
+    {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
 
 updating_hashtrees(Type, Content, State) ->
     _ = handle_event(updating_hashtrees, Type, Content, State),
@@ -298,7 +304,10 @@ exchanging_data(timeout, _, State) ->
         _ ->
             %% We carry on with the remaining partitions
             NewState = State#state{partitions = T},
-            {next_state, acquiring_locks, NewState, 0}
+            {
+                next_state, acquiring_locks, NewState,
+                [{next_event, internal, next}]
+            }
     end;
 
 exchanging_data(Type, Content, State) ->
@@ -313,6 +322,7 @@ exchanging_data(Type, Content, State) ->
 
 
 
+%% @private
 reset_state(State) ->
     State#state{
         local_tree_updated = false,
@@ -328,26 +338,9 @@ handle_event(_, cast, {remote_lock_acquired, Partition}, State) ->
 handle_event(StateLabel, Type, Event, State) ->
     _ = lager:info(
         "Invalid event; state=~p, type=~p, event=~p, state=~p",
-        [Type, Event, StateLabel, State]
+        [StateLabel, Type, Event, State]
     ),
     ok.
-
-
-acquire_local_lock(#state{partitions = [H|T]} = State) ->
-    %% get local lock
-    case plum_db_partition_hashtree:lock(H) of
-        ok ->
-            {ok, State};
-        Reason ->
-            _ = lager:info(
-                "Skipping partition, could not acquire local lock;"
-                " partition=~p, reason=~p",
-                [H, Reason]),
-            acquire_local_lock(State#state{partitions = T})
-    end;
-
-acquire_local_lock(#state{partitions = []} = State) ->
-    {error, State}.
 
 
 %% @private
@@ -371,7 +364,7 @@ release_locks(Partition, Peer) ->
 
 %% @private
 release_local_lock(Partition) ->
-    _ = plum_db_partition_hashtree:release_lock(Partition),
+    ok = plum_db_partition_hashtree:release_lock(Partition),
     ok.
 
 %% @private

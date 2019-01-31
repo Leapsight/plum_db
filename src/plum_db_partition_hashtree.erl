@@ -154,7 +154,7 @@ insert(Partition, PKey, Hash, IfMissing) ->
 prefix_hash(Partition, Prefix) when is_integer(Partition) ->
     prefix_hash(name(Partition), Prefix);
 
-prefix_hash(Server, Prefix) when is_pid(Server); is_atom(Server) ->
+prefix_hash(Server, Prefix) when is_pid(Server) orelse is_atom(Server) ->
     gen_server:call(Server, {prefix_hash, Prefix}, infinity).
 
 
@@ -260,15 +260,12 @@ release_lock(Node, Partition) ->
 %% aqcuiring the lock succeeds and `ok' is returned.
 %% @end
 %% -----------------------------------------------------------------------------
--spec release_lock(node(), plum_db:partition(), pid()) -> ok.
+-spec release_lock(node(), plum_db:partition(), pid()) ->
+    ok | {error, not_locked | not_allowed}.
 
 release_lock(Node, Partition, Pid) ->
-    Type = case node() of
-        Node -> internal;
-        _ -> external
-    end,
     gen_server:call(
-        {name(Partition), Node}, {release_lock, Type, Pid}, infinity).
+        {name(Partition), Node}, {release_lock, external, Pid}, infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -355,11 +352,10 @@ compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
 
 init([Partition, DataRoot]) ->
     Id = name(Partition),
-    State0 = do_init(#state{
+    State = do_init(#state{
         id = Id, data_root = DataRoot, partition = Partition
     }),
-    State1 = schedule_tick(State0),
-    {ok, State1}.
+    {ok, State}.
 
 handle_call({compare, RemoteFun, HandlerFun, HandlerAcc}, From, State) ->
     maybe_compare_async(From, RemoteFun, HandlerFun, HandlerAcc, State),
@@ -369,8 +365,8 @@ handle_call(update, From, State0) ->
     State1 = maybe_external_update(From, State0),
     {noreply, State1};
 
-handle_call({lock, Pid}, _From, State0) ->
-    State1 = maybe_external_lock(Pid, State0),
+handle_call({lock, Pid}, From, State0) ->
+    State1 = maybe_external_lock(Pid, From, State0),
     State2 = maybe_reset(State1),
     {noreply, State2};
 
@@ -404,20 +400,20 @@ handle_cast(reset, #state{built = true, lock = undefined} = State0) ->
     State1 = do_reset(State0),
     {stop, normal, State1};
 
-handle_cast(reset, #state{built = true, lock = {internal, _, _}} = State) ->
+handle_cast(reset, #state{built = true, lock = {internal, _, Pid}} = State) ->
     _ = lager:info(
-        "Scheduling hashtree reset; reason=ongoing_update, "
+        "Postponing hashtree reset; reason=ongoing_update, lock_owner=~p, "
         "partition=~p, node=~p",
-        [State#state.partition, node()]
+        [Pid, State#state.partition, node()]
     ),
     NewState = schedule_reset(State),
     {noreply, NewState};
 
-handle_cast(reset, #state{built = true, lock = {external, _, _}} = State) ->
+handle_cast(reset, #state{built = true, lock = {external, _, Pid}} = State) ->
     _ = lager:info(
-        "Scheduling hashtree reset; reason=locked, "
+        "Postponing hashtree reset; reason=locked, lock_owner=~p, "
         "partition=~p, node=~p",
-        [State#state.partition, node()]
+        [Pid, State#state.partition, node()]
     ),
     NewState = schedule_reset(State),
     {noreply, NewState};
@@ -442,15 +438,16 @@ handle_info(
 
 handle_info(
     {'DOWN', BuildRef, process, _Pid, Reason},
-    #state{built=BuildRef} = State) ->
-    _ = lager:error("building tree failed: ~p", [Reason]),
+    #state{built = BuildRef, partition= P} = State) ->
+    _ = lager:error(
+        "Building tree failed; reason=~p, partition=~p", [Reason, P]),
     State1 = build_error(State),
     {noreply, State1};
 
 handle_info(
-    {'DOWN', LockRef, process, _Pid, _Reason},
-    #state{lock = {_, LockRef, _}} = State) ->
-    {_, State1} = do_release_lock(State),
+    {'DOWN', LockRef, process, Pid, _Reason},
+    #state{lock = {Type, LockRef, _}} = State) ->
+    {_, State1} = do_release_lock(Type, Pid, State),
     {noreply, State1};
 
 handle_info({timeout, Ref, tick}, #state{timer = Ref} = State) ->
@@ -459,7 +456,11 @@ handle_info({timeout, Ref, tick}, #state{timer = Ref} = State) ->
     State2 = schedule_tick(State1),
     State3 = maybe_build_async(State2),
     State4 = maybe_update_async(State3),
-    {noreply, State4}.
+    {noreply, State4};
+
+handle_info(Event, State) ->
+    _ = lager:info("Received unknown event; event=~p", [Event]),
+    {noreply, State}.
 
 
 terminate(_Reason, State0) ->
@@ -492,18 +493,18 @@ do_init(#state{data_root = DataRoot, partition = Partition} = State0) ->
         lock = undefined,
         reset = false
     },
-    build_async(State).
+    NewState = build_async(State),
+    schedule_tick(NewState).
 
 
 %% @private
-do_reset(#state{lock = undefined} = State0) ->
-    _ = hashtree_tree:destroy(State0#state.tree),
+do_reset(#state{lock = undefined} = State) ->
+    _ = hashtree_tree:destroy(State#state.tree),
     _ = lager:info(
         "Resetting hashtree; partition=~p, node=~p",
-        [State0#state.partition, node()]
+        [State#state.partition, node()]
     ),
-    State1 = schedule_tick(State0),
-    do_init(State1).
+    do_init(State).
 
 
 %% @private
@@ -569,16 +570,22 @@ update_async(State) ->
 %% @private
 update_async(From, Lock, #state{tree = Tree} = State) ->
     Tree2 = hashtree_tree:update_snapshot(Tree),
-    Pid = spawn_link(fun() ->
-        hashtree_tree:update_perform(Tree2),
-        case From of
-            undefined -> ok;
-            _ -> gen_server:reply(From, ok)
+    Pid = spawn_link(
+        fun() ->
+            hashtree_tree:update_perform(Tree2),
+            case From of
+                undefined -> ok;
+                _ -> gen_server:reply(From, ok)
+            end
         end
-    end),
+    ),
     State1 = case Lock of
-        true -> do_lock(Pid, internal, State);
-        false -> State
+        true ->
+            %% Lock will be released on process `DOWN` message
+            %% by handle_info/2
+            do_lock(Pid, internal, State);
+        false ->
+            State
     end,
     State1#state{tree=Tree2}.
 
@@ -595,7 +602,7 @@ maybe_build_async(State) ->
 maybe_reset(#state{built = true, reset = true, lock = undefined} = State) ->
     do_reset(State);
 
-maybe_reset(#state{built = true, lock = undefined} = State) ->
+maybe_reset(#state{built = true, reset = false, lock = undefined} = State) ->
     Diff = erlang:system_time(second) - State#state.build_ts_secs,
     case Diff >= State#state.ttl_secs of
         true ->
@@ -661,21 +668,22 @@ build_error(State) ->
 
 
 %% @private
-maybe_external_lock(From, #state{lock = undefined, built = true} = State) ->
-    NewState = do_lock(From, external, State),
+maybe_external_lock(
+    Pid, From, #state{lock = undefined, built = true} = State) ->
+    NewState = do_lock(Pid, external, State),
     gen_server:reply(From, ok),
     NewState;
 
-maybe_external_lock(From, #state{built = true} = State) ->
+maybe_external_lock(_, From, #state{built = true} = State) ->
     gen_server:reply(From, locked),
     State;
 
-maybe_external_lock(From, State) ->
+maybe_external_lock(_, From, State) ->
     gen_server:reply(From, not_built),
     State.
 
 
-%% @private
+%% @privateaybe
 do_lock(Pid, Type, State) ->
     LockRef = monitor(process, Pid),
     State#state{lock = {Type, LockRef, Pid}}.
@@ -684,16 +692,18 @@ do_lock(Pid, Type, State) ->
 %% @private
 do_release_lock(Type, Pid, #state{lock = {Type, LockRef, Pid}} = State) ->
     true = demonitor(LockRef),
-    do_release_lock(State);
+    {ok, State#state{lock = undefined}};
+
+do_release_lock(_, _, #state{lock = undefined} = State) ->
+    {{error, not_locked}, State};
 
 do_release_lock(_, _, State) ->
-    %% Type or Pid mismatch
-    {error, State}.
+    {{error, not_allowed}, State}.
 
 
 %% @private
 do_release_lock(State) ->
-    {ok, State#state{lock = undefined}}.
+    do_release_lock(internal, self(), State).
 
 
 %% @private

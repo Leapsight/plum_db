@@ -226,14 +226,35 @@ start_link() ->
 
 get_partition({{'_', _}, _}) ->
     error(badarg);
+
 get_partition({{_, '_'}, _}) ->
     error(badarg);
+
 get_partition({{_, _} = FP, _}) ->
-    get_partition(FP);
+    get_partition(plum_db_config:get(shard_by), FP);
+
 get_partition({_, _} = FP) ->
-    % partition :: 0..(partition_count() - 1)
+    %% partition :: 0..(partition_count() - 1)
     erlang:phash2(FP, partition_count() - 1).
 
+
+%% -----------------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+get_partition(prefix, {{_, _} = FP, _}) ->
+    get_partition(FP);
+
+get_partition(prefix, {_, _} = FP) ->
+    get_partition(FP);
+
+get_partition(key, {{_, _}, _} = Key) ->
+    %% partition :: 0..(partition_count() - 1)
+    erlang:phash2(Key, partition_count() - 1);
+
+get_partition(undefined, Key) ->
+    get_partition(prefix, Key).
 
 
 
