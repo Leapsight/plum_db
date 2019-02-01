@@ -84,7 +84,7 @@ Do the following on each node to check they now all have the three elements:
 ```
 
 We are folding over the whole database using the full prefix wildcard.
-The following are examples of prefix wilcards:
+The following are examples of prefix wildcards:
 
 * `{'_', '_'}` - matches all full prefixes
 * `{foo, '_'}` - matches all subprefixes of Prefix `foo`
