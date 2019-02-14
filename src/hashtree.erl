@@ -502,9 +502,11 @@ new_segment_store(Opts, State) ->
 
     DefaultWriteBufferMin = 4 * 1024 * 1024,
     DefaultWriteBufferMax = 14 * 1024 * 1024,
-    ConfigVars = get_env(anti_entropy_leveldb_opts,
-                         [{write_buffer_size_min, DefaultWriteBufferMin},
-                          {write_buffer_size_max, DefaultWriteBufferMax}]),
+    Default = [
+        {write_buffer_size_min, DefaultWriteBufferMin},
+        {write_buffer_size_max, DefaultWriteBufferMax}
+    ],
+    ConfigVars = plum_db_config:get(aae_leveldb_opts, Default),
     Config = orddict:from_list(ConfigVars),
 
     %% Use a variable write buffer size to prevent against all buffers being
@@ -535,7 +537,7 @@ hash(X) ->
     sha(term_to_binary(X)).
 
 sha(Bin) ->
-    Chunk = get_env(anti_entropy_sha_chunk, 4096),
+    Chunk = plum_db_config:get(aae_sha_chunk, 4096),
     sha(Chunk, Bin).
 
 sha(Chunk, Bin) ->
@@ -553,10 +555,6 @@ sha(Chunk, Bin, Ctx) ->
             Ctx2 = esha_update(Ctx, Data),
             Ctx2
     end.
-
-get_env(Key, Default) ->
-    CoreEnv = app_helper:get_env(plumtree, Key, Default),
-    app_helper:get_env(riak_kv, Key, CoreEnv).
 
 -spec update_levels(integer(),
                     [{integer(), [{integer(), binary()}]}],

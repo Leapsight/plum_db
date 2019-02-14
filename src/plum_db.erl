@@ -198,13 +198,9 @@
 
 
 
-
-
-
 %% =============================================================================
 %% API
 %% =============================================================================
-
 
 
 
@@ -219,7 +215,8 @@ start_link() ->
 
 %% -----------------------------------------------------------------------------
 %% @private
-%% @doc Returns the server identifier assigned to the FullPrefix of the provided Key
+%% @doc Returns the server identifier assigned to the FullPrefix of the
+%% provided Key
 %% @end
 %% -----------------------------------------------------------------------------
 -spec get_partition(term()) -> partition().

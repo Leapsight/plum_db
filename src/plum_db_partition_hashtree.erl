@@ -92,15 +92,15 @@
 
 %% -----------------------------------------------------------------------------
 %% @doc Starts the process using {@link start_link/1}, passing in the
-%% directory where other cluster data is stored in `data_dir'
+%% directory where other cluster data is stored in `hashtrees_dir'
 %% as the data root.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec start_link(non_neg_integer()) -> {ok, pid()} | ignore | {error, term()}.
 
 start_link(Partition) when is_integer(Partition) ->
-    PRoot = app_helper:get_env(plum_db, data_dir),
-    DataRoot = filename:join([PRoot, "hashtrees", integer_to_list(Partition)]),
+    Dir = plum_db_config:get(hashtrees_dir),
+    DataRoot = filename:join([Dir, integer_to_list(Partition)]),
     Name = name(Partition),
     gen_server:start_link({local, Name}, ?MODULE, [Partition, DataRoot], []).
 

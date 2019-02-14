@@ -115,20 +115,30 @@ get(Key, Default) ->
     plum_db_mochiglobal:get(Key, Default).
 
 
+
+
+
 %% -----------------------------------------------------------------------------
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
 -spec set(Key :: atom() | tuple(), Value :: term()) -> ok.
 
+set(data_dir, Value) ->
+    _ = do_set(db_dir, db_dir(Value)),
+    _ = do_set(hashtrees_dir, hashtrees_dir(Value)),
+    do_set(data_dir, Value);
+
+set(partitions, Value) ->
+    Partitions = validate_partitions(Value),
+    do_set(partitions, Partitions);
+
 set(prefixes, Values) ->
     Prefixes = validate_prefixes(Values),
-    application:set_env(?APP, prefixes, Prefixes),
-    plum_db_mochiglobal:put(prefixes, Prefixes);
+    do_set(prefixes, Prefixes);
 
 set(Key, Value) ->
-    application:set_env(?APP, Key, Value),
-    plum_db_mochiglobal:put(Key, Value).
+    do_set(Key, Value).
 
 
 
@@ -137,6 +147,10 @@ set(Key, Value) ->
 %% PRIVATE
 %% =============================================================================
 
+
+do_set(Key, Value) ->
+    application:set_env(?APP, Key, Value),
+    plum_db_mochiglobal:put(Key, Value).
 
 
 %% @private
@@ -174,3 +188,38 @@ validate_prefixes(L) ->
             throw({invalid_prefix_type, Term})
     end,
     maps:from_list(lists:foldl(Fun, [], L)).
+
+
+%% @private
+db_dir(Value) -> filename:join([Value, "db"]).
+
+
+%% @private
+hashtrees_dir(Value) -> filename:join([Value, "hashtrees"]).
+
+
+%% @private
+validate_partitions(undefined) ->
+    erlang:system_info(schedulers);
+
+validate_partitions(N) when is_integer(N) ->
+    DataDir = get(data_dir),
+    Pattern = filename:join([db_dir(DataDir), "*"]),
+    case filelib:wildcard(Pattern) of
+        [] ->
+            %% We have no previous data, we take the user provided config
+            N;
+        Subdirs when length(Subdirs) =:= N ->
+            length(Subdirs);
+        Subdirs ->
+            %% We already have data in data_dir then
+            %% we should coerce this value to the actual number of partitions
+            M = length(Subdirs),
+            _ = lager:warning(
+                "The number of existing partitions on disk differ from the configuration, ignoring requested value and coercing configuration to the existing number instead; partitions=~p, existing=~p, data_dir=~p",
+                [N, M, DataDir]
+            ),
+            M
+    end.
+
+

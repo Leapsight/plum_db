@@ -582,8 +582,7 @@ init([Name, Partition, Opts]) ->
     process_flag(trap_exit, true),
 
     DataRoot = filename:join([
-        app_helper:get_prop_or_env(data_dir, Opts, plum_db),
-        "db",
+        plum_db_config:get(db_dir),
         integer_to_list(Partition)
     ]),
 
@@ -869,7 +868,7 @@ config_value(Key, Config, Default) ->
 
 %% @private
 open_db(State0) ->
-    RetriesLeft = app_helper:get_env(plum_db, store_open_retry_Limit, 30),
+    RetriesLeft = plum_db_config:get(store_open_retry_Limit),
     open_db(State0, max(1, RetriesLeft), undefined).
 
 
@@ -888,8 +887,7 @@ open_db(State0, RetriesLeft, _) ->
     	{error, {db_open, OpenErr} = Reason} ->
             case lists:prefix("IO error: lock ", OpenErr) of
                 true ->
-                    SleepFor = app_helper:get_env(
-                        plum_db, store_open_retries_delay, 2000),
+                    SleepFor = plum_db_config:get(store_open_retries_delay),
                     _ = lager:debug(
                         "Leveldb backend retrying ~p in ~p ms after error ~s\n",
                         [State0#state.data_root, SleepFor, OpenErr]
