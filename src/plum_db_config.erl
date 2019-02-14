@@ -207,7 +207,7 @@ validate_partitions(N) when is_integer(N) ->
     Pattern = filename:join([db_dir(DataDir), "*"]),
     Subdirs = filelib:wildcard(Pattern),
     case length(Subdirs) of
-        [] ->
+        0 ->
             %% We have no previous data, we take the user provided config
             N;
         N ->
