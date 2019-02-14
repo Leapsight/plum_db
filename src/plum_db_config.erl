@@ -205,16 +205,16 @@ validate_partitions(undefined) ->
 validate_partitions(N) when is_integer(N) ->
     DataDir = get(data_dir),
     Pattern = filename:join([db_dir(DataDir), "*"]),
-    case filelib:wildcard(Pattern) of
+    Subdirs = filelib:wildcard(Pattern),
+    case length(Subdirs) of
         [] ->
             %% We have no previous data, we take the user provided config
             N;
-        Subdirs when length(Subdirs) =:= N ->
-            length(Subdirs);
-        Subdirs ->
+        N ->
+            N;
+        M ->
             %% We already have data in data_dir then
             %% we should coerce this value to the actual number of partitions
-            M = length(Subdirs),
             _ = lager:warning(
                 "The number of existing partitions on disk differ from the configuration, ignoring requested value and coercing configuration to the existing number instead; partitions=~p, existing=~p, data_dir=~p",
                 [N, M, DataDir]
