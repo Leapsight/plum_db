@@ -15,6 +15,7 @@ init_per_suite(Config) ->
     N = 15000,
     {N, Time} = insert(0, N),
     ct:print(
+    ct:pal(
         info, "Insert worker finished in ~p msecs, inserts=~p~n", [Time, N]
     ),
     Config.
@@ -30,14 +31,14 @@ fold_concurrency(_) ->
     Fun = fun
         (Ref, X) when (X >= 0) and (X rem 2 =:= 0) ->
             fun() ->
-                ct:print(info, "Fold worker init", []),
+                ct:pal(info, "Fold worker init", []),
                 T0 = erlang:system_time(millisecond),
                 Fold = fun(E, Acc) -> [E|Acc] end,
                 Opts = [{resolver, lww}],
                 Res = plum_db:fold(Fold, [], {foo, bar}, Opts),
                 T1 = erlang:system_time(millisecond),
                 Diff = T1 -T0,
-                ct:print(
+                ct:pal(
                     info, "Fold worker finished in ~p msecs, results=~p~n", [Diff, length(Res)]
                 ),
                 Me ! promise(Ref, {Res, Diff})
@@ -45,9 +46,9 @@ fold_concurrency(_) ->
         (Ref, X) ->
             fun() ->
                 N = 5000,
-                ct:print(info, "Insert worker init", []),
+                ct:pal(info, "Insert worker init", []),
                 {N, Time} = insert(5000 * X, N),
-                ct:print(
+                ct:pal(
                     info, "Insert worker finished in ~p msecs, inserts=~p~n", [Time, N]
                 ),
                 Me ! promise(Ref, {N, Time})
@@ -63,7 +64,7 @@ fold_concurrency(_) ->
     T0 = erlang:system_time(second),
     _ = [yield(Ref, Timeout) || Ref <- lists:reverse(Refs)],
     T1 = erlang:system_time(second),
-    ct:print("Test finished in ~p secs ~n", [T1 - T0]).
+    ct:pal("Test finished in ~p secs ~n", [T1 - T0]).
 
 
 
