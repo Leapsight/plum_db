@@ -272,7 +272,7 @@ partitions() ->
 -spec partition_count() -> non_neg_integer().
 
 partition_count() ->
-    plum_db_config:get(partitions, 8).
+    plum_db_config:get(partitions).
 
 
 %% -----------------------------------------------------------------------------
@@ -525,6 +525,7 @@ match(FullPrefix, KeyPattern) ->
 
 match(FullPrefix0, KeyPattern, Opts0) ->
     FullPrefix = normalise_prefix(FullPrefix0),
+    %% KeyPattern overrides any match option present in Opts0
     Opts1 = [{match, KeyPattern} | lists:keydelete(match, 1, Opts0)],
     Limit = get_option(limit, Opts1, infinity),
     RemoveTombstones = case get_option(resolver, Opts1, undefined) of
@@ -536,8 +537,8 @@ match(FullPrefix0, KeyPattern, Opts0) ->
     Fun = fun
         ({_, ?TOMBSTONE}, {Acc, Cnt})
         when Cnt =< Limit andalso RemoveTombstones ->
-            {Acc, Cnt + 1};
-        ({Key, ValOrVals}, {Acc, Cnt}) when Cnt =< Limit ->
+            {Acc, Cnt};
+        ({Key, ValOrVals}, {Acc, Cnt}) when Cnt < Limit ->
             {[{Key, ValOrVals} | Acc], Cnt + 1};
         ({Key, _}, {Acc, _}) ->
             Cont = #continuation{
