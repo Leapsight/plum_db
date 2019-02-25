@@ -41,7 +41,8 @@
 	read_opts = []						::	opts(),
     write_opts = []						::	opts(),
     fold_opts = [{fill_cache, false}]	::	opts(),
-    iterators = []                      ::  iterators()
+    iterators = []                      ::  iterators(),
+    helper = undefined                  ::  pid()
 }).
 
 -record(partition_iterator, {
@@ -146,21 +147,22 @@ get(Partition, PKey) when is_integer(Partition) ->
 
 get(Name, {{Prefix, _}, _} = PKey) when is_atom(Name) ->
     case plum_db:prefix_type(Prefix) of
-        Type when (Type == ram) orelse (Type == ram_disk) ->
-            %% TODO during init we would be restoring async the ram_disk
-            %% prefixes, so we need to fallback to disk until the restore is
-            %% done. The problem is that this forces us to try..catch and fall
-            %% back to disk which ads 13 microsecs or check fot the table
-            %% existance which is faster (2 microsecs)
+        Type when Type == ram orelse Type == ramdisk ->
             case ets:lookup(table_name(Name, Type), PKey) of
+                [] when Type == ramdisk ->
+                    %% During init we would be restoring the ram_disk prefixes
+                    %% asynchronously.
+                    %% So we need to fallback to disk until the restore is
+                    %% done.
+                    gen_server:call(Name, {get, PKey, Type}, infinity);
                 [] ->
                     {error, not_found};
                 [{_, Obj}] ->
                     {ok, Obj}
             end;
-        _ ->
+        Type ->
             %% Type is disk or undefined
-            gen_server:call(Name, {get, PKey, disk}, infinity)
+            gen_server:call(Name, {get, PKey, Type}, infinity)
     end.
 
 
@@ -184,8 +186,8 @@ put(Name, {{Prefix, _}, _} = PKey, Value) when is_atom(Name) ->
         ram ->
             true = ets:insert(table_name(Name, ram), {PKey, Value}),
             ok;
-        _ ->
-            gen_server:call(Name, {put, PKey, Value}, infinity)
+        Type ->
+            gen_server:call(Name, {put, PKey, Value, Type}, infinity)
     end.
 
 
@@ -591,7 +593,8 @@ init([Name, Partition, Opts]) ->
             State0 = init_state(Name, Partition, DataRoot, Opts),
             case open_db(State0) of
                 {ok, State1} ->
-                    init_from_db(State1);
+                    State2 = spawn_helper(State1),
+                    {ok, State2};
                 {error, Reason} ->
                     {stop, Reason}
             end;
@@ -599,59 +602,57 @@ init([Name, Partition, Opts]) ->
 		 	{stop, Reason}
     end.
 
-
-
-
-handle_call({get, PKey}, _From, State) ->
-    {{Prefix, _}, _} = PKey,
-
-    Result = case plum_db:prefix_type(Prefix) of
-        Type when (Type == disk) orelse (Type == undefined) ->
-            DbRef = State#state.db_ref,
-            Opts = State#state.read_opts,
-            result(eleveldb:get(DbRef, encode_key(PKey), Opts));
-
-        Type when (Type == ram) orelse (Type == ram_disk) ->
-            %% TODO during init we would be restoring async the ram_disk
-            %% prefixes, so we need to fallback to disk until the restore is
-            %% done. The problem is that this forces us to try..catch and fall
-            %% back to disk which ads 13 microsecs or check fot the table
-            %% existance which is faster (2 microsecs)
-            Tab = case Type of
-                ram -> State#state.ram_tab;
-                ram_disk -> State#state.ram_disk_tab
-            end,
-            case ets:lookup(table_name(Tab, Type), PKey) of
-                [] ->
-                    {error, not_found};
-                [{_, Obj}] ->
-                    {ok, Obj}
-            end
-    end,
-    {reply, Result, State};
-
-handle_call({get, PKey, disk}, _From, State) ->
+handle_call({get, PKey, Type}, _From, State)
+when (Type == disk) orelse (Type == undefined) ->
     DbRef = State#state.db_ref,
     Opts = State#state.read_opts,
     Result = result(eleveldb:get(DbRef, encode_key(PKey), Opts)),
     {reply, Result, State};
 
-handle_call({put, PKey, Value}, _From, State) ->
+handle_call({get, PKey, ram_disk = Type}, _From, State) ->
+    Result = case
+        ets:lookup(table_name(State#state.ram_disk_tab, Type), PKey)
+    of
+        [] ->
+            %% During init we would be restoring the ram_disk prefixes
+            %% asynchronously.
+            %% So we need to fallback to disk until the restore is
+            %% done.
+            DbRef = State#state.db_ref,
+            Opts = State#state.read_opts,
+            result(eleveldb:get(DbRef, encode_key(PKey), Opts));
+        [{_, Obj}] ->
+            {ok, Obj}
+    end,
+    {reply, Result, State};
+
+handle_call({get, PKey, ram = Type}, _From, State) ->
+    %% This is for debugging to support direct gen_server:call calls
+    %% Normally the user will use get/1 that will catch this case
+    %% and resolve using ets directly on the calling process
+    Result = case ets:lookup(table_name(State#state.ram_tab, Type), PKey) of
+        [] ->
+            {error, not_found};
+        [{_, Obj}] ->
+            {ok, Obj}
+    end,
+    {reply, Result, State};
+
+handle_call({put, PKey, Value, ram}, _From, State) ->
+    true = ets:insert(State#state.ram_tab, {PKey, Value}),
+    {reply, ok, State};
+
+handle_call({put, PKey, Value, Type}, _From, State) ->
     DbRef = State#state.db_ref,
     Opts = State#state.write_opts,
-    {{Prefix, _}, _} = PKey,
-    Result = case plum_db:prefix_type(Prefix) of
-        ram ->
-            true = ets:insert(State#state.ram_tab, {PKey, Value}),
-            ok;
+    true = case Type of
         ram_disk ->
-            true = ets:insert(State#state.ram_disk_tab, {PKey, Value}),
-            Actions = [{put, encode_key(PKey), term_to_binary(Value)}],
-            result(eleveldb:write(DbRef, Actions, Opts));
+            ets:insert(State#state.ram_disk_tab, {PKey, Value});
         _ ->
-            Actions = [{put, encode_key(PKey), term_to_binary(Value)}],
-            result(eleveldb:write(DbRef, Actions, Opts))
+            true
     end,
+    Actions = [{put, encode_key(PKey), term_to_binary(Value)}],
+    Result = result(eleveldb:write(DbRef, Actions, Opts)),
     {reply, Result, State};
 
 handle_call({delete, PKey}, _From, State) ->
@@ -743,6 +744,12 @@ handle_call({iterator_close, Iter}, _From, State0) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+handle_info({'EXIT', Pid, normal}, #state{helper = Pid} = State) ->
+
+    {noreply, State#state{helper = undefined}};
+
+handle_info({'EXIT', Pid, Reason}, #state{helper = Pid} = State) ->
+    {stop, Reason, State};
 
 handle_info({'DOWN', Ref, process, _, _}, State0) ->
     State1 = close_iterator(Ref, State0),
@@ -920,55 +927,59 @@ open_db(State0, RetriesLeft, _) ->
 
 
 
+%% @private
+spawn_helper(State) ->
+    Helper = spawn_link(init_ram_disk_prefixes_fun(State)),
+    State#state{helper = Helper}.
 
-%% =============================================================================
-%% PRIVATE: ETS INIT
-%% Borrowed from riak_kv_eleveldb_backend.erl
-%% =============================================================================
+
 
 %% @private
-init_from_db(State) ->
-    _ = lager:info(
-        "Initialising partition ~p",
-        [State#state.partition]
-    ),
-    %% We create the in-memory db copy for ram and ram_disk prefixes
-    Tab = State#state.ram_disk_tab,
-
-    %% TODO do this in a separate process asynchronously
-    %% We load ram_disk prefixes from disk to ram
-    PrefixList = maps:to_list(plum_db:prefixes()),
-    {ok, DbIter} = eleveldb:iterator(State#state.db_ref, State#state.fold_opts),
-
-
-    try
-        Fun = fun
-            ({Prefix, ram_disk}, ok) ->
-                _ = lager:info(
-                    "Loading data from prefix ~p to ram",
-                    [Prefix]
-                ),
-                First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
-                Next = eleveldb:iterator_move(DbIter, First),
-                init_prefix_iterate(
-                    Next, DbIter, First, erlang:byte_size(First), Tab);
-            (_, ok) ->
-                ok
-        end,
-        ok = lists:foldl(Fun, ok, PrefixList),
-        {ok, State}
-    catch
-        ?EXCEPTION(Class, Reason, Stacktrace) ->
-            _ = lager:error(
-                "Error initialisation of partition; partition=~p, class=~p, reason=~p, stacktrace=~p",
-                [State#state.partition, Class, Reason, ?STACKTRACE(Stacktrace)]
-            )
-    after
+init_ram_disk_prefixes_fun(State) ->
+    fun() ->
         _ = lager:info(
-            "Finished initialisation of partition ~p",
+            "Initialising partition ~p",
             [State#state.partition]
         ),
-        eleveldb:iterator_close(DbIter)
+        %% We create the in-memory db copy for ram and ram_disk prefixes
+        Tab = State#state.ram_disk_tab,
+
+        %% We load ram_disk prefixes from disk to ram
+        PrefixList = maps:to_list(plum_db:prefixes()),
+        {ok, DbIter} = eleveldb:iterator(
+            State#state.db_ref, State#state.fold_opts),
+
+
+        try
+            Fun = fun
+                ({Prefix, ram_disk}, ok) ->
+                    _ = lager:info(
+                        "Loading data from prefix ~p to ram",
+                        [Prefix]
+                    ),
+                    First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
+                    Next = eleveldb:iterator_move(DbIter, First),
+                    init_prefix_iterate(
+                        Next, DbIter, First, erlang:byte_size(First), Tab);
+                (_, ok) ->
+                    ok
+            end,
+            lists:foldl(Fun, ok, PrefixList)
+        catch
+            ?EXCEPTION(Class, Reason, Stacktrace) ->
+                _ = lager:error(
+                    "Error while initialising partition; partition=~p, "
+                    "class=~p, reason=~p, stacktrace=~p",
+                    [State#state.partition, Class, Reason, ?STACKTRACE(Stacktrace)]
+                ),
+                erlang:raise(Class, Reason, ?STACKTRACE(Stacktrace))
+        after
+            _ = lager:info(
+                "Finished initialisation of partition ~p",
+                [State#state.partition]
+            ),
+            eleveldb:iterator_close(DbIter)
+        end
     end.
 
 
