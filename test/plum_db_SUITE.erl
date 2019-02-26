@@ -14,7 +14,6 @@ init_per_suite(Config) ->
     application:ensure_all_started(plum_db),
     N = 15000,
     {N, Time} = insert(0, N),
-    ct:print(
     ct:pal(
         info, "Insert worker finished in ~p msecs, inserts=~p~n", [Time, N]
     ),
