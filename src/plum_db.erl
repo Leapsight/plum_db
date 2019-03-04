@@ -958,7 +958,7 @@ prefix_hash(Partition, {_, _} = Prefix) ->
 %% -----------------------------------------------------------------------------
 %% @doc Returns a mapping of prefixes (the first element of a plum_db_prefix()
 %% tuple) to prefix_type() only for those prefixes for which a type was
-%% declared using the application optiont `prefixes`.
+%% declared using the application optiont `prefixes'.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec prefixes() -> prefixes().

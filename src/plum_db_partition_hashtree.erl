@@ -465,6 +465,7 @@ handle_info(Event, State) ->
 
 terminate(_Reason, State0) ->
     {_, State1} = do_release_lock(State0),
+    _ = erlang:cancel_timer(State1#state.timer),
     hashtree_tree:destroy(State1#state.tree),
     ok.
 
@@ -683,7 +684,7 @@ maybe_external_lock(_, From, State) ->
     State.
 
 
-%% @privateaybe
+%% @private
 do_lock(Pid, Type, State) ->
     LockRef = monitor(process, Pid),
     State#state{lock = {Type, LockRef, Pid}}.
