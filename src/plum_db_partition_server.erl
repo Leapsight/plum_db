@@ -609,9 +609,9 @@ when (Type == disk) orelse (Type == undefined) ->
     Result = result(eleveldb:get(DbRef, encode_key(PKey), Opts)),
     {reply, Result, State};
 
-handle_call({get, PKey, ram_disk = Type}, _From, State) ->
+handle_call({get, PKey, ram_disk}, _From, State) ->
     Result = case
-        ets:lookup(table_name(State#state.ram_disk_tab, Type), PKey)
+        ets:lookup(State#state.ram_disk_tab, PKey)
     of
         [] ->
             %% During init we would be restoring the ram_disk prefixes
@@ -626,11 +626,11 @@ handle_call({get, PKey, ram_disk = Type}, _From, State) ->
     end,
     {reply, Result, State};
 
-handle_call({get, PKey, ram = Type}, _From, State) ->
+handle_call({get, PKey, ram}, _From, State) ->
     %% This is for debugging to support direct gen_server:call calls
     %% Normally the user will use get/1 that will catch this case
     %% and resolve using ets directly on the calling process
-    Result = case ets:lookup(table_name(State#state.ram_tab, Type), PKey) of
+    Result = case ets:lookup(State#state.ram_tab, PKey) of
         [] ->
             {error, not_found};
         [{_, Obj}] ->
@@ -1011,11 +1011,11 @@ init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab) ->
 
 
 %% @private
-table_name(#partition_iterator{} = Iter, ram) ->
-    Iter#partition_iterator.ram_tab;
+table_name(#partition_iterator{ram_tab = Tab}, ram) ->
+    Tab;
 
-table_name(#partition_iterator{} = Iter, ram_disk) ->
-    Iter#partition_iterator.ram_disk_tab;
+table_name(#partition_iterator{ram_disk_tab = Tab}, ram_disk) ->
+    Tab;
 
 table_name(Name, ram) when is_atom(Name) ->
     list_to_atom(atom_to_list(Name) ++ "_ram");
