@@ -5,7 +5,7 @@
 %% alternately be assigned as a byte count via leveldb.maximum_memory
 %% instead.
 %% @see leveldb.maximum_memory
-{mapping, "db.maximum_memory.percent", "eleveldb.total_leveldb_mem_percent", [
+{mapping, "db.maximum_memory.percent", "rocksdb.total_leveldb_mem_percent", [
   {default, "50"},
   {datatype, integer}
 ]}.
@@ -16,7 +16,7 @@
 %% alternately be assigned as percentage of total server memory via
 %% leveldb.maximum_memory.percent.
 %% @see leveldb.maximum_memory.percent
-{mapping, "db.maximum_memory", "eleveldb.total_leveldb_mem", [
+{mapping, "db.maximum_memory", "rocksdb.total_leveldb_mem", [
   {datatype, bytesize},
   hidden
 ]}.
@@ -24,7 +24,7 @@
 %% @doc Whether LevelDB will flush after every write. Note: If you are
 %% familiar with fsync, this is analagous to calling fsync after every
 %% write.
-{mapping, "db.sync_on_write", "eleveldb.sync", [
+{mapping, "db.sync_on_write", "rocksdb.sync", [
   {default, off},
   {datatype, flag},
   hidden
@@ -35,7 +35,7 @@
 %% VMs on a machine with limited physical memory.  Do NOT use this
 %% option if making performance measurements.  This option overwrites
 %% values given to write_buffer_size_min and write_buffer_size_max.
-{mapping, "db.limited_developer_mem", "eleveldb.limited_developer_mem", [
+{mapping, "db.limited_developer_mem", "rocksdb.limited_developer_mem", [
   {default, off},
   {datatype, flag},
   hidden
@@ -48,14 +48,14 @@
 %% size is somewhere between write_buffer_size_min and
 %% write_buffer_size_max.
 %% @see leveldb.sync
-{mapping, "db.write_buffer_size_min", "eleveldb.write_buffer_size_min", [
+{mapping, "db.write_buffer_size_min", "rocksdb.write_buffer_size_min", [
   {default, "30MB"},
   {datatype, bytesize},
   hidden
 ]}.
 
 %% @see leveldb.write_buffer_size_min
-{mapping, "db.write_buffer_size_max", "eleveldb.write_buffer_size_max", [
+{mapping, "db.write_buffer_size_max", "rocksdb.write_buffer_size_max", [
   {default, "60MB"},
   {datatype, bytesize},
   hidden
@@ -66,7 +66,7 @@
 %% are destined to not find the requested key. The Bloom filter
 %% typically increases the size of an .sst table file by about
 %% 2%.
-{mapping, "db.bloomfilter", "eleveldb.use_bloomfilter", [
+{mapping, "db.bloomfilter", "rocksdb.use_bloomfilter", [
   {default, on},
   {datatype, flag},
   hidden
@@ -76,7 +76,7 @@
 %% released in favor of the page cache.  This has no impact with
 %% regard to release in favor of file cache.  The value is per
 %% vnode.
-{mapping, "db.block_cache_threshold", "eleveldb.block_cache_threshold", [
+{mapping, "db.block_cache_threshold", "rocksdb.block_cache_threshold", [
   {default, "32MB"},
   {datatype, bytesize},
   hidden
@@ -85,7 +85,7 @@
 %% @doc Defines the size threshold for a block / chunk of data within
 %% one .sst table file. Each new block gets an index entry in the .sst
 %% table file's master index.
-{mapping, "db.block.size", "eleveldb.sst_block_size", [
+{mapping, "db.block.size", "rocksdb.sst_block_size", [
   {default, "4KB"},
   {datatype, bytesize},
   hidden
@@ -94,7 +94,7 @@
 %% @doc Defines the key count threshold for a new key entry in the key
 %% index for a block. Most deployments should leave this parameter
 %% alone.
-{mapping, "db.block.restart_interval", "eleveldb.block_restart_interval", [
+{mapping, "db.block.restart_interval", "rocksdb.block_restart_interval", [
   {default, 16},
   {datatype, integer},
   hidden
@@ -106,7 +106,7 @@
 %% table file.  Value of zero disables the underlying dynamic
 %% block_size feature.
 %% @see leveldb.block.size
-{mapping, "db.block.size_steps", "eleveldb.block_size_steps", [
+{mapping, "db.block.size_steps", "rocksdb.block_size_steps", [
   {default, 16},
   {datatype, integer},
   hidden
@@ -114,7 +114,7 @@
 
 %% @doc Enables or disables the verification of the data fetched from
 %% LevelDB against internal checksums.
-{mapping, "db.verify_checksums", "eleveldb.verify_checksums", [
+{mapping, "db.verify_checksums", "rocksdb.verify_checksums", [
   {default, on},
   {datatype, flag},
   hidden
@@ -122,14 +122,14 @@
 
 %% @doc Enables or disables the verification of LevelDB data during
 %% compaction.
-{mapping, "db.verify_compaction", "eleveldb.verify_compaction", [
+{mapping, "db.verify_compaction", "rocksdb.verify_compaction", [
   {default, on},
   {datatype, flag},
   hidden
 ]}.
 
 %% @doc The number of worker threads performing LevelDB operations.
-{mapping, "db.threads", "eleveldb.eleveldb_threads", [
+{mapping, "db.threads", "rocksdb.rocksdb_threads", [
   {default, 71},
   {datatype, integer},
   hidden
@@ -138,7 +138,7 @@
 %% @doc Option to override LevelDB's use of fadvise(DONTNEED) with
 %% fadvise(WILLNEED) instead.  WILLNEED can reduce disk activity on
 %% systems where physical memory exceeds the database size.
-{mapping, "db.fadvise_willneed", "eleveldb.fadvise_willneed", [
+{mapping, "db.fadvise_willneed", "rocksdb.fadvise_willneed", [
   {default, false},
   {datatype, {enum, [true, false]}},
   hidden
@@ -149,7 +149,7 @@
 %% latency but increase overall disk activity.  Option can be
 %% changed at any time, but will not impact data on disk until
 %% next time a file requires compaction.
-{mapping, "db.compression", "eleveldb.compression", [
+{mapping, "db.compression", "rocksdb.compression", [
   {default, on},
   {datatype, flag}
 ]}.
@@ -158,13 +158,13 @@
 %% original compression supplied for leveldb.  lz4 is new
 %% algorithm that compresses to similar volume but averages twice
 %% as fast on writes and four times as fast on reads.
-{mapping, "db.compression.algorithm", "eleveldb.compression", [
+{mapping, "db.compression.algorithm", "rocksdb.compression", [
   {new_conf_value, lz4},
   {datatype, {enum, [snappy, lz4]}}
 ]}.
 
 {translation,
- "eleveldb.compression",
+ "rocksdb.compression",
  fun(Conf) ->
   Setting = cuttlefish:conf_get("db.compression", Conf),
     case Setting of
@@ -178,14 +178,14 @@
 %% @doc Controls when a background compaction initiates solely
 %% due to the number of delete tombstones within an individual
 %% .sst table file.  Value of 'off' disables the feature.
-{mapping, "db.compaction.trigger.tombstone_count", "eleveldb.delete_threshold", [
+{mapping, "db.compaction.trigger.tombstone_count", "rocksdb.delete_threshold", [
   {default, 1000},
   {datatype, [integer, {atom, off}]},
   hidden
 ]}.
 
 {translation,
- "eleveldb.delete_threshold",
+ "rocksdb.delete_threshold",
  fun(Conf) ->
    case cuttlefish:conf_get("db.compaction.trigger.tombstone_count", Conf) of
        off -> 0;
@@ -206,7 +206,7 @@
 %% an unexpected state.
 %% @see leveldb.tiered.mounts.fast
 %% @see leveldb.tiered.mounts.slow
-{mapping, "db.tiered", "eleveldb.tiered_slow_level", [
+{mapping, "db.tiered", "rocksdb.tiered_slow_level", [
   {default, off},
   {datatype, [
     {atom, off},
@@ -220,7 +220,7 @@
   hidden
 ]}.
 
-{translation, "eleveldb.tiered_slow_level",
+{translation, "rocksdb.tiered_slow_level",
  fun(Conf) ->
     case cuttlefish:conf_get("db.tiered", Conf) of
         off -> 0;
@@ -230,13 +230,13 @@
 }.
 
 %% @see leveldb.tiered
-{mapping, "db.tiered.path.fast", "eleveldb.tiered_fast_prefix", [
+{mapping, "db.tiered.path.fast", "rocksdb.tiered_fast_prefix", [
   {datatype, directory},
   hidden
 ]}.
 
 %% @see leveldb.tiered
-{mapping, "db.tiered.path.slow", "eleveldb.tiered_slow_prefix", [
+{mapping, "db.tiered.path.slow", "rocksdb.tiered_slow_prefix", [
   {datatype, directory},
   hidden
 ]}.
@@ -246,7 +246,7 @@
 %% database close.  The list is used on the next open to pre-populate
 %% the cache.  This typically eliminates heavy latencies associated
 %% with .sst files opening for early user requests.
-{mapping, "db.cache_object_warming", "eleveldb.cache_object_warming", [
+{mapping, "db.cache_object_warming", "rocksdb.cache_object_warming", [
   {default, true},
   {datatype, {enum, [true, false]}},
   hidden
@@ -255,7 +255,7 @@
 %% @doc Enable global expiry.  All leveldb databases / vnodes
 %% will use same retention_time and/or whole_file_expiry settings.
 %% Settings are unique for each leveldb instances in multi_backend.
-{mapping, "db.expiration", "eleveldb.expiry_enabled", [
+{mapping, "db.expiration", "rocksdb.expiry_enabled", [
   {default, off},
   {datatype, flag},
   hidden
@@ -264,7 +264,7 @@
 %% @doc Minutes until object expires.  Gives number of minutes
 %% a stored key/value will stay within the database before automatic
 %% deletion.  Set to unlimited to disable age based expiry.
-{mapping, "db.expiration.retention_time", "eleveldb.expiry_minutes", [
+{mapping, "db.expiration.retention_time", "rocksdb.expiry_minutes", [
   {default, unlimited},
   {datatype, [{duration, m}, {atom, unlimited}]},
   hidden
@@ -274,7 +274,7 @@
 %% @doc Expire entire .sst table file.  Authorizes leveldb to
 %% eliminate entire files that contain expired data (delete files
 %% instead of removing expired key/values during compaction).
-{mapping, "db.expiration.mode", "eleveldb.whole_file_expiry", [
+{mapping, "db.expiration.mode", "rocksdb.whole_file_expiry", [
   {default, whole_file},
   {datatype, {flag, whole_file, normal}},
   hidden

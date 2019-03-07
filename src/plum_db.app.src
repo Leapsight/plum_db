@@ -15,8 +15,9 @@
         lager,
         partisan,
         plumtree,
-        eleveldb,
+        rocksdb,
         sext,
+        utils,
         gproc
 
     ]},

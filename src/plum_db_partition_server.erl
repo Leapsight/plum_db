@@ -32,7 +32,7 @@
 -record(state, {
     name                                ::  atom(),
     partition                           ::  non_neg_integer(),
-    db_ref 								::	eleveldb:db_ref() | undefined,
+    db_ref 								::	rocksdb:db_handle() | undefined,
     ram_tab                             ::  atom(),
     ram_disk_tab                        ::  atom(),
 	config = []							::	opts(),
@@ -57,7 +57,7 @@
     disk_done = true        ::  boolean(),
     ram_disk_done = true    ::  boolean(),
     ram_done = true         ::  boolean(),
-    disk                    ::  eleveldb:itr_ref() | undefined,
+    disk                    ::  rocksdb:itr_handle() | undefined,
     ram                     ::  key | {cont, any()} | undefined,
     ram_disk                ::  key | {cont, any()} | undefined,
     ram_tab                 ::  atom(),
@@ -335,7 +335,7 @@ iterator_move(#partition_iterator{disk_done = false} = Iter, Action) ->
 
     DbIter = Iter#partition_iterator.disk,
 
-    case eleveldb:iterator_move(DbIter, eleveldb_action(Action)) of
+    case rocksdb:iterator_move(DbIter, rocksdb_action(Action)) of
         {ok, K} ->
             NewIter = Iter#partition_iterator{prev_key = K},
             case matches_key(K, Iter) of
@@ -358,7 +358,7 @@ iterator_move(#partition_iterator{disk_done = false} = Iter, Action) ->
             end;
 
         {error, Reason}  ->
-            %% No more data in eleveldb, maybe we continue with ets
+            %% No more data in rocksdb, maybe we continue with ets
             case next_iterator(disk, Iter) of
                 undefined ->
                     {error, Reason, Iter};
@@ -469,7 +469,7 @@ iterator_move(Type, key, Iter, prev) ->
 
     case ets:prev(Tab, Iter#partition_iterator.prev_key) of
         ?EOT ->
-            %% No more data in ets, maybe we continue with eleveldb
+            %% No more data in ets, maybe we continue with rocksdb
             case prev_iterator(Type, Iter) of
                 undefined ->
                     {error, invalid_iterator, Iter};
@@ -606,7 +606,7 @@ handle_call({get, PKey, Type}, _From, State)
 when (Type == disk) orelse (Type == undefined) ->
     DbRef = State#state.db_ref,
     Opts = State#state.read_opts,
-    Result = result(eleveldb:get(DbRef, encode_key(PKey), Opts)),
+    Result = result(rocksdb:get(DbRef, encode_key(PKey), Opts)),
     {reply, Result, State};
 
 handle_call({get, PKey, ram_disk}, _From, State) ->
@@ -620,7 +620,7 @@ handle_call({get, PKey, ram_disk}, _From, State) ->
             %% done.
             DbRef = State#state.db_ref,
             Opts = State#state.read_opts,
-            result(eleveldb:get(DbRef, encode_key(PKey), Opts));
+            result(rocksdb:get(DbRef, encode_key(PKey), Opts));
         [{_, Obj}] ->
             {ok, Obj}
     end,
@@ -652,7 +652,7 @@ handle_call({put, PKey, Value, Type}, _From, State) ->
             true
     end,
     Actions = [{put, encode_key(PKey), term_to_binary(Value)}],
-    Result = result(eleveldb:write(DbRef, Actions, Opts)),
+    Result = result(rocksdb:write(DbRef, Actions, Opts)),
     {reply, Result, State};
 
 handle_call({delete, PKey}, _From, State) ->
@@ -666,32 +666,27 @@ handle_call({delete, PKey}, _From, State) ->
         ram_disk ->
             true = ets:delete(State#state.ram_disk_tab, PKey),
             Actions = [{delete, encode_key(PKey)}],
-            result(eleveldb:write(DbRef, Actions, Opts));
+            result(rocksdb:write(DbRef, Actions, Opts));
         _ ->
             Actions = [{delete, encode_key(PKey)}],
-            result(eleveldb:write(DbRef, Actions, Opts))
+            result(rocksdb:write(DbRef, Actions, Opts))
     end,
     {reply, Result, State};
 
 handle_call(byte_size, _From, State) ->
-    DbRef = State#state.db_ref,
+
     Ram = ets:info(State#state.ram_tab, memory),
     RamDisk = ets:info(State#state.ram_disk_tab, memory),
     Ets = (Ram + RamDisk) * erlang:system_info(wordsize),
-
-    try eleveldb:status(DbRef, <<"leveldb.total-bytes">>) of
-        {ok, Bin} ->
-            {reply, binary_to_integer(Bin) + Ets, State}
-    catch
-        error:_ ->
-            {reply, Ets, State}
-    end;
+    %% TODO get rocksdb size
+    %% DbRef = State#state.db_ref,
+    {reply, Ets, State};
 
 handle_call(is_empty, _From, State) ->
     DbRef = State#state.db_ref,
     Ram = ets:info(State#state.ram_tab, size),
     RamDisk = ets:info(State#state.ram_disk_tab, size),
-    Result = eleveldb:is_empty(DbRef) andalso (Ram + RamDisk) == 0,
+    Result = rocksdb:is_empty(DbRef) andalso (Ram + RamDisk) == 0,
     {reply, Result, State};
 
 handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
@@ -765,8 +760,8 @@ terminate(_Reason, State) ->
         close_iterator(Iter, Acc)
     end,
     _ = lists:foldl(Fun, State, State#state.iterators),
-    %% Close eleveldb
-    catch eleveldb:close(State#state.db_ref),
+    %% Close rocksdb
+    catch rocksdb:close(State#state.db_ref),
     ok.
 
 
@@ -784,17 +779,17 @@ code_change(_OldVsn, State, _Extra) ->
 %% @private
 init_state(Name, Partition, DataRoot, Config) ->
     %% Merge the proplist passed in from Config with any values specified by the
-    %% eleveldb app level; precedence is given to the Config.
+    %% rocksdb app level; precedence is given to the Config.
     MergedConfig = orddict:merge(
         fun(_K, VLocal, _VGlobal) -> VLocal end,
         orddict:from_list(Config), % Local
-        orddict:from_list(application:get_all_env(eleveldb))), % Global
+        orddict:from_list(application:get_all_env(rocksdb))), % Global
 
     %% Use a variable write buffer size in order to reduce the number
-    %% of vnodes that try to kick off compaction at the same time
+    %% of partition servers that try to kick off compaction at the same time
     %% under heavy uniform load...
     WriteBufferMin = config_value(
-        write_buffer_size_min, MergedConfig, 30 * 1024 * 1024),
+        min_write_buffer_size_min, MergedConfig, 30 * 1024 * 1024),
     WriteBufferMax = config_value(
         write_buffer_size_max, MergedConfig, 60 * 1024 * 1024),
     WriteBufferSize = WriteBufferMin + rand:uniform(
@@ -808,10 +803,12 @@ init_state(Name, Partition, DataRoot, Config) ->
         orddict:store(create_if_missing, true, MergedConfig)),
 
     %% Parse out the open/read/write options
-    {OpenOpts, _BadOpenOpts} = eleveldb:validate_options(open, FinalConfig),
-    {ReadOpts, _BadReadOpts} = eleveldb:validate_options(read, FinalConfig),
-    {WriteOpts, _BadWriteOpts} = eleveldb:validate_options(write, FinalConfig),
-
+    %% {OpenOpts, _BadOpenOpts} = eleveldb:validate_options(open, FinalConfig),
+    %% {ReadOpts, _BadReadOpts} = eleveldb:validate_options(read, FinalConfig),
+    %% {WriteOpts, _BadWriteOpts} = eleveldb:validate_options(write, FinalConfig),
+    OpenOpts = FinalConfig,
+    ReadOpts = FinalConfig,
+    WriteOpts = FinalConfig,
     %% Use read options for folding, but FORCE fill_cache to false
     FoldOpts = lists:keystore(fill_cache, 1, ReadOpts, {fill_cache, false}),
 
@@ -884,19 +881,19 @@ open_db(_State0, 0, LastError) ->
     {error, LastError};
 
 open_db(State0, RetriesLeft, _) ->
-    case eleveldb:open(State0#state.data_root, State0#state.open_opts) of
+    case rocksdb:open(State0#state.data_root, State0#state.open_opts) of
         {ok, Ref} ->
             {ok, State0#state{db_ref = Ref}};
         %% Check specifically for lock error, this can be caused if
         %% a crashed vnode takes some time to flush leveldb information
-        %% out to disk.  The process is gone, but the NIF resource cleanup
+        %% out to disk.The process is gone, but the NIF resource cleanup
         %% may not have completed.
     	{error, {db_open, OpenErr} = Reason} ->
             case lists:prefix("IO error: lock ", OpenErr) of
                 true ->
                     SleepFor = plum_db_config:get(store_open_retries_delay),
                     _ = lager:debug(
-                        "Leveldb backend retrying ~p in ~p ms after error ~s\n",
+                        "Rocksdb backend retrying ~p in ~p ms after error ~s\n",
                         [State0#state.data_root, SleepFor, OpenErr]
                     ),
                     timer:sleep(SleepFor),
@@ -905,14 +902,14 @@ open_db(State0, RetriesLeft, _) ->
                     case lists:prefix("Corruption", OpenErr) of
                         true ->
                             _ = lager:info(
-                                "Starting repair of corrupted leveldb store; "
+                                "Starting repair of corrupted rocksdb store; "
                                 "data_root=~p, reason=~p",
                                 [State0#state.data_root, OpenErr]
                             ),
-                            _ = eleveldb:repair(
+                            _ = rocksdb:repair(
                                 State0#state.data_root, State0#state.open_opts),
                             _ = lager:info(
-                                "Finished repair of corrupted leveldb store; "
+                                "Finished repair of corrupted rocksdb store; "
                                 "data_root=~p, reason=~p",
                                 [State0#state.data_root, OpenErr]
                             ),
@@ -946,7 +943,7 @@ init_ram_disk_prefixes_fun(State) ->
 
         %% We load ram_disk prefixes from disk to ram
         PrefixList = maps:to_list(plum_db:prefixes()),
-        {ok, DbIter} = eleveldb:iterator(
+        {ok, DbIter} = rocksdb:iterator(
             State#state.db_ref, State#state.fold_opts),
 
 
@@ -958,7 +955,7 @@ init_ram_disk_prefixes_fun(State) ->
                         [Prefix]
                     ),
                     First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
-                    Next = eleveldb:iterator_move(DbIter, First),
+                    Next = rocksdb:iterator_move(DbIter, First),
                     init_prefix_iterate(
                         Next, DbIter, First, erlang:byte_size(First), Tab);
                 (_, ok) ->
@@ -978,7 +975,7 @@ init_ram_disk_prefixes_fun(State) ->
                 "Finished initialisation of partition ~p",
                 [State#state.partition]
             ),
-            eleveldb:iterator_close(DbIter)
+            rocksdb:iterator_close(DbIter)
         end
     end.
 
@@ -994,7 +991,7 @@ init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab) ->
             %% Element is {{P, K}, MetadataObj}
             PKey = decode_key(K),
             true = ets:insert(Tab, {PKey, binary_to_term(V)}),
-            Next = eleveldb:iterator_move(DbIter, prefetch),
+            Next = rocksdb:iterator_move(DbIter, prefetch),
             init_prefix_iterate(Next, DbIter, BinPrefix, BPSize, Tab);
         _ ->
             %% We have no more matches in this Prefix
@@ -1076,27 +1073,27 @@ prev_iterator(disk, _) ->
 
 
 %% @private
-eleveldb_action({?WILDCARD, _}) ->
+rocksdb_action({?WILDCARD, _}) ->
     first;
 
-eleveldb_action({{?WILDCARD, _}, _}) ->
+rocksdb_action({{?WILDCARD, _}, _}) ->
     first;
 
-eleveldb_action({{_, _}, _} = PKey) ->
+rocksdb_action({{_, _}, _} = PKey) ->
     sext:prefix(PKey);
 
-eleveldb_action({_, _} = FullPrefix) ->
-    eleveldb_action({{_, _} = FullPrefix, ?WILDCARD});
+rocksdb_action({_, _} = FullPrefix) ->
+    rocksdb_action({{_, _} = FullPrefix, ?WILDCARD});
 
-eleveldb_action(first) ->
+rocksdb_action(first) ->
     first;
-eleveldb_action(next) ->
+rocksdb_action(next) ->
     next;
-eleveldb_action(prev) ->
+rocksdb_action(prev) ->
     prev;
-eleveldb_action(prefetch) ->
+rocksdb_action(prefetch) ->
     prefetch;
-eleveldb_action(prefetch_stop) ->
+rocksdb_action(prefetch_stop) ->
     prefetch_stop.
 
 
@@ -1185,9 +1182,9 @@ set_disk_iterator(#partition_iterator{} = PartIter0, State) ->
 
     {ok, DbIter} = case KeysOnly of
         true ->
-            eleveldb:iterator(DbRef, Opts, keys_only);
+            rocksdb:iterator(DbRef, Opts, keys_only);
         false ->
-            eleveldb:iterator(DbRef, Opts)
+            rocksdb:iterator(DbRef, Opts)
     end,
 
     PartIter0#partition_iterator{
@@ -1255,7 +1252,7 @@ close_iterator(Ref, State0) when is_reference(Ref) ->
             State1;
         {#partition_iterator{disk = DbIter}, State1} ->
             _ = erlang:demonitor(Ref, [flush]),
-            _ = eleveldb:iterator_close(DbIter),
+            _ = rocksdb:iterator_close(DbIter),
             State1;
         error ->
             State0
