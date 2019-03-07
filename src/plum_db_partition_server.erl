@@ -1018,10 +1018,10 @@ table_name(#partition_iterator{} = Iter, ram_disk) ->
     Iter#partition_iterator.ram_disk_tab;
 
 table_name(Name, ram) when is_atom(Name) ->
-    list_to_existing_atom(atom_to_list(Name) ++ "_ram");
+    list_to_atom(atom_to_list(Name) ++ "_ram");
 
 table_name(Name, ram_disk) when is_atom(Name) ->
-    list_to_existing_atom(atom_to_list(Name) ++ "_ram_disk");
+    list_to_atom(atom_to_list(Name) ++ "_ram_disk");
 
 table_name(N, ram) when is_integer(N) ->
     list_to_atom(
