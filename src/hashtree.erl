@@ -695,6 +695,7 @@ new_segment_store(Opts, State) ->
         undefined ->
             Root = "/tmp/anti/level",
             <<P:128/integer>> = md5(term_to_binary({Now, make_ref()})),
+                {erlang:timestamp(), make_ref()})),
             filename:join(Root, integer_to_list(P));
         SegmentPath ->
             SegmentPath
