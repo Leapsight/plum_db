@@ -66,7 +66,7 @@ start_link(Id) ->
 %% -----------------------------------------------------------------------------
 %% @private
 name(Id) ->
-    list_to_atom("plum_db_partition_" ++ integer_to_list(Id) ++ "_worker").
+    list_to_atom("plum_db_partition_worker_" ++ integer_to_list(Id)).
 
 
 
@@ -176,6 +176,9 @@ get_object(PKey, State) ->
 
 %% @private
 store({_FullPrefix, _Key} = PKey, Obj, State) ->
+
+    ok = plum_db_partition_server:put(State#state.partition, PKey, Obj),
+
     ok = case plum_db_config:get(aae_enabled) of
         true ->
             Hash = plum_db_object:hash(Obj),
@@ -184,7 +187,7 @@ store({_FullPrefix, _Key} = PKey, Obj, State) ->
         false ->
             ok
     end,
-    ok = plum_db_partition_server:put(State#state.partition, PKey, Obj),
+
     {Obj, State}.
 
 

@@ -259,11 +259,15 @@ close_iterator(Itr) ->
 
 -spec destroy(string() | hashtree()) -> ok | hashtree().
 destroy(Path) when is_list(Path) ->
-    ok = rocksdb:destroy(Path, []);
+    _ = lager:debug("Destroying Rocksdb instance; path=~p", [Path]),
+    _ = rocksdb:destroy(Path, []),
+    ok;
+
 destroy(State) ->
     %% Assumption: close was already called on all hashtrees that
-    %%             use this LevelDB instance,
-    ok = rocksdb:destroy(State#state.path, []),
+    %% use this RocksDB instance,
+    _ = lager:debug("Destroying Rocksdb instance; path=~p", [State#state.path]),
+    _ = rocksdb:destroy(State#state.path, []),
     State.
 
 -spec insert(binary(), binary(), hashtree()) -> hashtree().
@@ -492,13 +496,14 @@ set_bucket(Level, Bucket, Val, State) ->
 -spec new_segment_store(proplist(), hashtree()) -> hashtree().
 new_segment_store(Opts, State) ->
     DataDir = case proplists:get_value(segment_path, Opts) of
-                  undefined ->
-                      Root = "/tmp/anti/level",
-                      <<P:128/integer>> = md5(term_to_binary({erlang:timestamp(), make_ref()})),
-                      filename:join(Root, integer_to_list(P));
-                  SegmentPath ->
-                      SegmentPath
-              end,
+        undefined ->
+            Root = "/tmp/anti/level",
+            <<P:128/integer>> = md5(term_to_binary(
+                {erlang:timestamp(), make_ref()})),
+            filename:join(Root, integer_to_list(P));
+        SegmentPath ->
+            SegmentPath
+    end,
 
     DefaultWriteBufferMin = 4 * 1024 * 1024,
     DefaultWriteBufferMax = 14 * 1024 * 1024,
@@ -516,16 +521,16 @@ new_segment_store(Opts, State) ->
     {Offset, _} = rand:uniform_s(1 + WriteBufferMax - WriteBufferMin,
                                 rand:seed(exsplus, erlang:timestamp())),
     WriteBufferSize = WriteBufferMin + Offset,
-    Config2 = orddict:store(write_buffer_size, WriteBufferSize, Config),
+    Config2 = orddict:store(db_write_buffer_size, WriteBufferSize, Config),
     Config3 = orddict:erase(write_buffer_size_min, Config2),
     Config4 = orddict:erase(write_buffer_size_max, Config3),
-    Config5 = orddict:store(is_internal_db, true, Config4),
-    Config6 = orddict:store(use_bloomfilter, true, Config5),
-    Options = orddict:store(create_if_missing, true, Config6),
+    %% Config5 = orddict:store(is_internal_db, true, Config4),
+    %% Config6 = orddict:store(use_bloomfilter, true, Config5),
+    Options = orddict:store(create_if_missing, true, Config4),
 
     ok = filelib:ensure_dir(DataDir),
-    {ok, Ref} = rocksdb:open(DataDir, Options),
-    State#state{ref=Ref, path=DataDir}.
+    {ok, Ref} = plum_db_rocksdb_utils:open(DataDir, Options),
+    State#state{ref = Ref, path = DataDir}.
 
 -spec share_segment_store(hashtree(), hashtree()) -> hashtree().
 share_segment_store(State, #state{ref=Ref, path=Path}) ->
@@ -752,7 +757,7 @@ iterate({ok, K, V}, IS=#itr_state{itr=Itr,
             IS2 = IS#itr_state{current_segment=Segment,
                                segment_acc=[{K,V} | Acc],
                                prefetch=true},
-            iterate(iterator_move(Itr, prefetch), IS2);
+            iterate(iterator_move(Itr, next), IS2);
         {Id, _, [Seg|Remaining], _} ->
             %% Pointing at next segment we are interested in
             IS2 = IS#itr_state{current_segment=Seg,
@@ -760,7 +765,7 @@ iterate({ok, K, V}, IS=#itr_state{itr=Itr,
                                segment_acc=[{K,V}],
                                final_acc=[{Segment, F(Acc)} | FinalAcc],
                                prefetch=true},
-            iterate(iterator_move(Itr, prefetch), IS2);
+            iterate(iterator_move(Itr, next), IS2);
         {Id, _, ['*'], _} ->
             %% Pointing at next segment we are interested in
             IS2 = IS#itr_state{current_segment=Seg,
@@ -768,7 +773,7 @@ iterate({ok, K, V}, IS=#itr_state{itr=Itr,
                                segment_acc=[{K,V}],
                                final_acc=[{Segment, F(Acc)} | FinalAcc],
                                prefetch=true},
-            iterate(iterator_move(Itr, prefetch), IS2);
+            iterate(iterator_move(Itr, next), IS2);
         {Id, NextSeg, [NextSeg|Remaining], _} ->
             %% A previous prefetch_stop left us at the start of the
             %% next interesting segment.
@@ -776,14 +781,14 @@ iterate({ok, K, V}, IS=#itr_state{itr=Itr,
                                remaining_segments=Remaining,
                                segment_acc=[{K,V}],
                                prefetch=true},
-            iterate(iterator_move(Itr, prefetch), IS2);
+            iterate(iterator_move(Itr, next), IS2);
         {Id, _, [_NextSeg | _Remaining], true} ->
             %% Pointing at uninteresting segment, but need to halt the
             %% prefetch to ensure the interator can be reused
             IS2 = IS#itr_state{segment_acc=[],
                                final_acc=[{Segment, F(Acc)} | FinalAcc],
                                prefetch=false},
-            iterate(iterator_move(Itr, prefetch_stop), IS2);
+            iterate(iterator_move(Itr, next), IS2);
         {Id, _, [NextSeg | Remaining], false} ->
             %% Pointing at uninteresting segment, seek to next interesting one
             Seek = encode(Id, NextSeg, <<>>),
@@ -797,7 +802,7 @@ iterate({ok, K, V}, IS=#itr_state{itr=Itr,
             %% ensure the iterator can be reused. The next operation
             %% with this iterator is a seek so no need to be concerned
             %% with the data returned here.
-            _ = iterator_move(Itr, prefetch_stop),
+            _ = iterator_move(Itr, next),
             IS#itr_state{prefetch=false};
         {_, _, _, false} ->
             %% Done with traversal

@@ -2,6 +2,7 @@
 -behaviour(gen_statem).
 
 -record(state, {
+    node                            :: node(),
     %% node the exchange is taking place with
     peer                            :: node(),
     %% the remaining partitions to cover
@@ -80,11 +81,16 @@ start_link(Peer, Opts) when is_map(Opts) ->
 
 
 init([Peer, Opts]) ->
+    Node = plum_db_peer_service:mynode(),
     State = #state{
+        node = Node,
         peer = Peer,
         partitions = maps:get(partitions, Opts, plum_db:partitions()),
         timeout = maps:get(timeout, Opts, 60000)
     },
+
+    _ = lager:debug(
+        "Starting data exchange with peer; node=~p, peer=~p", [Node, Peer]),
 
     %% We notify subscribers
     _ = plum_db_events:notify(exchange_started, {self(), Peer}),
@@ -99,8 +105,12 @@ callback_mode() ->
     state_functions.
 
 
-terminate(Reason, _StateName, _State) ->
+terminate(Reason, _StateName, State) ->
     %% We notify subscribers
+    _ = lager:debug(
+        "Completed data exchange with peer; node=~p, peer=~p",
+        [State#state.node, State#state.peer]
+    ),
     _ = plum_db_events:notify(exchange_finished, {self(), Reason}),
     ok.
 
@@ -131,20 +141,25 @@ acquiring_locks(internal, next, #state{partitions = [H|T]} = State) ->
     case plum_db_partition_hashtree:lock(H) of
         ok ->
             _ = lager:debug(
-                "Successfully acquired local lock; partition=~p", [H]),
-            %% get corresponding remote lock
+                "Successfully acquired local lock; "
+                "node=~p, partition=~p",
+                [NewState#state.node, H]
+            ),
+            %% Request remote lock
             ok = async_acquire_remote_lock(NewState#state.peer, H),
             %% We wait for a remote lock event
             {next_state, acquiring_locks, NewState, NewState#state.timeout};
         Reason ->
             _ = lager:debug(
                 "Failed to acquire local lock, skipping partition; "
-                "reason=~p, partition=~p",
-                [Reason, H]),
+                "node=~p, partition=~p, reason=~p",
+                [NewState#state.node, H, Reason]
+            ),
             _ = lager:info(
                 "Skipping exchange for partition; "
-                "reason=~p, partition=~p",
-                [Reason, H]),
+                "node=~p, partition=~p, reason=~p",
+                [NewState#state.node, H, Reason]
+            ),
             %% We continue with the next partition
             acquiring_locks(internal, next, NewState#state{partitions = T})
     end;
@@ -156,9 +171,10 @@ acquiring_locks(timeout, _, #state{partitions = []} = State) ->
 acquiring_locks(timeout, _, #state{partitions = [H|T]} = State) ->
     %% We timed out waiting for a remote lock for partition H
     ok = release_local_lock(H),
-    _ = lager:debug(
-        "Failed to acquire remote lock; reason=timeout, partition=~p, peer=~p",
-        [H, State#state.peer]
+    _ = lager:info(
+        "Failed to acquire remote lock; "
+        "node=~p, partition=~p, peer=~p, reason=~p",
+        [State#state.node, H, State#state.peer, timeout]
     ),
     %% We try with the remaining partitions
     NewState = State#state{partitions = T},
@@ -167,8 +183,9 @@ acquiring_locks(timeout, _, #state{partitions = [H|T]} = State) ->
 acquiring_locks(
     cast, {remote_lock_acquired, P}, #state{partitions = [P|_]} = State) ->
     _ = lager:debug(
-        "Successfully acquired remote lock; partition=~p, peer=~p, ",
-        [P, State#state.peer]
+        "Successfully acquired remote lock; "
+        "node=~p, partition=~p, peer=~p",
+        [State#state.node, P, State#state.peer]
     ),
     {next_state, updating_hashtrees, State, [{timeout, 0, start}]};
 
@@ -177,8 +194,9 @@ acquiring_locks(cast, {remote_lock_error, Reason}, State) ->
     ok = release_local_lock(H),
 
     _ = lager:info(
-        "Failed to acquire remote lock; reason=~p, partition=~p, peer=~p",
-        [Reason,  H, State#state.peer]
+        "Failed to acquire remote lock; "
+        "node=~p, partition=~p, peer=~p, reason=~p",
+        [State#state.node, H, State#state.peer, Reason]
     ),
     %% We try again with the remaining partitions
     NewState = State#state{partitions = T},

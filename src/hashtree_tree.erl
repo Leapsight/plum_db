@@ -154,9 +154,15 @@
                                                    different, binary()}]}.
 -type diff()           :: prefix_diff() | key_diffs().
 -type handler_fun(X)   :: fun((diff(), X) -> X).
+
 -type remote_fun()     :: fun((prefixes(),
                                {get_bucket, {integer(), integer()}} |
                                {key_hashses, integer()}) -> orddict:orddict()).
+-type new_opt_num_levels() :: {num_levels, non_neg_integer()}.
+-type new_opt_data_dir()   :: {data_dir, file:name_all()}.
+-type new_opt()            :: new_opt_num_levels() | new_opt_data_dir().
+-type new_opts()           :: [new_opt()].
+
 
 %%%===================================================================
 %%% API
@@ -169,14 +175,12 @@
 %%                  length of the prefix list passed to {@link insert/5}.
 %%   * data_dir   - the directory where the LevelDB instances for the nodes will
 %%                  be stored.
--type new_opt_num_levels() :: {num_levels, non_neg_integer()}.
--type new_opt_data_dir()   :: {data_dir, file:name_all()}.
--type new_opt()            :: new_opt_num_levels() | new_opt_data_dir().
--type new_opts()           :: [new_opt()].
+
 -spec new(term(), new_opts()) -> tree().
+
 new(TreeId, Opts) ->
     NumLevels = proplists:get_value(num_levels, Opts, ?NUM_LEVELS),
-    DataRoot  = data_root(Opts),
+    DataRoot = data_root(Opts),
     Tree = #hashtree_tree{id = TreeId,
                           data_root = DataRoot,
                           num_levels = NumLevels,
@@ -191,10 +195,14 @@ new(TreeId, Opts) ->
 %% This deletes the LevelDB files for the nodes.
 -spec destroy(tree()) -> ok.
 destroy(Tree) ->
-    ets:foldl(fun({_, Node}, _) ->
-                      Node1 = hashtree:close(Node),
-                      hashtree:destroy(Node1)
-              end, undefined, Tree#hashtree_tree.nodes),
+    ets:foldl(
+        fun({_, Node}, _) ->
+            Node1 = hashtree:close(Node),
+            hashtree:destroy(Node1)
+        end,
+        undefined,
+        Tree#hashtree_tree.nodes
+    ),
     catch ets:delete(Tree#hashtree_tree.nodes),
     ok.
 

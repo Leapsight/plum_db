@@ -92,17 +92,18 @@
 
 %% -----------------------------------------------------------------------------
 %% @doc Starts the process using {@link start_link/1}, passing in the
-%% directory where other cluster data is stored in `hashtrees_dir'
+%% directory where other cluster data is stored in `aae_dir'
 %% as the data root.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec start_link(non_neg_integer()) -> {ok, pid()} | ignore | {error, term()}.
 
 start_link(Partition) when is_integer(Partition) ->
-    Dir = plum_db_config:get(hashtrees_dir),
-    DataRoot = filename:join([Dir, integer_to_list(Partition)]),
+    Dir = plum_db_config:get(aae_dir),
+    DataRoot = filename:join([Dir, "hashtree_" ++ integer_to_list(Partition)]),
     Name = name(Partition),
-    gen_server:start_link({local, Name}, ?MODULE, [Partition, DataRoot], []).
+    gen_server:start_link(
+        {local, Name}, ?MODULE, [Name, Partition, DataRoot], []).
 
 
 %% -----------------------------------------------------------------------------
@@ -110,8 +111,7 @@ start_link(Partition) when is_integer(Partition) ->
 %% @end
 %% -----------------------------------------------------------------------------
 name(Partition) ->
-    list_to_atom(
-        "plum_db_partition_" ++ integer_to_list(Partition) ++ "_hashtree").
+    list_to_atom("plum_db_partition_hashtree_" ++ integer_to_list(Partition)).
 
 
 %% -----------------------------------------------------------------------------
@@ -350,10 +350,9 @@ compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
 
 
 
-init([Partition, DataRoot]) ->
-    Id = name(Partition),
+init([Name, Partition, DataRoot]) ->
     State = do_init(#state{
-        id = Id, data_root = DataRoot, partition = Partition
+        id = Name, data_root = DataRoot, partition = Partition
     }),
     {ok, State}.
 
@@ -466,7 +465,7 @@ handle_info(Event, State) ->
 terminate(_Reason, State0) ->
     {_, State1} = do_release_lock(State0),
     _ = erlang:cancel_timer(State1#state.timer),
-    hashtree_tree:destroy(State1#state.tree),
+    _ = hashtree_tree:destroy(State1#state.tree),
     ok.
 
 
@@ -502,8 +501,8 @@ do_init(#state{data_root = DataRoot, partition = Partition} = State0) ->
 do_reset(#state{lock = undefined} = State) ->
     _ = hashtree_tree:destroy(State#state.tree),
     _ = lager:info(
-        "Resetting hashtree; partition=~p, node=~p",
-        [State#state.partition, node()]
+        "Resetting hashtree; node=~p, partition=~p",
+        [node(), State#state.partition, node()]
     ),
     do_init(State).
 
@@ -630,13 +629,13 @@ build_async(State) ->
                 Iterator = plum_db:iterator(
                     FullPrefix, [{partitions, [Partition]}]),
                 _ = lager:info(
-                    "Starting hashtree build; partition=~p, node=~p",
-                    [Partition, node()]
+                    "Starting hashtree build; node=~p, partition=~p",
+                    [node(), Partition]
                 ),
                 Res = build(Partition, Iterator),
                 _ = lager:info(
-                    "Finished hashtree build; partition=~p, node=~p",
-                    [Partition, node()]
+                    "Finished hashtree build; node=~p, partition=~p",
+                    [node(), Partition]
                 ),
                 Res
             end),

@@ -57,6 +57,7 @@ init() ->
         data_dir => "data",
         partitions => erlang:system_info(schedulers),
         prefixes => [],
+        aae_dir => "aae",
         aae_hashtree_ttl => 7 * 24 * 60 * 60, %% 1 week
         aae_enabled => true,
         aae_sha_chunk => 4096,
@@ -126,8 +127,11 @@ get(Key, Default) ->
 
 set(data_dir, Value) ->
     _ = do_set(db_dir, db_dir(Value)),
-    _ = do_set(hashtrees_dir, hashtrees_dir(Value)),
     do_set(data_dir, Value);
+
+set(aae_dir, Value) ->
+    _ = do_set(hashtrees_dir, hashtrees_dir(Value)),
+    do_set(aae_dir, Value);
 
 set(partitions, Value) ->
     Partitions = validate_partitions(Value),
@@ -215,11 +219,18 @@ validate_partitions(N) when is_integer(N) ->
         M ->
             %% We already have data in data_dir then
             %% we should coerce this value to the actual number of partitions
-            _ = lager:warning(
-                "The number of existing partitions on disk differ from the configuration, ignoring requested value and coercing configuration to the existing number instead; partitions=~p, existing=~p, data_dir=~p",
+            %% _ = lager:warning(
+            %%     "The number of existing partitions on disk differ from the configuration, ignoring requested value and coercing configuration to the existing number instead; partitions=~p, existing=~p, data_dir=~p",
+            %%     [N, M, DataDir]
+            %% ),
+            %% M
+            _ = lager:error(
+                "The number of existing partitions on disk differ from the "
+                "configuration, stopping initialisation to avoid data "
+                "corruption; partitions=~p, existing=~p, data_dir=~p",
                 [N, M, DataDir]
             ),
-            M
+            exit({invalid_config, partitions})
     end.
 
 

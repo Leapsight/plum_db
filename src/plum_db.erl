@@ -726,7 +726,7 @@ iterate(#iterator{ref = undefined, partitions = [H|_]} = I0) ->
     iterate(Res, I0#iterator{ref = Ref});
 
 iterate(#iterator{ref = Ref} = I) ->
-    iterate(plum_db_partition_server:iterator_move(Ref, prefetch), I).
+    iterate(plum_db_partition_server:iterator_move(Ref, next), I).
 
 
 %% @private
@@ -971,6 +971,7 @@ prefixes() ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec prefix_type(term()) -> prefix_type() | undefined.
+
 prefix_type(Prefix) ->
     maps:get(Prefix, plum_db_config:get(prefixes), undefined).
 
@@ -981,6 +982,7 @@ prefix_type(Prefix) ->
 %% -----------------------------------------------------------------------------
 -spec put(
     plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier()) -> ok.
+
 put(FullPrefix, Key, ValueOrFun) ->
     put(FullPrefix, Key, ValueOrFun, []).
 
@@ -990,8 +992,9 @@ put(FullPrefix, Key, ValueOrFun) ->
 %% triggers a broadcast to notify other nodes in the cluster. Currently, there
 %% are no put options.
 %%
-%% NOTE: because the third argument to this function can be a plum_db_modifier(),
-%% used to resolve conflicts on write, values cannot be functions.
+%% NOTE: Becuase the third argument to this function can be a
+%% plum_db_modifier(), used to resolve conflicts on write, values cannot be
+%% functions.
 %% To store functions wrap them in another type like a tuple.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1016,6 +1019,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec delete(plum_db_prefix(), plum_db_key()) -> ok.
+
 delete(FullPrefix, Key) ->
     delete(FullPrefix, Key, []).
 
@@ -1029,6 +1033,7 @@ delete(FullPrefix, Key) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec delete(plum_db_prefix(), plum_db_key(), delete_opts()) -> ok.
+
 delete(FullPrefix, Key, _Opts) ->
     put(FullPrefix, Key, ?TOMBSTONE, []).
 
@@ -1367,7 +1372,8 @@ put_with_context({?WILDCARD, _} = PKey, _, _) ->
 
 put_with_context({{_, _}, _} = PKey, undefined, ValueOrFun) ->
     %% empty list is an empty dvvset
-    put_with_context(PKey, [], ValueOrFun);
+    Context = [],
+    put_with_context(PKey, Context, ValueOrFun);
 
 put_with_context({{Prefix, SubPrefix}, _Key} = PKey, Context, ValueOrFun)
 when (is_binary(Prefix) orelse is_atom(Prefix))

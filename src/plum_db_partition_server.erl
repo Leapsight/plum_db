@@ -68,8 +68,11 @@
 -type iterator()            ::  #partition_iterator{}.
 -type iterators()           ::  [iterator()].
 -type iterator_action()     ::  first
-                                | last | next | prev
-                                | prefetch | prefetch_stop
+                                | last
+                                | next
+                                | prev
+                                %% | {seek, binary()}
+                                %% | {seek_for_prev, binary()}
                                 | plum_db_prefix()
                                 | plum_db_pkey()
                                 | binary().
@@ -126,8 +129,7 @@ start_link(Partition, Opts) ->
 %% @private
 name(Partition) ->
     N = valid_partition(Partition),
-    list_to_atom(
-        "plum_db_partition_" ++ integer_to_list(N) ++ "_server").
+    list_to_atom("plum_db_partition_server_" ++ integer_to_list(N)).
 
 
 %% -----------------------------------------------------------------------------
@@ -322,14 +324,6 @@ iterator_move(
     #partition_iterator{disk_done = true} = Iter, {undefined, undefined}) ->
     %% We continue with ets so we translate the action
     iterator_move(Iter, first);
-
-iterator_move(#partition_iterator{disk_done = true} = Iter, prefetch) ->
-    %% We continue with ets so we translate the action
-    iterator_move(Iter, next);
-
-iterator_move(#partition_iterator{disk_done = true} = Iter, prefetch_stop) ->
-    %% We continue with ets so we translate the action
-    iterator_move(Iter, next);
 
 iterator_move(#partition_iterator{disk_done = false} = Iter, Action) ->
 
@@ -789,7 +783,7 @@ init_state(Name, Partition, DataRoot, Config) ->
     %% of partition servers that try to kick off compaction at the same time
     %% under heavy uniform load...
     WriteBufferMin = config_value(
-        min_write_buffer_size_min, MergedConfig, 30 * 1024 * 1024),
+        write_buffer_size_min, MergedConfig, 30 * 1024 * 1024),
     WriteBufferMax = config_value(
         write_buffer_size_max, MergedConfig, 60 * 1024 * 1024),
     WriteBufferSize = WriteBufferMin + rand:uniform(
@@ -798,7 +792,7 @@ init_state(Name, Partition, DataRoot, Config) ->
     %% Update the write buffer size in the merged config and make sure
     %% create_if_missing is set to true
     FinalConfig = orddict:store(
-        write_buffer_size,
+        db_write_buffer_size,
         WriteBufferSize,
         orddict:store(create_if_missing, true, MergedConfig)),
 
@@ -872,54 +866,13 @@ config_value(Key, Config, Default) ->
 
 %% @private
 open_db(State0) ->
-    RetriesLeft = plum_db_config:get(store_open_retry_Limit),
-    open_db(State0, max(1, RetriesLeft), undefined).
-
-
-%% @private
-open_db(_State0, 0, LastError) ->
-    {error, LastError};
-
-open_db(State0, RetriesLeft, _) ->
-    case rocksdb:open(State0#state.data_root, State0#state.open_opts) of
+    DataRoot = State0#state.data_root,
+    Opts = State0#state.open_opts,
+    case plum_db_rocksdb_utils:open(DataRoot, Opts) of
         {ok, Ref} ->
             {ok, State0#state{db_ref = Ref}};
-        %% Check specifically for lock error, this can be caused if
-        %% a crashed vnode takes some time to flush leveldb information
-        %% out to disk.The process is gone, but the NIF resource cleanup
-        %% may not have completed.
-    	{error, {db_open, OpenErr} = Reason} ->
-            case lists:prefix("IO error: lock ", OpenErr) of
-                true ->
-                    SleepFor = plum_db_config:get(store_open_retries_delay),
-                    _ = lager:debug(
-                        "Rocksdb backend retrying ~p in ~p ms after error ~s\n",
-                        [State0#state.data_root, SleepFor, OpenErr]
-                    ),
-                    timer:sleep(SleepFor),
-                    open_db(State0, RetriesLeft - 1, Reason);
-                false ->
-                    case lists:prefix("Corruption", OpenErr) of
-                        true ->
-                            _ = lager:info(
-                                "Starting repair of corrupted rocksdb store; "
-                                "data_root=~p, reason=~p",
-                                [State0#state.data_root, OpenErr]
-                            ),
-                            _ = rocksdb:repair(
-                                State0#state.data_root, State0#state.open_opts),
-                            _ = lager:info(
-                                "Finished repair of corrupted rocksdb store; "
-                                "data_root=~p, reason=~p",
-                                [State0#state.data_root, OpenErr]
-                            ),
-                            open_db(State0, 0, Reason);
-                        false ->
-                            {error, Reason}
-                    end
-            end;
-        {error, Reason} ->
-            {error, Reason}
+        {error, _} = Error ->
+            Error
     end.
 
 
@@ -991,7 +944,7 @@ init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab) ->
             %% Element is {{P, K}, MetadataObj}
             PKey = decode_key(K),
             true = ets:insert(Tab, {PKey, binary_to_term(V)}),
-            Next = rocksdb:iterator_move(DbIter, prefetch),
+            Next = rocksdb:iterator_move(DbIter, next),
             init_prefix_iterate(Next, DbIter, BinPrefix, BPSize, Tab);
         _ ->
             %% We have no more matches in this Prefix
@@ -1021,12 +974,10 @@ table_name(Name, ram_disk) when is_atom(Name) ->
     list_to_atom(atom_to_list(Name) ++ "_ram_disk");
 
 table_name(N, ram) when is_integer(N) ->
-    list_to_atom(
-        "plum_db_partition_" ++ integer_to_list(N) ++ "_server_ram");
+    table_name(name(N), ram);
 
 table_name(N, ram_disk) when is_integer(N) ->
-    list_to_atom(
-        "plum_db_partition_" ++ integer_to_list(N) ++ "_server_ram_disk").
+    table_name(name(N), ram_disk).
 
 
 %% @private
@@ -1056,18 +1007,22 @@ next_iterator(ram, _) ->
 %% @private
 prev_iterator(ram, #partition_iterator{ram_disk_tab = undefined} = Iter) ->
     prev_iterator(ram_disk, Iter);
+
 prev_iterator(ram, Iter) ->
     Iter#partition_iterator{
         ram_disk = false,
         ram_done = false
     };
+
 prev_iterator(ram_disk, #partition_iterator{disk = undefined}) ->
     undefined;
+
 prev_iterator(ram_disk, Iter) ->
     Iter#partition_iterator{
         disk_done = false,
         ram_disk_done = false
     };
+
 prev_iterator(disk, _) ->
     undefined.
 
@@ -1090,11 +1045,7 @@ rocksdb_action(first) ->
 rocksdb_action(next) ->
     next;
 rocksdb_action(prev) ->
-    prev;
-rocksdb_action(prefetch) ->
-    prefetch;
-rocksdb_action(prefetch_stop) ->
-    prefetch_stop.
+    prev.
 
 
 %% @private
