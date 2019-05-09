@@ -391,7 +391,8 @@ handle_call({prefix_hash, Prefix}, _From, #state{tree = Tree} = State) ->
 handle_call(
     {insert, PKey, Hash, IfMissing}, _From, #state{tree = Tree} = State) ->
     {Prefixes, Key} = prepare_pkey(PKey),
-    Tree1 = hashtree_tree:insert(Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree),
+    Tree1 = hashtree_tree:insert(
+        Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree),
     {reply, ok, State#state{tree=Tree1}}.
 
 
@@ -430,22 +431,22 @@ handle_cast(_Msg, State) ->
 
 
 handle_info(
-    {'DOWN', BuildRef, process, _Pid, normal},
-    #state{built=BuildRef} = State) ->
+    {'DOWN', Ref, process, _Pid, normal}, #state{built = Ref} = State) ->
     State1 = build_done(State),
     {noreply, State1};
 
 handle_info(
-    {'DOWN', BuildRef, process, _Pid, Reason},
-    #state{built = BuildRef, partition= P} = State) ->
+    {'DOWN', Ref, process, _Pid, Reason}, #state{built = Ref} = State) ->
+    P = State#state.partition,
     _ = lager:error(
         "Building tree failed; reason=~p, partition=~p", [Reason, P]),
     State1 = build_error(State),
     {noreply, State1};
 
 handle_info(
-    {'DOWN', LockRef, process, Pid, _Reason},
-    #state{lock = {Type, LockRef, _}} = State) ->
+    {'DOWN', Ref, process, Pid, _Reason},
+    #state{lock = {Type, Ref, _}} = State) ->
+
     {_, State1} = do_release_lock(Type, Pid, State),
     {noreply, State1};
 
