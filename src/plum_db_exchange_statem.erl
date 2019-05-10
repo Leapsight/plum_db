@@ -28,6 +28,7 @@
 %% API
 -export([start/2]).
 -export([start_link/2]).
+%% -export([cancel/1]).
 
 %% gen_statem callbacks
 -export([init/1]).
@@ -391,23 +392,18 @@ release_remote_lock(Partition, Peer) ->
 
 
 %% @private
-update_request(Node, Partition) when Node =:= node() ->
-    do_async(fun() ->
-        %% acquired lock so we know there is no other update
-        %% and tree is built
-        case plum_db_partition_hashtree:update(Node, Partition) of
-            ok -> local_tree_updated;
-            Error -> {error, {local, Error}}
-        end
-    end);
-
 update_request(Node, Partition) ->
     do_async(fun() ->
-        %% acquired lock so we know there is no other update
-        %% and tree is built
+        LocalNode = plum_db_peer_service:mynode(),
         case plum_db_partition_hashtree:update(Node, Partition) of
-            ok -> remote_tree_updated;
-            Error -> {error, {remote, Error}}
+            ok when Node =:= LocalNode ->
+                local_tree_updated;
+            ok ->
+                remote_tree_updated;
+            Error when Node =:= LocalNode ->
+                {error, {local, Error}};
+            Error ->
+                {error, {remote, Error}}
         end
     end).
 
