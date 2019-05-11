@@ -91,7 +91,8 @@
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Starts the process using {@link start_link/1}, passing in the
+%% @doc Starts a paritition hashtree process using
+%% {@link start_link/1}, passing in the
 %% directory where other cluster data is stored in `aae_dir'
 %% as the data root.
 %% @end
@@ -547,6 +548,7 @@ maybe_external_update(
 
 maybe_external_update(
     From, #state{built = true, lock = {external, _, _}} = State) ->
+    %% The lock held is external i.e. a peer node, so we can update
     update_async(From, false, State);
 
 maybe_external_update(From, State) ->

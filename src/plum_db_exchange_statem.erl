@@ -209,7 +209,8 @@ acquiring_locks(Type, Content, State) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc Before performing an exchange we will request both local and remote
+%% hashtrees to update.
 %% @end
 %% -----------------------------------------------------------------------------
 updating_hashtrees(timeout, start, State) ->
@@ -234,8 +235,10 @@ updating_hashtrees(cast, local_tree_updated, State0) ->
     State1 = State0#state{local_tree_updated = true},
     case State1#state.remote_tree_updated of
         true ->
+            %% Local an remote trees have been updated
             {next_state, exchanging_data, State1, 0};
         false ->
+            %% We wait for remote tree to be updated
             {next_state, updating_hashtrees, State1, State1#state.timeout}
     end;
 
@@ -243,8 +246,10 @@ updating_hashtrees(cast, remote_tree_updated, State0) ->
     State1 = State0#state{remote_tree_updated = true},
     case State1#state.local_tree_updated of
         true ->
+            %% Local an remote trees have been updated
             {next_state, exchanging_data, State1, 0};
         false ->
+            %% We wait for local tree to be updated
             {next_state, updating_hashtrees, State1, State1#state.timeout}
     end;
 
@@ -296,33 +301,23 @@ exchanging_data(timeout, _, State) ->
         keys = Keys
     } = Res,
 
-    Total = LocalPrefixes + RemotePrefixes + Keys,
-
-    case Total > 0 of
-        true ->
-            _ = lager:info(
-                "Completed data exchange;"
-                " partition=~p, peer=~p, missing_local_prefixes=~p,"
-                " missing_remote_prefixes=~p, keys=~p",
-                [Partition, Peer, LocalPrefixes, RemotePrefixes, Keys]
-            );
-        false ->
-            _ = lager:info(
-                "Completed data exchange; partition=~p, peer=~p",
-                [Partition, Peer]
-            )
-    end,
+    _ = lager:info(
+        "Completed data exchange;"
+        " partition=~p, peer=~p, missing_local_prefixes=~p,"
+        " missing_remote_prefixes=~p, keys=~p",
+        [Partition, Peer, LocalPrefixes, RemotePrefixes, Keys]
+    ),
 
     [H|T] = State#state.partitions,
+    NewState = State#state{partitions = T},
     ok = release_locks(H, Peer),
 
     case T of
         [] ->
             %% H was the last partition, so we stop
-            {stop, normal, State};
+            {stop, normal, NewState};
         _ ->
             %% We carry on with the remaining partitions
-            NewState = State#state{partitions = T},
             {
                 next_state, acquiring_locks, NewState,
                 [{next_event, internal, next}]

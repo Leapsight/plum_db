@@ -113,7 +113,7 @@ handle_call({take, PKey, Context}, _From, State) ->
     {reply, {Existing, Result}, NewState};
 
 handle_call({merge, PKey, Obj}, _From, State0) ->
-    %% We implement puts here since we need to do a read followed by a write
+    %% We implement merge here since we need to do a read followed by a write
     %% atomically, and we need to serialise them.
     Existing = get_object(PKey, State0),
     case plum_db_object:reconcile(Obj, Existing) of
@@ -175,6 +175,15 @@ get_object(PKey, State) ->
 
 
 %% @private
+put(PKey, Context, ValueOrFun, State) ->
+    Existing = get_object(PKey, State),
+    ServerId = State#state.server_id,
+    Modified = plum_db_object:modify(Existing, Context, ValueOrFun, ServerId),
+    {Result, NewState} = store(PKey, Modified, State),
+    {Existing, Result, NewState}.
+
+
+%% @private
 store({_FullPrefix, _Key} = PKey, Obj, State) ->
 
     ok = plum_db_partition_server:put(State#state.partition, PKey, Obj),
@@ -183,17 +192,9 @@ store({_FullPrefix, _Key} = PKey, Obj, State) ->
         true ->
             Hash = plum_db_object:hash(Obj),
             plum_db_partition_hashtree:insert(
-                State#state.partition, PKey, Hash, true);
+                State#state.partition, PKey, Hash, false);
         false ->
             ok
     end,
 
     {Obj, State}.
-
-
-put(PKey, Context, ValueOrFun, State) ->
-    Existing = get_object(PKey, State),
-    ServerId = State#state.server_id,
-    Modified = plum_db_object:modify(Existing, Context, ValueOrFun, ServerId),
-    {Result, NewState} = store(PKey, Modified, State),
-    {Existing, Result, NewState}.
