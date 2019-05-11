@@ -163,6 +163,8 @@
 -export([iterator_key_value/1]).
 -export([iterator_key_values/1]).
 -export([iterator_prefix/1]).
+-export([manual_exchange/1]).
+-export([manual_exchange/2]).
 -export([merge/3]).
 -export([partition_count/0]).
 -export([partitions/0]).
@@ -1329,6 +1331,36 @@ exchange(Peer, Opts0) ->
             {error, aae_disabled}
     end.
 
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Triggers an asynchronous exchange
+%% @end
+%% -----------------------------------------------------------------------------
+-spec manual_exchange(node()) -> {ok, pid()} | {error, term()}.
+
+manual_exchange(Peer) ->
+    manual_exchange(Peer, #{}).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Triggers an asynchronous exchange
+%% @end
+%% -----------------------------------------------------------------------------
+-spec manual_exchange(node(), map()) -> {ok, pid()} | {error, term()}.
+
+manual_exchange(Peer, Opts0) ->
+
+    Opts1 = maps:merge(#{timeout => 60000}, Opts0),
+
+    case plum_db_exchange_statem:start(Peer, Opts1) of
+        {ok, Pid} ->
+            {ok, Pid};
+        {error, Reason} ->
+            {error, Reason};
+        ignore ->
+            {error, ignore}
+    end.
 
 
 
