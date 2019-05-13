@@ -180,7 +180,7 @@ store({_FullPrefix, _Key} = PKey, Obj, State) ->
         true ->
             Hash = plum_db_object:hash(Obj),
             plum_db_partition_hashtree:insert(
-                State#state.partition, PKey, Hash, true);
+                State#state.partition, PKey, Hash, false);
         false ->
             ok
     end,

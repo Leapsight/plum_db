@@ -500,8 +500,8 @@ new_segment_store(Opts, State) ->
                       SegmentPath
               end,
 
-    DefaultWriteBufferMin = 4 * 1024 * 1024,
-    DefaultWriteBufferMax = 14 * 1024 * 1024,
+    DefaultWriteBufferMin = 30 * 1024 * 1024,
+    DefaultWriteBufferMax = 60 * 1024 * 1024,
     Default = [
         {write_buffer_size_min, DefaultWriteBufferMin},
         {write_buffer_size_max, DefaultWriteBufferMax}
