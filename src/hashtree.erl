@@ -761,7 +761,6 @@ sha(Chunk, Bin, Ctx) ->
             Ctx2
     end.
 
-
 -spec update_levels(integer(),
                     [{integer(), [{integer(), binary()}]}],
                     hashtree(), next_rebuild()) -> hashtree().
