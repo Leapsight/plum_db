@@ -1,6 +1,20 @@
 # plum_db
 
-A database globally replicated via Epidemic Broadcast Trees and lasp-lang’s Partisan. An offspring of Plumtree and Partisan, a descendant of Riak Core Metadata Store.
+plum_db is database globally replicated via Epidemic Broadcast Trees and lasp-lang’s Partisan. It is an offspring of plumtree and partisan, and as such, a descendant of Riak Core Metadata Store.
+
+## Differences with Plumtree
+
+The original plumtree project was the result of extracting the Metadata Store from Riak Core and replacing the cluster membership state by an ORSWOT CRDT. plum_db replaces the cluster membership state with partisan's
+
+|Feature|plum_db|plumtree|
+|---|---|---|
+|cluster membership state| partisan membership state which uses an AWSET | ORSWOT (riak_dt)}
+|data model| Riak Core Metadata (dvvset)| Riak Core Metadata (dvvset)|
+|persistence|leveldb. A key is sharded across N instances of leveldb, where N is configurable at deployment time.|Each prefix has its own ets and dets table.|
+|API|A simplification of the Riak Core Metadata API. A single function to iterate over the whole database i.e. across one or all shards and across a single or many prefixes |Riak Core Metadata API (plumtree_metadata_manager is used to iterate over prefixes whereas plumtree_metadata is used to iterate over keys within each prefix. The API is confusing and is the result of having a store (ets + dets) per prefix.|
+|active anti-entropy|Based on Riak Core Metadata AAE, uses a separate instance of leveldb to store a merkle tree on disk. Updated to use the new API and gen_statem|Based on Riak Core Metadata AAE, uses a separate instance of leveldb to store a merkle tree on disk.|
+|pubsub|Based on a combination of gen_event and gproc, allowing to register a Callback module or function to be executed when an event is generated. gproc dependency allows to pattern match events using a match spec | Based gen_event, allowing to register a Callback module or function to be executed when an event is generated|
+
 
 ## Running a 3-node cluster
 
@@ -48,7 +62,7 @@ plum_db3@127.0.0.1> plum_db_peer_service:members().
 On node 1 do:
 
 ```erlang
-> plum_db:put({foo, bar}, foo, 1).
+> [plum_db:put({foo, bar}, foo, 1).
 ```
 
 On node 2 do:
@@ -66,5 +80,18 @@ On node 3 do:
 Do the following on each node to check they now all have the three elements:
 
 ``` erlang
-> plum_db:fold(fun({K, V}, Acc) -> [{K, V}|Acc] end, [], {undefined, undefined}).
+> plum_db:fold(fun({K, V}, Acc) -> [{K, V}|Acc] end, [], {'_', '_'}).
+```
+
+We are folding over the whole database using the full prefix wildcard.
+The following are examples of prefix wildcards:
+
+* `{'_', '_'}` - matches all full prefixes
+* `{foo, '_'}` - matches all subprefixes of Prefix `foo`
+* `{foo, bar}` - matches the subprefix `bar` of prefix `foo`
+
+Notice that the pattern `{'_', bar}` is NOT allowed.
+
+```
+[plum_db:put({foo, 3}, integer_to_binary(X), 1) || X <- lists:seq(1, 1000)].
 ```

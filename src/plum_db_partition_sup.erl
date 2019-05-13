@@ -56,8 +56,8 @@ name(Id) when is_integer(Id) ->
 
 
 init([Id]) ->
-    Opts = application:get_env(plum_db, leveldb_opts, []),
-    RestartStrategy = {one_for_all, 5, 1},
+    Opts = plum_db_config:get(leveldb_opts, []),
+    RestartStrategy = {one_for_all, 10, 60},
     Children = [
         #{
             id => plum_db_partition_server:name(Id),

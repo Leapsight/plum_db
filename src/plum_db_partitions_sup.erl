@@ -45,7 +45,7 @@ start_link() ->
 
 
 init([]) ->
-    RestartStrategy = {one_for_one, 5, 1},
+    RestartStrategy = {one_for_one, 5, 60},
     Children = [
         #{
             id => plum_db_partition_sup:name(Id),

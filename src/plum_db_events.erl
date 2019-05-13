@@ -24,11 +24,16 @@
 
 %% API
 -export([start_link/0]).
+-export([subscribe/1]).
+-export([unsubscribe/1]).
+-export([subscribe/2]).
+-export([add_pubsub_handler/0]).
 -export([add_handler/2]).
 -export([add_sup_handler/2]).
 -export([add_callback/1]).
 -export([add_sup_callback/1]).
 -export([update/1]).
+-export([notify/2]).
 
 %% gen_event callbacks
 -export([init/1]).
@@ -39,39 +44,129 @@
 -export([code_change/3]).
 
 -record(state, {
-    callback
+    callback    :: function() | undefined
 }).
 
 %% ===================================================================
 %% API functions
 %% ===================================================================
 
+
+
 start_link() ->
     gen_event:start_link({local, ?MODULE}).
 
+
+%% -----------------------------------------------------------------------------
+%% @doc Ads itself as an event handler. This is to implement the pubsub
+%% capabilities provided by this module
+%% @end
+%% -----------------------------------------------------------------------------
+add_pubsub_handler() ->
+    gen_event:add_handler(?MODULE, {?MODULE, pubsub}, [pubsub]).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Adds an event handler.
+%% Calls `gen_event:add_handler(?MODULE, Handler, Args)'.
+%% @end
+%% -----------------------------------------------------------------------------
 add_handler(Handler, Args) ->
     gen_event:add_handler(?MODULE, Handler, Args).
 
+
+%% -----------------------------------------------------------------------------
+%% @doc Adds a supervised event handler.
+%% Calls `gen_event:add_sup_handler(?MODULE, Handler, Args)'.
+%% @end
+%% -----------------------------------------------------------------------------
 add_sup_handler(Handler, Args) ->
     gen_event:add_sup_handler(?MODULE, Handler, Args).
 
-add_callback(Fn) when is_function(Fn) ->
+
+%% -----------------------------------------------------------------------------
+%% @doc Adds a callback function.
+%% The function needs to have a single argument representing the event that has
+%% been fired.
+%% @end
+%% -----------------------------------------------------------------------------
+add_callback(Fn) when is_function(Fn, 1) ->
     gen_event:add_handler(?MODULE, {?MODULE, make_ref()}, [Fn]).
 
-add_sup_callback(Fn) when is_function(Fn) ->
+
+%% -----------------------------------------------------------------------------
+%% @doc Adds a supervised callback function.
+%% The function needs to have a single argument representing the event that has
+%% been fired.
+%% @end
+%% -----------------------------------------------------------------------------
+add_sup_callback(Fn) when is_function(Fn, 1) ->
     gen_event:add_sup_handler(?MODULE, {?MODULE, make_ref()}, [Fn]).
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
-%% Notify the event handlers of an updated object
+%% @doc Subscribe to events of type Event.
+%% Any events published through update/1 will delivered to the calling process,
+%% along with all other subscribers.
+%% This function will raise an exception if you try to subscribe to the same
+%% event twice from the same process.
+%% This function uses plum_db_pubsub:subscribe/2.
 %% @end
 %% -----------------------------------------------------------------------------
-update(Obj) ->
-    gen_event:notify(?MODULE, {object_update, Obj}).
+subscribe(EventType) ->
+    true = plum_db_pubsub:subscribe(l, EventType),
+    ok.
 
 
+%% -----------------------------------------------------------------------------
+%% @doc Subscribe conditionally to events of type Event.
+%% This function is similar to subscribe/2, but adds a condition in the form of
+%% an ets match specification.
+%% The condition is tested and a message is delivered only if the condition is
+%% true. Specifically, the test is:
+%% `ets:match_spec_run([Msg], ets:match_spec_compile(Cond)) == [true]'
+%% In other words, if the match_spec returns true for a message, that message
+%% is sent to the subscriber.
+%% For any other result from the match_spec, the message is not sent. `Cond ==
+%% undefined' means that all messages will be delivered, which means that
+%% `Cond=undefined' and `Cond=[{'_',[],[true]}]' are equivalent.
+%% This function will raise an exception if you try to subscribe to the same
+%% event twice from the same process.
+%% This function uses `plum_db_pubsub:subscribe_cond/2'.
+%% @end
+%% -----------------------------------------------------------------------------
+subscribe(EventType, MatchSpec) ->
+    true = plum_db_pubsub:subscribe_cond(l, EventType, MatchSpec),
+    ok.
 
+
+%% -----------------------------------------------------------------------------
+%% @doc Remove subscription created using `subscribe/1,2'
+%% @end
+%% -----------------------------------------------------------------------------
+unsubscribe(EventType) ->
+    true = plum_db_pubsub:unsubscribe(l, EventType),
+    ok.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% Notify the event handlers, callback funs and subscribers of an updated
+%% object.
+%% The message delivered to each subscriber will be of the form:
+%% `{plum_db_event, Event, Msg}'
+%% @end
+%% -----------------------------------------------------------------------------
+update(PObject) ->
+    notify(object_update, PObject).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+notify(Event, Message) ->
+    gen_event:notify(?MODULE, {Event, Message}).
 
 
 %% =============================================================================
@@ -80,18 +175,32 @@ update(Obj) ->
 %% =============================================================================
 
 
-init([Fn]) ->
+init([pubsub]) ->
+    {ok, #state{}};
+
+init([Fn]) when is_function(Fn, 1) ->
     {ok, #state{callback = Fn}}.
 
-handle_event({object_update, Obj}, State) ->
-    (State#state.callback)(Obj),
+
+handle_event({Event, Message}, #state{callback = undefined} = State) ->
+    %% This is the pubsub handler instance
+    %% We notify gproc conditional subscribers
+    _ = plum_db_pubsub:publish_cond(l, Event, Message),
+    {ok, State};
+
+handle_event({Event, Message}, State) ->
+    %% We notify callback funs
+    (State#state.callback)({Event, Message}),
     {ok, State}.
+
 
 handle_call(_Request, State) ->
     {ok, ok, State}.
 
+
 handle_info(_Info, State) ->
     {ok, State}.
+
 
 terminate(_Reason, _State) ->
     ok.

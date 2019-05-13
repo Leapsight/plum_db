@@ -26,7 +26,6 @@
 -module(plum_db_partisan_peer_service).
 -behaviour(plum_db_peer_service).
 
--define(PEER_SERVICE, partisan_peer_service).
 
 %% plum_db_peer_service callbacks
 -export([join/1]).
@@ -54,7 +53,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 join(Node) ->
-    do(join, [Node, true]).
+    partisan_peer_service:join(Node, true).
 
 
 %% -----------------------------------------------------------------------------
@@ -62,13 +61,13 @@ join(Node) ->
 %% @end
 %% -----------------------------------------------------------------------------
 join(NodeStr, Auto) when is_list(NodeStr) ->
-    do(join, [NodeStr, Auto]);
+    partisan_peer_service:join(NodeStr, Auto);
 
 join(Node, Auto) when is_atom(Node) ->
-    do(join, [Node, Auto]);
+    partisan_peer_service:join(Node, Auto);
 
 join(#{name := _Name, listen_addrs := _ListenAddrs} = Node, Auto) ->
-    do(join, [Node, Auto]).
+    partisan_peer_service:join(Node, Auto).
 
 
 %% -----------------------------------------------------------------------------
@@ -76,7 +75,7 @@ join(#{name := _Name, listen_addrs := _ListenAddrs} = Node, Auto) ->
 %% @end
 %% -----------------------------------------------------------------------------
 join(Node, Node, Auto) ->
-    do(join, [Node, Node, Auto]).
+    partisan_peer_service:join(Node, Node, Auto).
 
 
 %% -----------------------------------------------------------------------------
@@ -84,8 +83,7 @@ join(Node, Node, Auto) ->
 %% @end
 %% -----------------------------------------------------------------------------
 leave() ->
-    Manager = do(?PEER_SERVICE, manager, []),
-    do(leave, [Manager:mynode()]).
+    partisan_peer_service:leave(mynode()).
 
 
 %% -----------------------------------------------------------------------------
@@ -93,7 +91,7 @@ leave() ->
 %% @end
 %% -----------------------------------------------------------------------------
 leave(Node) ->
-    do(leave, [Node]).
+    partisan_peer_service:leave(Node).
 
 
 %% -----------------------------------------------------------------------------
@@ -101,7 +99,7 @@ leave(Node) ->
 %% @end
 %% -----------------------------------------------------------------------------
 members() ->
-    do(?PEER_SERVICE, members, []).
+    partisan_peer_service:members().
 
 
 %% -----------------------------------------------------------------------------
@@ -109,7 +107,7 @@ members() ->
 %% @end
 %% -----------------------------------------------------------------------------
 manager() ->
-    do(?PEER_SERVICE, manager, []).
+    partisan_peer_service:manager().
 
 
 %% -----------------------------------------------------------------------------
@@ -117,8 +115,7 @@ manager() ->
 %% @end
 %% -----------------------------------------------------------------------------
 myself() ->
-    Manager = do(?PEER_SERVICE, manager, []),
-    Manager:myself().
+    partisan_peer_service_manager:myself().
 
 
 %% -----------------------------------------------------------------------------
@@ -126,8 +123,7 @@ myself() ->
 %% @end
 %% -----------------------------------------------------------------------------
 mynode() ->
-    Manager = do(?PEER_SERVICE, manager, []),
-    Manager:mynode().
+    partisan_peer_service_manager:mynode().
 
 
 %% -----------------------------------------------------------------------------
@@ -144,32 +140,4 @@ stop() ->
 %% -----------------------------------------------------------------------------
 stop(Reason) ->
     lager:notice("Stopping; reason=~p", [Reason]),
-    do(stop, [Reason]).
-
-
-
-%% =============================================================================
-%% PRIVATE
-%% =============================================================================
-
-
-
-%% -----------------------------------------------------------------------------
-%% @private
-%% @doc Execute call to the proper backend.
-%% @end
-%% -----------------------------------------------------------------------------
-do(join, Args) ->
-    erlang:apply(?PEER_SERVICE, join, Args);
-
-do(Function, Args) ->
-    erlang:apply(?PEER_SERVICE, Function, Args).
-
-
-%% -----------------------------------------------------------------------------
-%% @private
-%% @doc Execute call to the proper backend.
-%% @end
-%% -----------------------------------------------------------------------------
-do(Module, Function, Args) ->
-    erlang:apply(Module, Function, Args).
+    partisan_peer_service:stop(Reason).
