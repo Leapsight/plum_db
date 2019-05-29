@@ -27,6 +27,8 @@
 
 -define(DEFAULT_PEER_SERVICE, plum_db_partisan_peer_service).
 
+-type partisan_peer()   ::  #{name := _Name, listen_addrs := _ListenAddrs}.
+-export_type([partisan_peer/0]).
 
 -export([join/1]).
 -export([join/2]).
@@ -49,21 +51,24 @@
 
 
 %% Attempt to join node.
--callback join(node()) -> ok | {error, atom()}.
+-callback join(node() | list() | partisan_peer()) -> ok | {error, atom()}.
 
 %% Attempt to join node with or without automatically claiming ring
 %% ownership.
--callback join(node(), boolean()) -> ok | {error, atom()}.
+-callback join(node() | list() | partisan_peer(), boolean()) ->
+    ok | {error, atom()}.
 
 %% Attempt to join node with or without automatically claiming ring
 %% ownership.
--callback join(node(), node(), boolean()) -> ok | {error, atom()}.
+-callback join(
+    node() | list() | partisan_peer(),
+    node() | list() | partisan_peer(), boolean()) -> ok | {error, atom()}.
 
 %% Remove myself from the cluster.
 -callback leave() -> ok.
 
 %% Remove a node from the cluster.
--callback leave(node()) -> ok.
+-callback leave(node() | list() | partisan_peer()) -> ok.
 
 %% Return members of the cluster.
 -callback members() -> {ok, [node()]}.
