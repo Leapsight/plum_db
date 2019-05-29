@@ -23,7 +23,7 @@
  {<<"rand_compat">>,{pkg,<<"rand_compat">>,<<"0.0.3">>},1},
  {<<"rocksdb">>,
   {git,"https://gitlab.com/barrel-db/erlang-rocksdb.git",
-       {ref,"4adb1e518872a6cb7d95ff9b981c99505a9ecbef"}},
+       {ref,"c1a161f7d5f06754b96af9f00c51649bf7706faa"}},
   0},
  {<<"sext">>,{pkg,<<"sext">>,<<"1.5.0">>},0},
  {<<"time_compat">>,{pkg,<<"time_compat">>,<<"0.0.1">>},1},
