@@ -40,7 +40,35 @@ do_open(_, _, 0, Reason) ->
     {error, Reason};
 
 do_open(DataRoot, Opts, RetriesLeft, _) ->
-    case rocksdb:open(DataRoot, Opts) of
+    Bucket = "bondy." ++ lists:append(
+        string:replace(
+            DataRoot,
+            "/",
+            ".",
+            all
+        )
+    ),
+    Name = Bucket,
+
+    Credentials = [
+        {access_key_id, "yinyan1097"},
+        {secret_key, "yinyan1097"}
+    ],
+    AwsOptions =  [{endpoint_override, "127.0.0.1:19000"}, {scheme, "http"}],
+    EnvOptions = [
+        {credentials, Credentials},
+        {aws_options, AwsOptions},
+        {keep_local_sst_files, true},
+        {keep_local_log_files, true},
+        {create_bucket_if_missing, true}
+    ],
+    {ok, CloudEnv} = rocksdb:new_cloud_env(
+        Bucket, "", "", Bucket, "", "", EnvOptions),
+
+    DBOptions =  [{create_if_missing, true}, {env, CloudEnv} | Opts],
+    PersistentCacheSize = 128 bsl 20, %% 128 MB.
+    Res = rocksdb:open_cloud_db(Name, DBOptions, DataRoot, PersistentCacheSize),
+    case Res of
         {ok, _} = OK ->
             OK;
         {error, Reason} ->
