@@ -37,19 +37,24 @@
 
 
 
-
 %% =============================================================================
 %% API
 %% =============================================================================
 
 
+
+%% -----------------------------------------------------------------------------
+%% @doc Initialises plum_db configuration
+%% @end
+%% -----------------------------------------------------------------------------
 init() ->
+    ok = setup_env(),
     Config = application:get_all_env(plum_db),
     DefaultWriteBufferMin = 4 * 1024 * 1024,
     DefaultWriteBufferMax = 14 * 1024 * 1024,
     Defaults = #{
         shard_by => prefix,
-        peer_service => plum_db_partisan_peer_service,
+        peer_service => partisan_peer_service,
         store_open_retries_delay => 2000,
         store_open_retry_Limit => 30,
         data_exchange_timeout => 60000,
@@ -73,6 +78,7 @@ init() ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec get(Key :: atom() | tuple()) -> term().
+
 get([H|T]) ->
     case get(H) of
         Term when is_map(Term) ->
@@ -98,6 +104,7 @@ get(Key) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec get(Key :: atom() | tuple(), Default :: term()) -> term().
+
 get([H|T], Default) ->
     case get(H, Default) of
         Term when is_map(Term) ->
@@ -113,9 +120,6 @@ get(Key, Default) when is_tuple(Key) ->
 
 get(Key, Default) ->
     plum_db_mochiglobal:get(Key, Default).
-
-
-
 
 
 %% -----------------------------------------------------------------------------
@@ -142,12 +146,58 @@ set(Key, Value) ->
 
 
 
-
 %% =============================================================================
 %% PRIVATE
 %% =============================================================================
 
 
+
+%% @private
+setup_env() ->
+    PartisanEnv0 = maps:from_list(application:get_all_env(partisan)),
+    Channels = maps:get(channels, PartisanEnv0, []),
+    PartisanDefaults = #{
+        partisan_peer_service_manager => partisan_default_peer_service_manager
+    },
+    PartisanOverrides = #{
+        pid_encoding => false,
+        connect_disterl => false,
+        channels => [aae_messages | Channels]
+    },
+    PartisanEnv1 = maps:merge(
+        maps:merge(PartisanDefaults, PartisanEnv0),
+        PartisanOverrides
+    ),
+    _ = [
+        application:set_env(partisan, K, V)
+        || {K, V} <-  maps:to_list(PartisanEnv1)
+    ],
+
+    PlumtreeEnv0 = maps:from_list(application:get_all_env(plumtree)),
+    BroadcastMods = maps:get(broadcast_mods, PlumtreeEnv0, []),
+
+    PlumtreeDefaults = #{
+        peer_service => plum_db_peer_service,
+        exchange_selection => optimized,
+        lazy_tick_period => 1000,
+        exchange_tick_period => 10000,
+        broadcast_exchange_timer => 60000
+    },
+    PlumtreeOverrides = #{
+        broadcast_mods => [plum_db | BroadcastMods]
+    },
+    PlumtreeEnv1 = maps:merge(
+        maps:merge(PlumtreeDefaults, PlumtreeEnv0),
+        PlumtreeOverrides
+    ),
+    _ = [
+        application:set_env(plumtree, K, V)
+        || {K, V} <-  maps:to_list(PlumtreeEnv1)
+    ],
+    ok.
+
+
+%% @private
 do_set(Key, Value) ->
     application:set_env(?APP, Key, Value),
     plum_db_mochiglobal:put(Key, Value).
@@ -173,9 +223,11 @@ get_path(_, _, ?ERROR) ->
 get_path(_, _, Default) ->
     Default.
 
+
 %% @private
 validate_prefixes(undefined) ->
     [];
+
 validate_prefixes(L) ->
     Fun = fun
         ({P, ram} = E, Acc) when is_binary(P) orelse is_atom(P) ->
