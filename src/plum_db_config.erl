@@ -253,7 +253,10 @@ hashtrees_dir(Value) -> filename:join([Value, "hashtrees"]).
 
 %% @private
 validate_partitions(undefined) ->
-    erlang:system_info(schedulers);
+    validate_partitions(erlang:system_info(schedulers));
+
+validate_partitions(0) ->
+    validate_partitions(1);
 
 validate_partitions(N) when is_integer(N) ->
     DataDir = get(data_dir),

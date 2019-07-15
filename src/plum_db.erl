@@ -233,8 +233,13 @@ get_partition({{_, _} = FP, _}) ->
     get_partition(plum_db_config:get(shard_by), FP);
 
 get_partition({_, _} = FP) ->
-    %% partition :: 0..(partition_count() - 1)
-    erlang:phash2(FP, partition_count() - 1).
+      case partition_count() > 1 of
+        true ->
+            %% partition :: 0..(partition_count() - 1)
+            erlang:phash2(FP, partition_count() - 1);
+        false ->
+            0
+    end.
 
 
 %% -----------------------------------------------------------------------------
@@ -249,8 +254,13 @@ get_partition(prefix, {_, _} = FP) ->
     get_partition(FP);
 
 get_partition(key, {{_, _}, _} = Key) ->
-    %% partition :: 0..(partition_count() - 1)
-    erlang:phash2(Key, partition_count() - 1);
+    case partition_count() > 1 of
+        true ->
+            %% partition :: 0..(partition_count() - 1)
+            erlang:phash2(Key, partition_count() - 1);
+        false ->
+            0
+    end;
 
 get_partition(undefined, Key) ->
     get_partition(prefix, Key).
