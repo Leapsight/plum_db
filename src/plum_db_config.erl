@@ -62,6 +62,7 @@ init() ->
         data_dir => "data",
         partitions => erlang:system_info(schedulers),
         prefixes => [],
+        aae_concurrency => 1,
         aae_hashtree_ttl => 7 * 24 * 60 * 60, %% 1 week
         aae_enabled => true,
         aae_sha_chunk => 4096,
