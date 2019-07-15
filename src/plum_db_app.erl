@@ -59,17 +59,22 @@
 %% =============================================================================
 
 
+
 %% -----------------------------------------------------------------------------
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
+    %% It is important we init the config before starting the supervisor
+    %% as we override some user configuration for both partisan and plumtree
+    %% before they start (as they are included applications and our supervisor
+    %% starts them).
     ok = plum_db_config:init(),
+
     case plum_db_sup:start_link() of
         {ok, Pid} ->
             %% We set the pubsub handler
             ok = plum_db_events:add_pubsub_handler(),
-            ok = setup_partisan(),
             {ok, Pid};
         Other ->
             Other
@@ -84,7 +89,6 @@ prep_stop(_State) ->
     ok.
 
 
-
 %% -----------------------------------------------------------------------------
 %% @doc
 %% @end
@@ -94,14 +98,7 @@ stop(_State) ->
 
 
 
-
-
 %% =============================================================================
 %% PRIVATE
 %% =============================================================================
 
-
-%% @private
-setup_partisan() ->
-    Channels0 = partisan_config:get(channels, []),
-    partisan_config:set(channels, [aae_messages | Channels0]).

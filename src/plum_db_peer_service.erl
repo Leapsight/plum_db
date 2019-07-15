@@ -25,21 +25,34 @@
 %% -----------------------------------------------------------------------------
 -module(plum_db_peer_service).
 
--define(DEFAULT_PEER_SERVICE, plum_db_partisan_peer_service).
+-define(DEFAULT_PEER_SERVICE, partisan_peer_service).
+
+-type partisan_peer()   ::  #{name := _Name, listen_addrs := _ListenAddrs}.
+-export_type([partisan_peer/0]).
 
 
+
+-export([add_sup_callback/1]).
+-export([cast_message/3]).
+-export([connections/0]).
+-export([decode/1]).
+-export([forward_message/3]).
 -export([join/1]).
 -export([join/2]).
 -export([join/3]).
 -export([leave/0]).
 -export([leave/1]).
 -export([manager/0]).
--export([myself/0]).
--export([mynode/0]).
 -export([members/0]).
+-export([mynode/0]).
+-export([myself/0]).
 -export([peer_service/0]).
 -export([stop/0]).
 -export([stop/1]).
+-export([sync_join/1]).
+-export([sync_join/2]).
+-export([sync_join/3]).
+-export([update_members/1]).
 
 
 
@@ -49,24 +62,40 @@
 
 
 %% Attempt to join node.
--callback join(node()) -> ok | {error, atom()}.
+-callback join(node() | list() | partisan_peer()) -> ok | {error, atom()}.
+-callback sync_join(node() | list() | partisan_peer()) -> ok | {error, atom()}.
 
 %% Attempt to join node with or without automatically claiming ring
 %% ownership.
--callback join(node(), boolean()) -> ok | {error, atom()}.
+-callback join(node() | list() | partisan_peer(), boolean()) ->
+    ok | {error, atom()}.
+-callback sync_join(node() | list() | partisan_peer(), boolean()) ->
+    ok | {error, atom()}.
 
 %% Attempt to join node with or without automatically claiming ring
 %% ownership.
--callback join(node(), node(), boolean()) -> ok | {error, atom()}.
+-callback join(
+    node() | list() | partisan_peer(),
+    node() | list() | partisan_peer(), boolean()) -> ok | {error, atom()}.
+-callback sync_join(
+    node() | list() | partisan_peer(),
+    node() | list() | partisan_peer(), boolean()) -> ok | {error, atom()}.
+
 
 %% Remove myself from the cluster.
 -callback leave() -> ok.
 
 %% Remove a node from the cluster.
--callback leave(node()) -> ok.
+-callback leave(node() | list() | partisan_peer()) -> ok.
 
 %% Return members of the cluster.
 -callback members() -> {ok, [node()]}.
+
+%% Return members of the cluster.
+-callback connections() -> {ok, [partisan_peer_service_connections:t()]}.
+
+-callback decode() -> list().
+
 
 %% Return manager.
 -callback myself() -> map().
@@ -124,8 +153,32 @@ join(#{name := _Name, listen_addrs := _ListenAddrs} = Node, Auto) ->
 %% @doc Initiate join. Nodes cannot join themselves.
 %% @end
 %% -----------------------------------------------------------------------------
-join(Node, Node, Auto) ->
-    do(join, [Node, Node, Auto]).
+join(Node1, Node2, Auto) ->
+    do(join, [Node1, Node2, Auto]).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Prepare node to join a cluster.
+%% @end
+%% ----------------------------------------------------------------------------
+sync_join(Node) ->
+    do(sync_join, [Node, true]).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Prepare node to join a cluster.
+%% @end
+%% ----------------------------------------------------------------------------
+sync_join(Node, Auto) ->
+    do(sync_join, [Node, Auto]).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Prepare node to join a cluster.
+%% @end
+%% ----------------------------------------------------------------------------
+sync_join(Node1, Node2, Auto) ->
+    do(sync_join, [Node1, Node2, Auto]).
 
 
 %% -----------------------------------------------------------------------------
@@ -135,13 +188,36 @@ join(Node, Node, Auto) ->
 members() ->
     do(members, []).
 
+%% -----------------------------------------------------------------------------
+%% @doc Update cluster members.
+%% @end
+%% -----------------------------------------------------------------------------
+update_members(Nodes) ->
+    do(update_members, [Nodes]).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Return node connections.
+%% @end
+%% -----------------------------------------------------------------------------
+connections() ->
+    do(connections, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+decode(State) ->
+    do(decode, [State]).
+
 
 %% -----------------------------------------------------------------------------
 %% @doc Return myself.
 %% @end
 %% -----------------------------------------------------------------------------
 myself() ->
-    do(myself, []).
+    partisan_peer_service_manager:myself().
 
 
 %% -----------------------------------------------------------------------------
@@ -149,7 +225,7 @@ myself() ->
 %% @end
 %% -----------------------------------------------------------------------------
 mynode() ->
-    do(node, []).
+    partisan_peer_service_manager:mynode().
 
 
 %% -----------------------------------------------------------------------------
@@ -165,7 +241,7 @@ manager() ->
 %% @end
 %% -----------------------------------------------------------------------------
 leave() ->
-    do(leave, []).
+    leave(mynode()).
 
 
 %% -----------------------------------------------------------------------------
@@ -189,7 +265,32 @@ stop() ->
 %% @end
 %% -----------------------------------------------------------------------------
 stop(Reason) ->
+    lager:notice("Stopping; reason=~p", [Reason]),
     do(stop, [Reason]).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Add callback
+%% @end
+%% -----------------------------------------------------------------------------
+add_sup_callback(Function) ->
+    do(add_sup_callback, [Function]).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Add callback
+%% @end
+%% -----------------------------------------------------------------------------
+cast_message(Name, ServerRef, Message) ->
+    do(cast_message, [Name, ServerRef, Message]).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Add callback
+%% @end
+%% -----------------------------------------------------------------------------
+forward_message(Name, ServerRef, Message) ->
+    do(forward_message, [Name, ServerRef, Message]).
 
 
 

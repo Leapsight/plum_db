@@ -62,9 +62,14 @@ start_link() ->
 init([]) ->
     RestartStrategy = {one_for_one, 5, 60},
     Children = [
+        %% We start the included applications
+        ?CHILD(partisan_sup, supervisor, []),
+        ?CHILD(plumtree_sup, supervisor, []),
+        %%
         ?CHILD(plum_db_table_owner, worker, []),
         ?CHILD(plum_db, worker, []),
         ?CHILD(plum_db_events, worker, []),
-        ?CHILD(plum_db_partitions_sup, supervisor, [])
+        ?CHILD(plum_db_partitions_sup, supervisor, []),
+        ?CHILD(plum_db_exchanges_sup, supervisor, [])
     ],
     {ok, {RestartStrategy, Children}}.

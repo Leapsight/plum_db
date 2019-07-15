@@ -3,14 +3,14 @@
 
 -record(state, {
     %% node the exchange is taking place with
-    peer                            :: node(),
+    peer                            ::  node(),
     %% the remaining partitions to cover
-    partitions                      :: [plum_db:partition()],
+    partitions                      ::  [plum_db:partition()],
     %% count of trees that have been buit
     local_tree_updated = false      ::  boolean(),
     remote_tree_updated = false     ::  boolean(),
     %% length of time waited to acquire remote lock or update trees
-    timeout                         :: pos_integer()
+    timeout                         ::  pos_integer()
 }).
 
 -record(exchange, {
@@ -97,6 +97,7 @@ init([Peer, Opts]) ->
 
 callback_mode() ->
     state_functions.
+
 
 
 terminate(Reason, _StateName, _State) ->
@@ -494,3 +495,4 @@ track_repair(
 
 track_repair({key_diffs, _, Diffs}, Acc=#exchange{keys = Keys}) ->
     Acc#exchange{keys = Keys + length(Diffs)}.
+

@@ -163,8 +163,8 @@
 -export([iterator_key_value/1]).
 -export([iterator_key_values/1]).
 -export([iterator_prefix/1]).
--export([manual_exchange/1]).
--export([manual_exchange/2]).
+-export([sync_exchange/1]).
+-export([sync_exchange/2]).
 -export([merge/3]).
 -export([partition_count/0]).
 -export([partitions/0]).
@@ -233,8 +233,13 @@ get_partition({{_, _} = FP, _}) ->
     get_partition(plum_db_config:get(shard_by), FP);
 
 get_partition({_, _} = FP) ->
-    %% partition :: 0..(partition_count() - 1)
-    erlang:phash2(FP, partition_count() - 1).
+      case partition_count() > 1 of
+        true ->
+            %% partition :: 0..(partition_count() - 1)
+            erlang:phash2(FP, partition_count() - 1);
+        false ->
+            0
+    end.
 
 
 %% -----------------------------------------------------------------------------
@@ -249,8 +254,13 @@ get_partition(prefix, {_, _} = FP) ->
     get_partition(FP);
 
 get_partition(key, {{_, _}, _} = Key) ->
-    %% partition :: 0..(partition_count() - 1)
-    erlang:phash2(Key, partition_count() - 1);
+    case partition_count() > 1 of
+        true ->
+            %% partition :: 0..(partition_count() - 1)
+            erlang:phash2(Key, partition_count() - 1);
+        false ->
+            0
+    end;
 
 get_partition(undefined, Key) ->
     get_partition(prefix, Key).
@@ -1319,7 +1329,7 @@ exchange(Peer, Opts0) ->
         true ->
             Opts1 = maps:merge(#{timeout => 60000}, Opts0),
 
-            case plum_db_exchange_statem:start(Peer, Opts1) of
+            case plum_db_exchanges_sup:start_exchange(Peer, Opts1) of
                 {ok, Pid} ->
                     {ok, Pid};
                 {error, Reason} ->
@@ -1334,28 +1344,38 @@ exchange(Peer, Opts0) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Triggers an asynchronous exchange
+%% @doc Triggers a synchronous exchange
 %% @end
 %% -----------------------------------------------------------------------------
--spec manual_exchange(node()) -> {ok, pid()} | {error, term()}.
+-spec sync_exchange(node()) -> ok | {error, term()}.
 
-manual_exchange(Peer) ->
-    manual_exchange(Peer, #{}).
+sync_exchange(Peer) ->
+    sync_exchange(Peer, #{}).
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Triggers an asynchronous exchange
+%% @doc Triggers a synchronous exchange
 %% @end
 %% -----------------------------------------------------------------------------
--spec manual_exchange(node(), map()) -> {ok, pid()} | {error, term()}.
+-spec sync_exchange(node(), map()) -> ok | {error, term()}.
 
-manual_exchange(Peer, Opts0) ->
+sync_exchange(Peer, Opts0) ->
+    Timeout = 60000,
+    Opts1 = maps:merge(#{timeout => Timeout}, Opts0),
 
-    Opts1 = maps:merge(#{timeout => 60000}, Opts0),
-
-    case plum_db_exchange_statem:start(Peer, Opts1) of
+    case plum_db_exchanges_sup:start_exchange(Peer, Opts1) of
         {ok, Pid} ->
-            {ok, Pid};
+            Ref = erlang:monitor(process, Pid),
+            receive
+                {'DOWN', Ref, process, Pid, normal} ->
+                    ok;
+
+                {'DOWN', Ref, process, Pid, Reason} ->
+                    {error, Reason}
+            after
+                Timeout + 1000 ->
+                    {error, timeout}
+            end;
         {error, Reason} ->
             {error, Reason};
         ignore ->
