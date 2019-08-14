@@ -67,7 +67,7 @@
 start(_StartType, _StartArgs) ->
     %% It is important we init the config before starting the supervisor
     %% as we override some user configuration for both partisan and plumtree
-    %% before they start (as they are included applications and our supervisor
+    %% before they start (they are included applications and our supervisor
     %% starts them).
     ok = plum_db_config:init(),
 
