@@ -12,8 +12,8 @@
  {<<"lager">>,{pkg,<<"lager">>,<<"3.6.7">>},0},
  {<<"lasp_support">>,{pkg,<<"lasp_support">>,<<"0.0.3">>},1},
  {<<"partisan">>,
-  {git,"https://github.com/Leapsight/partisan.git",
-       {ref,"1b741339fc0e3065e29152336767d761a4cce636"}},
+  {git,"https://github.com/aramallo/partisan.git",
+       {ref,"eac44d231edd6b7048f2a40ffacb789c42614d6b"}},
   0},
  {<<"plumtree">>,
   {git,"https://github.com/aramallo/plumtree.git",
@@ -23,8 +23,8 @@
  {<<"rand_compat">>,{pkg,<<"rand_compat">>,<<"0.0.3">>},1},
  {<<"sext">>,{pkg,<<"sext">>,<<"1.5.0">>},0},
  {<<"time_compat">>,{pkg,<<"time_compat">>,<<"0.0.1">>},1},
- {<<"types">>,{pkg,<<"types">>,<<"0.1.6">>},1},
- {<<"uuid">>,{pkg,<<"uuid_erl">>,<<"1.7.3">>},1}]}.
+ {<<"types">>,{pkg,<<"types">>,<<"0.1.8">>},1},
+ {<<"uuid">>,{pkg,<<"uuid_erl">>,<<"1.7.5">>},1}]}.
 [
 {pkg_hash,[
  {<<"acceptor_pool">>, <<"679D741DF87FC13599B1AEF2DF8F78F1F880449A6BEFAB7C44FB6FAE0E92A2DE">>},
@@ -35,6 +35,6 @@
  {<<"rand_compat">>, <<"011646BC1F0B0C432FE101B816F25B9BBB74A085713CEE1DAFD2D62E9415EAD3">>},
  {<<"sext">>, <<"07D5D516DAA4C437B2F7DB99F6B2728C8AF939313479B1BEDC1995BB15936236">>},
  {<<"time_compat">>, <<"23FE0AD1FDF3B5B88821B2D04B4B5E865BF587AE66056D671FE0F53514ED8139">>},
- {<<"types">>, <<"03BB7140016C896D3441A77CB0B7D6ACAA583D6D6E9C4A3E1FD3C25123710290">>},
- {<<"uuid">>, <<"C5DF97D1A3D626235C2415E74053C47B2138BB863C5CD802AB5CAECB8ECC019F">>}]}
+ {<<"types">>, <<"5782B67231E8C174FE2835395E71E669FE0121076779D2A09F1C0D58EE0E2F13">>},
+ {<<"uuid">>, <<"3862FF9A21C42566DFD0376B97512FA202922897129E09A05E2AFA0D9CAFD97A">>}]}
 ].
