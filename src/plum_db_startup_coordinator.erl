@@ -94,7 +94,8 @@ wait_for_partitions() ->
 %% -----------------------------------------------------------------------------
 -spec wait_for_partitions(Timeout :: timeout()) -> ok | {error, timeout}.
 
-wait_for_partitions(Timeout) ->
+wait_for_partitions(Timeout)
+when (is_integer(Timeout) andalso Timeout > 0) orelse Timeout == infinity ->
     ok = gen_server:call(?MODULE, wait_for_partitions),
 
     receive
@@ -124,7 +125,8 @@ wait_for_hashtrees() ->
 %% -----------------------------------------------------------------------------
 -spec wait_for_hashtrees(Timeout :: timeout()) -> ok | {error, timeout}.
 
-wait_for_hashtrees(Timeout) ->
+wait_for_hashtrees(Timeout)
+when (is_integer(Timeout) andalso Timeout > 0) orelse Timeout == infinity ->
     ok = gen_server:call(?MODULE, wait_for_hashtrees),
 
     receive
@@ -230,7 +232,6 @@ handle_info({plum_db_event, partition_init_finished, Result}, State) ->
     end;
 
 handle_info({plum_db_event, hashtree_build_finished, Result}, State) ->
-    _ = lager:debug("Received hashtree_build_finished; result=~p", [Result]),
     case Result of
         {ok, Partition} ->
             {noreply, remove_hashtree(Partition, State)};
@@ -243,7 +244,7 @@ handle_info({plum_db_event, hashtree_build_finished, Result}, State) ->
 
 
 handle_info(Event, State) ->
-    _ = lager:debug("Received unknown info event; event=~p", [Event]),
+    _ = lager:info("Received unknown info event; event=~p", [Event]),
     {noreply, State}.
 
 
