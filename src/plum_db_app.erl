@@ -103,11 +103,8 @@ start(_StartType, _StartArgs) ->
 %% @end
 %% -----------------------------------------------------------------------------
 start_phase(init_db_partitions, normal, []) ->
-    WaitForPartitions = plum_db_config:get(wait_for_partitions),
-    WaitForHashtrees = plum_db_config:get(aae_enabled)
-        andalso plum_db_config:get(wait_for_hashtrees),
-    %% Waiting for hasstrees implies also waiting for partitions
-    case WaitForPartitions orelse WaitForHashtrees of
+       %% Waiting for hasstrees implies also waiting for partitions
+    case wait_for_partitions() of
         true ->
             %% We block until all partitions are initialised
             plum_db_startup_coordinator:wait_for_partitions();
@@ -116,15 +113,14 @@ start_phase(init_db_partitions, normal, []) ->
     end;
 
 start_phase(init_db_hashtrees, normal, []) ->
-    WaitForHashtrees = plum_db_config:get(aae_enabled)
-        andalso plum_db_config:get(wait_for_hashtrees),
-    case WaitForHashtrees of
+    case wait_for_hashtrees() of
         true ->
             %% We block until all hashtrees are built
             plum_db_startup_coordinator:wait_for_hashtrees();
         false ->
             ok
     end,
+    %% We stop the coordinator as it is a transcient worker
     plum_db_startup_coordinator:stop().
 
 
@@ -142,3 +138,21 @@ prep_stop(_State) ->
 %% -----------------------------------------------------------------------------
 stop(_State) ->
     ok.
+
+
+
+%% =============================================================================
+%% PRIVATE
+%% =============================================================================
+
+
+
+%% @private
+wait_for_partitions() ->
+    plum_db_config:get(wait_for_partitions) orelse wait_for_hashtrees().
+
+
+%% @private
+wait_for_hashtrees() ->
+    plum_db_config:get(aae_enabled) andalso
+    plum_db_config:get(wait_for_hashtrees).

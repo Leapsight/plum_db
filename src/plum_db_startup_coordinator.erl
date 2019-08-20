@@ -17,7 +17,10 @@
 %% =============================================================================
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc A transient worker that is used to listen to certain plum_db events and
+%% allow watchers to wait (blocking the caller) for certain conditions.
+%% This is used by plum_db_app during the startup process to wait for these
+%% conditions.
 %% @end
 %% -----------------------------------------------------------------------------
 -module(plum_db_startup_coordinator).
