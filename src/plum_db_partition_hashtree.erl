@@ -304,6 +304,7 @@ update(Node, Partition) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec reset(plum_db:partition()) -> ok.
+
 reset(Partition) ->
     reset(node(), Partition).
 
@@ -313,6 +314,7 @@ reset(Partition) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec reset(node(), plum_db:partition()) -> ok.
+
 reset(Node, Partition) ->
     gen_server:cast({name(Partition), Node}, reset).
 
@@ -438,10 +440,9 @@ handle_info(
 
 handle_info(
     {'DOWN', BuildRef, process, _Pid, Reason},
-    #state{built = BuildRef, partition= P} = State) ->
-    _ = lager:error(
-        "Building tree failed; reason=~p, partition=~p", [Reason, P]),
-    State1 = build_error(State),
+    #state{built = BuildRef} = State) ->
+
+    State1 = build_error(Reason, State),
     {noreply, State1};
 
 handle_info(
@@ -632,12 +633,7 @@ build_async(State) ->
                     "Starting hashtree build; partition=~p, node=~p",
                     [Partition, node()]
                 ),
-                Res = build(Partition, Iterator),
-                _ = lager:info(
-                    "Finished hashtree build; partition=~p, node=~p",
-                    [Partition, node()]
-                ),
-                Res
+                build(Partition, Iterator)
             end),
             State#state{built = Ref};
         false ->
@@ -660,10 +656,22 @@ build(Partition, Iterator) ->
 
 %% @private
 build_done(State) ->
+    _ = lager:info(
+        "Finished hashtree build; partition=~p, node=~p",
+        [State#state.partition, node()]
+    ),
+    _ = plum_db_events:notify(
+        hashtree_build_finished, {ok, State#state.partition}),
     State#state{built = true, build_ts_secs = erlang:system_time(second)}.
 
 %% @private
-build_error(State) ->
+build_error(Reason, State) ->
+    _ = lager:error(
+        "Building tree failed; reason=~p, partition=~p",
+        [Reason, State#state.partition]
+    ),
+    _ = plum_db_events:notify(
+        hashtree_build_finished, {ok, State#state.partition}),
     State#state{built = false}.
 
 

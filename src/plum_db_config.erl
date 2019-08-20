@@ -53,6 +53,8 @@ init() ->
     DefaultWriteBufferMin = 4 * 1024 * 1024,
     DefaultWriteBufferMax = 14 * 1024 * 1024,
     Defaults = #{
+        wait_for_partitions => true,
+        wait_for_hashtrees => true,
         shard_by => prefix,
         peer_service => partisan_peer_service,
         store_open_retries_delay => 2000,

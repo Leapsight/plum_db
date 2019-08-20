@@ -25,7 +25,8 @@
 -export([subscribe/1]).
 -export([unsubscribe/1]).
 -export([subscribe/2]).
--export([add_pubsub_handler/0]).
+-export([delete_handler/1]).
+-export([delete_handler/2]).
 -export([add_handler/2]).
 -export([add_sup_handler/2]).
 -export([add_callback/1]).
@@ -52,16 +53,15 @@
 
 
 start_link() ->
-    gen_event:start_link({local, ?MODULE}).
-
-
-%% -----------------------------------------------------------------------------
-%% @doc Ads itself as an event handler. This is to implement the pubsub
-%% capabilities provided by this module
-%% @end
-%% -----------------------------------------------------------------------------
-add_pubsub_handler() ->
-    gen_event:add_handler(?MODULE, {?MODULE, pubsub}, [pubsub]).
+    case gen_event:start_link({local, ?MODULE}) of
+        {ok, _} = OK ->
+            %% Ads this module as an event handler.
+            %% This is to implement the pubsub capabilities.
+            ok = gen_event:add_handler(?MODULE, {?MODULE, pubsub}, [pubsub]),
+            OK;
+        Error ->
+            Error
+    end.
 
 
 %% -----------------------------------------------------------------------------
@@ -88,8 +88,12 @@ add_sup_handler(Handler, Args) ->
 %% been fired.
 %% @end
 %% -----------------------------------------------------------------------------
+-spec add_callback(fun((any()) -> any())) -> {ok, reference()}.
+
 add_callback(Fn) when is_function(Fn, 1) ->
-    gen_event:add_handler(?MODULE, {?MODULE, make_ref()}, [Fn]).
+    Ref = make_ref(),
+    gen_event:add_handler(?MODULE, {?MODULE, Ref}, [Fn]),
+    {ok, Ref}.
 
 
 %% -----------------------------------------------------------------------------
@@ -98,8 +102,37 @@ add_callback(Fn) when is_function(Fn, 1) ->
 %% been fired.
 %% @end
 %% -----------------------------------------------------------------------------
+-spec add_sup_callback(fun((any()) -> any())) -> {ok, reference()}.
+
 add_sup_callback(Fn) when is_function(Fn, 1) ->
-    gen_event:add_sup_handler(?MODULE, {?MODULE, make_ref()}, [Fn]).
+    Ref = make_ref(),
+    gen_event:add_sup_handler(?MODULE, {?MODULE, Ref}, [Fn]),
+    {ok, Ref}.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec delete_handler(module() | reference()) ->
+    term() | {error, module_not_found} | {'EXIT', Reason :: term()}.
+
+delete_handler(Handler) ->
+    delete_handler(Handler, normal).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec delete_handler(module() | reference(), Args :: term()) ->
+    term() | {error, module_not_found} | {'EXIT', Reason :: term()}.
+
+delete_handler(Ref, Args) when is_reference(Ref) ->
+    gen_event:delete_handler(?MODULE, {?MODULE, Ref}, Args);
+
+delete_handler(Handler, Args) when is_atom(Handler) ->
+    gen_event:delete_handler(?MODULE, Handler, Args).
 
 
 %% -----------------------------------------------------------------------------
@@ -111,6 +144,8 @@ add_sup_callback(Fn) when is_function(Fn, 1) ->
 %% This function uses plum_db_pubsub:subscribe/2.
 %% @end
 %% -----------------------------------------------------------------------------
+-spec subscribe(term()) -> ok.
+
 subscribe(EventType) ->
     true = plum_db_pubsub:subscribe(l, EventType),
     ok.

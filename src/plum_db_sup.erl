@@ -23,16 +23,16 @@
 -module(plum_db_sup).
 -behaviour(supervisor).
 
--define(CHILD(I, Type, Args, Timeout), #{
+-define(CHILD(I, Type, Args, Restart, Timeout), #{
     id => I,
     start => {I, start_link, Args},
-    restart => permanent,
+    restart => Restart,
     shutdown => Timeout,
     type => Type,
     modules => [I]
 }).
 
--define(CHILD(I, Type, Args), ?CHILD(I, Type, Args, 5000)).
+-define(CHILD(I, Type, Args, Restart), ?CHILD(I, Type, Args, Restart, 5000)).
 
 
 -export([start_link/0]).
@@ -61,13 +61,15 @@ init([]) ->
     RestartStrategy = {one_for_one, 5, 60},
     Children = [
         %% We start the included applications
-        ?CHILD(partisan_sup, supervisor, []),
-        ?CHILD(plumtree_sup, supervisor, []),
-        %%
-        ?CHILD(plum_db_table_owner, worker, []),
-        ?CHILD(plum_db, worker, []),
-        ?CHILD(plum_db_events, worker, []),
-        ?CHILD(plum_db_partitions_sup, supervisor, []),
-        ?CHILD(plum_db_exchanges_sup, supervisor, [])
+        ?CHILD(partisan_sup, supervisor, [], permanent),
+        ?CHILD(plumtree_sup, supervisor, [], permanent),
+        %% We start the plum_db processes
+        ?CHILD(plum_db_events, worker, [], permanent),
+        ?CHILD(plum_db_startup_coordinator, worker, [], transient),
+        ?CHILD(plum_db_table_owner, worker, [], permanent),
+        ?CHILD(plum_db, worker, [], permanent),
+
+        ?CHILD(plum_db_partitions_sup, supervisor, [], permanent),
+        ?CHILD(plum_db_exchanges_sup, supervisor, [], permanent)
     ],
     {ok, {RestartStrategy, Children}}.

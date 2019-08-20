@@ -19,10 +19,6 @@
 -module(plum_db_partitions_sup).
 -behaviour(supervisor).
 
--define(CHILD(Id, Mod, Type, Args, Timeout),
-    {Id, {Mod, start_link, Args}, permanent, Timeout, Type, [Mod]}).
-
-
 
 -export([start_link/0]).
 -export([init/1]).

@@ -939,10 +939,7 @@ spawn_helper(State) ->
 %% @private
 init_ram_disk_prefixes_fun(State) ->
     fun() ->
-        _ = lager:info(
-            "Initialising partition ~p",
-            [State#state.partition]
-        ),
+        _ = lager:info("Initialising partition ~p", [State#state.partition]),
         %% We create the in-memory db copy for ram and ram_disk prefixes
         Tab = State#state.ram_disk_tab,
 
@@ -951,14 +948,11 @@ init_ram_disk_prefixes_fun(State) ->
         {ok, DbIter} = eleveldb:iterator(
             State#state.db_ref, State#state.fold_opts),
 
-
         try
             Fun = fun
                 ({Prefix, ram_disk}, ok) ->
                     _ = lager:info(
-                        "Loading data from prefix ~p to ram",
-                        [Prefix]
-                    ),
+                        "Loading data from prefix ~p to ram", [Prefix]),
                     First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
                     Next = eleveldb:iterator_move(DbIter, First),
                     init_prefix_iterate(
@@ -966,7 +960,14 @@ init_ram_disk_prefixes_fun(State) ->
                 (_, ok) ->
                     ok
             end,
-            lists:foldl(Fun, ok, PrefixList)
+            ok = lists:foldl(Fun, ok, PrefixList),
+            _ = lager:info(
+                "Finished initialisation of partition ~p",
+                [State#state.partition]
+            ),
+            _ = plum_db_events:notify(
+                partition_init_finished, {ok, State#state.partition}),
+            ok
         catch
             ?EXCEPTION(Class, Reason, Stacktrace) ->
                 _ = lager:error(
@@ -974,12 +975,12 @@ init_ram_disk_prefixes_fun(State) ->
                     "class=~p, reason=~p, stacktrace=~p",
                     [State#state.partition, Class, Reason, ?STACKTRACE(Stacktrace)]
                 ),
+                _ = plum_db_events:notify(
+                    partition_init_finished,
+                    {error, Reason, State#state.partition}
+                ),
                 erlang:raise(Class, Reason, ?STACKTRACE(Stacktrace))
         after
-            _ = lager:info(
-                "Finished initialisation of partition ~p",
-                [State#state.partition]
-            ),
             eleveldb:iterator_close(DbIter)
         end
     end.

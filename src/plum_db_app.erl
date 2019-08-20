@@ -67,6 +67,7 @@
 -behaviour(application).
 
 -export([start/2]).
+-export([start_phase/3]).
 -export([prep_stop/1]).
 -export([stop/1]).
 
@@ -91,12 +92,40 @@ start(_StartType, _StartArgs) ->
 
     case plum_db_sup:start_link() of
         {ok, Pid} ->
-            %% We set the pubsub handler
-            ok = plum_db_events:add_pubsub_handler(),
             {ok, Pid};
         Other ->
             Other
     end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Application behaviour callback
+%% @end
+%% -----------------------------------------------------------------------------
+start_phase(init_db_partitions, normal, []) ->
+    WaitForPartitions = plum_db_config:get(wait_for_partitions),
+    WaitForHashtrees = plum_db_config:get(aae_enabled)
+        andalso plum_db_config:get(wait_for_hashtrees),
+    %% Waiting for hasstrees implies also waiting for partitions
+    case WaitForPartitions orelse WaitForHashtrees of
+        true ->
+            %% We block until all partitions are initialised
+            plum_db_startup_coordinator:wait_for_partitions();
+        false ->
+            ok
+    end;
+
+start_phase(init_db_hashtrees, normal, []) ->
+    WaitForHashtrees = plum_db_config:get(aae_enabled)
+        andalso plum_db_config:get(wait_for_hashtrees),
+    case WaitForHashtrees of
+        true ->
+            %% We block until all hashtrees are built
+            plum_db_startup_coordinator:wait_for_hashtrees();
+        false ->
+            ok
+    end,
+    plum_db_startup_coordinator:stop().
 
 
 %% -----------------------------------------------------------------------------
@@ -113,10 +142,3 @@ prep_stop(_State) ->
 %% -----------------------------------------------------------------------------
 stop(_State) ->
     ok.
-
-
-
-%% =============================================================================
-%% PRIVATE
-%% =============================================================================
-
