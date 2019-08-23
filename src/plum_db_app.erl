@@ -97,7 +97,6 @@ start(_StartType, _StartArgs) ->
 %% @end
 %% -----------------------------------------------------------------------------
 start_phase(init_db_partitions, normal, []) ->
-    %% Waiting for hashtrees implies waiting for partitions
     case wait_for_partitions() of
         true ->
             %% We block until all partitions are initialised
@@ -149,6 +148,7 @@ stop(_State) ->
 
 %% @private
 wait_for_partitions() ->
+    %% Waiting for hashtrees implies waiting for partitions
     plum_db_config:get(wait_for_partitions) orelse wait_for_hashtrees().
 
 
