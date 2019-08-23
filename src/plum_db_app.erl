@@ -84,13 +84,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
-    %% It is important we init the config before starting the supervisor
-    %% as we override some user configuration for both partisan and plumtree
-    %% before they start (they are included applications and our supervisor
-    %% starts them).
-    ok = plum_db_config:init(),
-
-    case plum_db_sup:start_link() of
+      case plum_db_sup:start_link() of
         {ok, Pid} ->
             {ok, Pid};
         Other ->
@@ -103,7 +97,7 @@ start(_StartType, _StartArgs) ->
 %% @end
 %% -----------------------------------------------------------------------------
 start_phase(init_db_partitions, normal, []) ->
-       %% Waiting for hasstrees implies also waiting for partitions
+    %% Waiting for hashtrees implies waiting for partitions
     case wait_for_partitions() of
         true ->
             %% We block until all partitions are initialised
@@ -154,5 +148,7 @@ wait_for_partitions() ->
 
 %% @private
 wait_for_hashtrees() ->
+    %% If aae is disabled the hastrees will never get build
+    %% and we would block forever
     plum_db_config:get(aae_enabled) andalso
     plum_db_config:get(wait_for_hashtrees).
