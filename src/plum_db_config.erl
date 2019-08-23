@@ -55,6 +55,7 @@ init() ->
     Defaults = #{
         wait_for_partitions => true,
         wait_for_hashtrees => true,
+        wait_for_aae_exchange => true,
         shard_by => prefix,
         peer_service => partisan_peer_service,
         store_open_retries_delay => 2000,
@@ -62,7 +63,7 @@ init() ->
         data_exchange_timeout => 60000,
         hashtree_timer => 10000,
         data_dir => "data",
-        partitions => erlang:system_info(schedulers),
+        partitions => max(erlang:system_info(schedulers), 8),
         prefixes => [],
         aae_concurrency => 1,
         aae_hashtree_ttl => 7 * 24 * 60 * 60, %% 1 week
