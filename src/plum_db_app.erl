@@ -101,7 +101,10 @@ start_phase(init_db_partitions, normal, []) ->
     case wait_for_partitions() of
         true ->
             %% We block until all partitions are initialised
-            plum_db_startup_coordinator:wait_for_partitions();
+            _ = lager:debug("Waiting for plum_db partitions to be initialised"),
+            ok = maybe_error(plum_db_startup_coordinator:wait_for_partitions()),
+            _ = lager:debug(
+                "Finished waiting for plum_db partitions initialisation");
         false ->
             ok
     end;
@@ -110,7 +113,10 @@ start_phase(init_db_hashtrees, normal, []) ->
     case wait_for_hashtrees() of
         true ->
             %% We block until all hashtrees are built
-            plum_db_startup_coordinator:wait_for_hashtrees();
+            _ = lager:debug("Waiting for plum_db hashtrees to be built"),
+            ok = maybe_error(plum_db_startup_coordinator:wait_for_hashtrees()),
+            _ = lager:debug(
+                "Finished waiting for plum_db hashtrees built");
         false ->
             ok
     end,
@@ -152,3 +158,8 @@ wait_for_hashtrees() ->
     %% and we would block forever
     plum_db_config:get(aae_enabled) andalso
     plum_db_config:get(wait_for_hashtrees).
+
+
+%% @private
+maybe_error(ok) -> ok;
+maybe_error({error, Reason}) -> error(Reason).
