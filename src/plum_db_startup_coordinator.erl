@@ -29,8 +29,10 @@
 -record(state, {
     remaining_partitions        ::  list(integer()),
     remaining_hashtrees         ::  list(integer()),
-    partition_watchers = []     ::  list(pid()),
-    hashtree_watchers  = []     ::  list(pid())
+    partition_watchers = []     ::  list({pid(), any()}),
+    hashtree_watchers  = []     ::  list({pid(), any()}),
+    failed_partitions = #{}     ::  map(),
+    failed_hashtrees = #{}      ::  map()
 }).
 
 -type state()                   ::  #state{}.
@@ -84,7 +86,8 @@ stop() ->
 %% This is equivalent to calling `wait_for_partitions(infinity)'.
 %% @end
 %% -----------------------------------------------------------------------------
--spec wait_for_partitions() -> ok.
+-spec wait_for_partitions() ->
+    ok | {error, timeout} | {error, FailedPartitions :: map()}.
 
 wait_for_partitions() ->
     wait_for_partitions(infinity).
@@ -95,17 +98,19 @@ wait_for_partitions() ->
 %% or the timeout TImeout is reached.
 %% @end
 %% -----------------------------------------------------------------------------
--spec wait_for_partitions(Timeout :: timeout()) -> ok | {error, timeout}.
+-spec wait_for_partitions(Timeout :: timeout()) ->
+    ok | {error, timeout} | {error, FailedPartitions :: map()}.
 
 wait_for_partitions(Timeout)
 when (is_integer(Timeout) andalso Timeout > 0) orelse Timeout == infinity ->
-    ok = gen_server:call(?MODULE, wait_for_partitions),
+    {ok, Tag} = gen_server:call(?MODULE, wait_for_partitions),
 
     receive
-        {plum_db_partitions_init_finished, _Partitions} ->
-            ok
-    after Timeout ->
-        {error, timeout}
+        {plum_db_partitions_init_finished, Tag, Return} ->
+            Return
+    after
+        Timeout ->
+            {error, timeout}
     end.
 
 
@@ -115,7 +120,8 @@ when (is_integer(Timeout) andalso Timeout > 0) orelse Timeout == infinity ->
 %% This is equivalent to calling `wait_for_hashtrees(infinity)'.
 %% @end
 %% -----------------------------------------------------------------------------
--spec wait_for_hashtrees() -> ok.
+-spec wait_for_hashtrees() ->
+    ok | {error, timeout} | {error, FailedHashtrees :: map()}.
 
 wait_for_hashtrees() ->
     wait_for_hashtrees(infinity).
@@ -126,17 +132,19 @@ wait_for_hashtrees() ->
 %% is reached.
 %% @end
 %% -----------------------------------------------------------------------------
--spec wait_for_hashtrees(Timeout :: timeout()) -> ok | {error, timeout}.
+-spec wait_for_hashtrees(Timeout :: timeout()) ->
+    ok | {error, timeout} | {error, FailedHashtrees :: map()}.
 
 wait_for_hashtrees(Timeout)
 when (is_integer(Timeout) andalso Timeout > 0) orelse Timeout == infinity ->
-    ok = gen_server:call(?MODULE, wait_for_hashtrees),
+    {ok, Tag} = gen_server:call(?MODULE, wait_for_hashtrees),
 
     receive
-        {plum_db_hashtrees_build_finished, _Partitions} ->
-            ok
-    after Timeout ->
-        {error, timeout}
+        {plum_db_hashtrees_build_finished, Tag, Return} ->
+            Return
+    after
+        Timeout ->
+            {error, timeout}
     end.
 
 
@@ -175,24 +183,32 @@ init([]) ->
     | {stop, term(), state()}.
 
 handle_call(
-    wait_for_partitions, {Pid, _}, #state{remaining_partitions = []} = State) ->
+    wait_for_partitions, From, #state{remaining_partitions = []} = State) ->
     %% Nothing to wait for, so immediately reply
-    ok = send_partitions_init_finished(Pid),
-    {reply, ok, State};
+    Message = case State#state.failed_partitions of
+        Map when map_size(Map) == 0 -> ok;
+        Map -> {error, Map}
+    end,
+    Res = send(From, plum_db_partitions_init_finished, Message),
+    {reply, Res, State};
 
-handle_call(wait_for_partitions, {Pid, _}, State) ->
-    L = [Pid | State#state.partition_watchers],
-    {reply, ok, State#state{partition_watchers = L}};
+handle_call(wait_for_partitions, {_, Tag} = From, State) ->
+    L = [From | State#state.partition_watchers],
+    {reply, {ok, Tag}, State#state{partition_watchers = L}};
 
 handle_call(
-    wait_for_hashtrees, {Pid, _}, #state{remaining_hashtrees = []} = State) ->
+    wait_for_hashtrees, From, #state{remaining_hashtrees = []} = State) ->
     %% Nothing to wait for, so immediately reply
-    ok = send_hashtrees_build_finished(Pid),
-    {reply, ok, State};
+    Message = case State#state.failed_hashtrees of
+        Map when map_size(Map) == 0 -> ok;
+        Map -> {error, Map}
+    end,
+    Res = send(From, plum_db_hashtrees_build_finished, Message),
+    {reply, Res, State};
 
-handle_call(wait_for_hashtrees, {Pid, _}, State) ->
-    L = [Pid | State#state.hashtree_watchers],
-    {reply, ok, State#state{hashtree_watchers = L}};
+handle_call(wait_for_hashtrees, {_, Tag} = From, State) ->
+    L = [From | State#state.hashtree_watchers],
+    {reply, {ok, Tag}, State#state{hashtree_watchers = L}};
 
 handle_call(remaining_partitions, _From, State) ->
     Res = State#state.remaining_partitions,
@@ -227,22 +243,20 @@ handle_info({plum_db_event, partition_init_finished, Result}, State) ->
     case Result of
         {ok, Partition} ->
             {noreply, remove_partition(Partition, State)};
-        {error, _Reason, _Partition} ->
-            %% ok = notify_error(Reason, Partition, State),
-            %% Let the supervisor retry and eventually crash, and keep
-            %% waiting?
-            {noreply, State}
+        {error, Reason, Partition} ->
+            Map = maps:put(Partition, Reason, State#state.failed_partitions),
+            NewState = State#state{failed_partitions = Map},
+            {noreply, remove_partition(Partition, NewState)}
     end;
 
 handle_info({plum_db_event, hashtree_build_finished, Result}, State) ->
     case Result of
         {ok, Partition} ->
             {noreply, remove_hashtree(Partition, State)};
-        {error, _Reason, _Partition} ->
-            %% ok = notify_error(Reason, Partition, State),
-            %% Let the supervisor retry and eventually crash, and keep
-            %% waiting?
-            {noreply, State}
+        {error, Reason, Partition} ->
+            Map = maps:put(Partition, Reason, State#state.failed_hashtrees),
+            NewState = State#state{failed_partitions = Map},
+            {noreply, NewState}
     end;
 
 
@@ -288,10 +302,23 @@ remove_partition(Partition, #state{} = State0) ->
 maybe_partitions_init_finished(#state{partition_watchers = []} = State) ->
     State;
 
-maybe_partitions_init_finished(#state{remaining_partitions = []} = State) ->
+maybe_partitions_init_finished(
+    #state{remaining_partitions = [], failed_partitions = Failed} = State)
+    when map_size(Failed) == 0 ->
     _ = [
-        send_partitions_init_finished(Pid)
-        || Pid <- State#state.partition_watchers
+        send(Watcher, plum_db_partitions_init_finished, ok)
+        || Watcher <- State#state.partition_watchers
+    ],
+    State#state{partition_watchers = []};
+
+maybe_partitions_init_finished(#state{remaining_partitions = []} = State)->
+    _ = [
+        send(
+            Watcher,
+            plum_db_partitions_init_finished,
+            {error, State#state.failed_partitions}
+        )
+        || Watcher <- State#state.partition_watchers
     ],
     State#state{partition_watchers = []};
 
@@ -313,10 +340,23 @@ remove_hashtree(Partition, #state{} = State0) ->
 maybe_hashtrees_build_finished(#state{hashtree_watchers = []} = State) ->
     State;
 
-maybe_hashtrees_build_finished(#state{remaining_hashtrees = []} = State) ->
+maybe_hashtrees_build_finished(
+    #state{remaining_hashtrees = [], failed_hashtrees = Failed} = State)
+    when map_size(Failed) == 0 ->
     _ = [
-        send_hashtrees_build_finished(Pid)
-        || Pid <- State#state.hashtree_watchers
+        send(Watcher, plum_db_hashtrees_build_finished, ok)
+        || Watcher <- State#state.hashtree_watchers
+    ],
+    State#state{hashtree_watchers = []};
+
+maybe_hashtrees_build_finished(#state{remaining_hashtrees = []} = State)->
+    _ = [
+        send(
+            Watcher,
+            plum_db_hashtrees_build_finished,
+            {error, State#state.failed_hashtrees}
+        )
+        || Watcher <- State#state.hashtree_watchers
     ],
     State#state{hashtree_watchers = []};
 
@@ -325,11 +365,6 @@ maybe_hashtrees_build_finished(State) ->
 
 
 %% @private
-send_partitions_init_finished(To) ->
-    To ! {plum_db_partitions_init_finished, plum_db:partitions()},
-    ok.
-
-%% @private
-send_hashtrees_build_finished(To) ->
-    To ! {plum_db_hashtrees_build_finished, plum_db:partitions()},
-    ok.
+send({Pid, Tag}, Event, Message) ->
+    Pid ! {Event, Tag, Message},
+    {ok, Tag}.
