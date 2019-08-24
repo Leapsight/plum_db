@@ -19,8 +19,24 @@
 %% -----------------------------------------------------------------------------
 %% @doc A transient worker that is used to listen to certain plum_db events and
 %% allow watchers to wait (blocking the caller) for certain conditions.
-%% This is used by plum_db_app during the startup process to wait for these
-%% conditions.
+%% This is used by plum_db_app during the startup process to wait for the
+%% following conditions:
+%%
+%% * Partition initisalisation – the worker subscribes to plum_db notifications
+%% and keeps track of each partition initialisation until they are all
+%% initialised (or failed to initilised) and replies to all watchers with a
+%% `ok' or `{error, FailedPartitions}', where FailedPartitions is a map() which
+%% keys are the partition number and the value is the reason for the failure.
+%% * Partition hashtree build – the worker subscribes to plum_db notifications
+%% and keeps track of each partition hashtree until they are all
+%% built (or failed to build) and replies to all watchers with a
+%% `ok' or `{error, FailedHashtrees}', where FailedHashtrees is a map() which
+%% keys are the partition number and the value is the reason for the failure.
+%%
+%% A watcher is any process which calls the functions wait_for_partitions/0,1
+%% and/or wait_for_hashtrees/0,1. Both functions will block the caller until
+%% the above conditions are met.
+%%
 %% @end
 %% -----------------------------------------------------------------------------
 -module(plum_db_startup_coordinator).
@@ -30,7 +46,7 @@
     remaining_partitions        ::  list(integer()),
     remaining_hashtrees         ::  list(integer()),
     partition_watchers = []     ::  list({pid(), any()}),
-    hashtree_watchers  = []     ::  list({pid(), any()}),
+    hashtree_watchers = []      ::  list({pid(), any()}),
     failed_partitions = #{}     ::  map(),
     failed_hashtrees = #{}      ::  map()
 }).
