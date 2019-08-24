@@ -171,7 +171,7 @@ handle_call({give_away, Name, NewOwner}, {From, _Tag}, St) ->
 	Reply =  case ets:lookup(?MODULE, Name) of
 		[] ->
 			false;
-		{Name, Tab} ->
+		[{Name, Tab}] ->
 			TrueOwner = ets:info(Tab, owner),
 			% If TrueOwner == self() the previous owner died
 			case
