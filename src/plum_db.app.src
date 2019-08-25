@@ -5,7 +5,8 @@
     {mod, {plum_db_app, []}},
     {start_phases, [
         {init_db_partitions, []},
-        {init_db_hashtrees, []}
+        {init_db_hashtrees, []},
+        {aae_exchange, []}
     ]},
     {applications, [
         kernel,

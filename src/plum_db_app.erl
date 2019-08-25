@@ -120,7 +120,32 @@ start_phase(init_db_hashtrees, normal, []) ->
             ok
     end,
     %% We stop the coordinator as it is a transcient worker
-    plum_db_startup_coordinator:stop().
+    plum_db_startup_coordinator:stop();
+
+start_phase(aae_exchange, normal, []) ->
+    %% When plum_db is included in a principal application, the latter can
+    %% join the cluster before this phase.
+    case wait_for_aae_exchange() of
+        true ->
+            MyNode = plum_db_peer_service:mynode(),
+            Members = plumtree_broadcast:broadcast_members(),
+
+            case lists:delete(MyNode, Members) of
+                [] ->
+                    %% We have not yet joined a cluster, so we finish
+                    ok;
+                Peers ->
+                    %% We are in a cluster, we randomnly pick a peer and
+                    %% perform an AAE exchange
+                    [Peer|_] = lists_utils:shuffle(Peers),
+                    %% We block until the exchange finishes successfully
+                    %% or with error, we finish anyway
+                    _ = plum_db:sync_exchange(Peer),
+                    ok
+            end;
+        false ->
+            ok
+    end.
 
 
 %% -----------------------------------------------------------------------------
@@ -158,6 +183,12 @@ wait_for_hashtrees() ->
     %% and we would block forever
     plum_db_config:get(aae_enabled) andalso
     plum_db_config:get(wait_for_hashtrees).
+
+
+%% @private
+wait_for_aae_exchange() ->
+    plum_db_config:get(aae_enabled) andalso
+    plum_db_config:get(wait_for_aae_exchange).
 
 
 %% @private
