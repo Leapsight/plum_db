@@ -55,7 +55,8 @@
 %% If the limit is reached returns the error tuple `{error, concurrency_limit}'
 %% @end
 %% -----------------------------------------------------------------------------
--spec start_exchange(node(), list() | map()) -> {ok, pid()} | {error, any()}.
+-spec start_exchange(node(), list() | map()) ->
+    {ok, pid()} | {error, any()}.
 
 start_exchange(Peer, Opts) ->
     Children = supervisor:count_children(?MODULE),
@@ -80,6 +81,8 @@ stop_exchange(Pid) when is_pid(Pid)->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
+-spec start_link() -> {ok, pid()} | ignore | {error, term()}.
+
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 

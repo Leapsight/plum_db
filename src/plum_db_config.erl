@@ -81,7 +81,7 @@ init() ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec get(Key :: atom() | tuple()) -> term().
+-spec get(Key :: atom() | tuple() | list(atom())) -> term().
 
 get([H|T]) ->
     case get(H) of
@@ -107,7 +107,7 @@ get(Key) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec get(Key :: atom() | tuple(), Default :: term()) -> term().
+-spec get(Key :: atom() | tuple() | list(atom()), Default :: term()) -> term().
 
 get([H|T], Default) ->
     case get(H, Default) of

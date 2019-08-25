@@ -1,5 +1,5 @@
 %% =============================================================================
-%%  plum_db_partition_worker.erl -
+%%  plum_db.erl -
 %%
 %%  Copyright (c) 2013 Basho Technologies, Inc.  All Rights Reserved.
 %%  Copyright (c) 2017-2019 Ngineo Limited t/a Leapsight. All rights reserved.
@@ -752,6 +752,9 @@ iterate(#iterator{ref = Ref} = I) ->
 
 
 %% @private
+-spec iterate(plum_db_partition_server:iterator_move_result(), iterator()) ->
+    iterator().
+
 iterate({error, no_match, Ref1}, I0) ->
     %% We carry on trying to match the remaining keys
     iterate(I0#iterator{ref = Ref1});
@@ -1348,9 +1351,7 @@ exchange(Peer, Opts0) ->
                 {ok, Pid} ->
                     {ok, Pid};
                 {error, Reason} ->
-                    {error, Reason};
-                ignore ->
-                    {error, ignore}
+                    {error, Reason}
             end;
         false ->
             {error, aae_disabled}
@@ -1391,9 +1392,7 @@ sync_exchange(Peer, Opts0) ->
                     {error, timeout}
             end;
         {error, Reason} ->
-            {error, Reason};
-        ignore ->
-            {error, ignore}
+            {error, Reason}
     end.
 
 
@@ -1448,7 +1447,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 
 -spec take_with_context(
     plum_db_pkey_pattern(), undefined | plum_db_context()) ->
-        {Existing :: plum_db_object(), New :: plum_db_object()}.
+        {Existing :: plum_db_object() | undefined, New :: plum_db_object()}.
 
 take_with_context({?WILDCARD, _} = PKey, _) ->
     error(badarg, [PKey]);

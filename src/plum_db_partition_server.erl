@@ -66,17 +66,31 @@
     ram_disk_tab            ::  atom()
 }).
 
--type opts()                :: 	[{atom(), term()}].
--type iterator()            ::  #partition_iterator{}.
--type iterators()           ::  [iterator()].
--type iterator_action()     ::  first
-                                | last | next | prev
-                                | prefetch | prefetch_stop
-                                | plum_db_prefix()
-                                | plum_db_pkey()
-                                | binary().
+-type opts()                    :: 	[{atom(), term()}].
+-type iterator()                ::  #partition_iterator{}.
+-type iterators()               ::  [iterator()].
+-type iterator_action()         ::  first
+                                    | last | next | prev
+                                    | prefetch | prefetch_stop
+                                    | plum_db_prefix()
+                                    | plum_db_pkey()
+                                    | binary().
+-type iterator_move_result()    ::  {ok,
+                                        Key :: binary() | plum_db_pkey(),
+                                        Value :: binary(),
+                                        iterator()
+                                    }
+                                    | {ok,
+                                        Key :: binary() | plum_db_pkey(),
+                                        iterator()
+                                    }
+                                    | {error, invalid_iterator, iterator()}
+                                    | {error, iterator_closed, iterator()}
+                                    | {error, no_match, iterator()}.
+
 
 -export_type([iterator/0]).
+-export_type([iterator_move_result/0]).
 
 -export([byte_size/1]).
 -export([delete/1]).
@@ -313,12 +327,7 @@ iterator_close(Store, #partition_iterator{} = Iter) when is_atom(Store) ->
 %% @doc Iterates over the storage stack in order (disk -> ram_disk -> ram).
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator_move(iterator(), iterator_action()) ->
-    {ok, Key :: binary(), Value :: binary(), iterator()}
-    | {ok, Key :: binary(), iterator()}
-    | {error, invalid_iterator, iterator()}
-    | {error, iterator_closed, iterator()}
-    | {error, no_match, iterator()}.
+-spec iterator_move(iterator(), iterator_action()) -> iterator_move_result().
 
 iterator_move(
     #partition_iterator{disk_done = true} = Iter, {undefined, undefined}) ->
@@ -1122,7 +1131,7 @@ ets_match_spec({_, _} = FullPrefix, KeysOnly) ->
 
 %% @private
 -spec matches_key(binary() | plum_db_pkey(), iterator()) ->
-    {true, plum_db_pkey()} | false | ?EOT.
+    {true, plum_db_pkey()} | {false, plum_db_pkey()} | ?EOT.
 
 matches_key(PKey, #partition_iterator{match_spec = undefined} = Iter) ->
     %% We try to match the prefix and if it doesn't we stop
