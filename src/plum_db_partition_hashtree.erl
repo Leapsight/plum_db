@@ -1,22 +1,22 @@
-%% -------------------------------------------------------------------
+%% =============================================================================
+%%  plum_db_partition_hashtree.erl -
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.  All Rights Reserved.
+%%  Copyright (c) 2013 Basho Technologies, Inc.  All Rights Reserved.
+%%  Copyright (c) 2017-2019 Ngineo Limited t/a Leapsight. All rights reserved.
 %%
-%% This file is provided to you under the Apache License,
-%% Version 2.0 (the "License"); you may not use this file
-%% except in compliance with the License.  You may obtain
-%% a copy of the License at
+%%  Licensed under the Apache License, Version 2.0 (the "License");
+%%  you may not use this file except in compliance with the License.
+%%  You may obtain a copy of the License at
 %%
-%%   http://www.apache.org/licenses/LICENSE-2.0
+%%     http://www.apache.org/licenses/LICENSE-2.0
 %%
-%% Unless required by applicable law or agreed to in writing,
-%% software distributed under the License is distributed on an
-%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-%% KIND, either express or implied.  See the License for the
-%% specific language governing permissions and limitations
-%% under the License.
-%%
-%% -------------------------------------------------------------------
+%%  Unless required by applicable law or agreed to in writing, software
+%%  distributed under the License is distributed on an "AS IS" BASIS,
+%%  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%  See the License for the specific language governing permissions and
+%%  limitations under the License.
+%% =============================================================================
+
 -module(plum_db_partition_hashtree).
 -behaviour(gen_server).
 
@@ -65,10 +65,10 @@
     %% the plum_db partition this hashtree represents
     partition       ::  non_neg_integer(),
     %% the tree managed by this process
-    tree            ::  hashtree_tree:tree(),
+    tree            ::  hashtree_tree:tree() | undefined,
     %% whether or not the tree has been built or a monitor ref
     %% if the tree is being built
-    built           ::  boolean() | reference(),
+    built           ::  boolean() | reference() | undefined,
     %% a monitor reference for a process that currently holds a
     %% lock on the tree
     lock            ::  {internal | external, reference(), pid()} | undefined,
@@ -76,9 +76,9 @@
     %% to calculate if the hashtree has expired
     build_ts_secs   ::  non_neg_integer() | undefined,
     %% Time in milliseconds after which the hashtree will be reset
-    ttl_secs        ::  non_neg_integer(),
+    ttl_secs        ::  non_neg_integer() | undefined,
     reset = false   ::  boolean(),
-    timer           ::  reference()
+    timer           ::  reference() | undefined
 }).
 
 
@@ -304,6 +304,7 @@ update(Node, Partition) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec reset(plum_db:partition()) -> ok.
+
 reset(Partition) ->
     reset(node(), Partition).
 
@@ -313,6 +314,7 @@ reset(Partition) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec reset(node(), plum_db:partition()) -> ok.
+
 reset(Node, Partition) ->
     gen_server:cast({name(Partition), Node}, reset).
 
@@ -438,10 +440,9 @@ handle_info(
 
 handle_info(
     {'DOWN', BuildRef, process, _Pid, Reason},
-    #state{built = BuildRef, partition= P} = State) ->
-    _ = lager:error(
-        "Building tree failed; reason=~p, partition=~p", [Reason, P]),
-    State1 = build_error(State),
+    #state{built = BuildRef} = State) ->
+
+    State1 = build_error(Reason, State),
     {noreply, State1};
 
 handle_info(
@@ -482,19 +483,26 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @private
 do_init(#state{data_root = DataRoot, partition = Partition} = State0) ->
-    TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
-    Tree = hashtree_tree:new(TreeId, [{data_dir, DataRoot}, {num_levels, 2}]),
-    TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
-    State = State0#state{
-        tree = Tree,
-        built = false,
-        build_ts_secs = undefined,
-        ttl_secs = TTL,
-        lock = undefined,
-        reset = false
-    },
-    NewState = build_async(State),
-    schedule_tick(NewState).
+
+    try
+        TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
+        Tree = hashtree_tree:new(
+            TreeId, [{data_dir, DataRoot}, {num_levels, 2}]),
+        TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
+        State = State0#state{
+            tree = Tree,
+            built = false,
+            build_ts_secs = undefined,
+            ttl_secs = TTL,
+            lock = undefined,
+            reset = false
+        },
+        NewState = build_async(State),
+        schedule_tick(NewState)
+    catch
+        _:Reason ->
+            {stop, Reason}
+    end.
 
 
 %% @private
@@ -632,12 +640,7 @@ build_async(State) ->
                     "Starting hashtree build; partition=~p, node=~p",
                     [Partition, node()]
                 ),
-                Res = build(Partition, Iterator),
-                _ = lager:info(
-                    "Finished hashtree build; partition=~p, node=~p",
-                    [Partition, node()]
-                ),
-                Res
+                build(Partition, Iterator)
             end),
             State#state{built = Ref};
         false ->
@@ -660,10 +663,22 @@ build(Partition, Iterator) ->
 
 %% @private
 build_done(State) ->
+    _ = lager:info(
+        "Finished hashtree build; partition=~p, node=~p",
+        [State#state.partition, node()]
+    ),
+    _ = plum_db_events:notify(
+        hashtree_build_finished, {ok, State#state.partition}),
     State#state{built = true, build_ts_secs = erlang:system_time(second)}.
 
 %% @private
-build_error(State) ->
+build_error(Reason, State) ->
+    _ = lager:error(
+        "Building tree failed; reason=~p, partition=~p",
+        [Reason, State#state.partition]
+    ),
+    _ = plum_db_events:notify(
+        hashtree_build_finished, {ok, State#state.partition}),
     State#state{built = false}.
 
 

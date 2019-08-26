@@ -168,19 +168,21 @@
 
 -type select_fun(T) :: fun((orddict()) -> T).
 
--record(state, {id             :: tree_id_bin(),
-                index          :: index(),
-                levels         :: pos_integer(),
-                segments       :: pos_integer(),
-                width          :: pos_integer(),
-                mem_levels     :: integer(),
-                tree           :: dict:dict(),
-                ref            :: term(),
-                path           :: string(),
-                itr            :: term(),
-                write_buffer   :: [{put, binary(), binary()} | {delete, binary()}],
-                write_buffer_count :: integer(),
-                dirty_segments :: array:array()
+-record(state, {id             ::   tree_id_bin() | undefined,
+                index          ::   index() | undefined,
+                levels         ::   pos_integer() | undefined,
+                segments       ::   pos_integer() | undefined,
+                width          ::    pos_integer() | undefined,
+                mem_levels     ::   integer() | undefined,
+                tree           ::   dict:dict() | undefined,
+                ref            ::   term(),
+                path           ::   string() | undefined,
+                itr            ::   term(),
+                write_buffer   ::   [{put, binary(), binary()}
+                                    | {delete, binary()}]
+                                    | undefined,
+                write_buffer_count  :: integer() | undefined,
+                dirty_segments :: array:array() | undefined
                }).
 
 -record(itr_state, {itr                :: term(),
@@ -204,17 +206,20 @@
 %%% API
 %%%===================================================================
 
--spec new() -> hashtree().
+-spec new() -> hashtree() | no_return().
 new() ->
     new({0,0}).
 
--spec new({index(), tree_id_bin() | non_neg_integer()}) -> hashtree().
+-spec new({index(), tree_id_bin() | non_neg_integer()}) ->
+    hashtree() | no_return().
 new(TreeId) ->
     State = new_segment_store([], #state{}),
     new(TreeId, State, []).
 
--spec new({index(), tree_id_bin() | non_neg_integer()}, proplist()) -> hashtree();
-         ({index(), tree_id_bin() | non_neg_integer()}, hashtree()) -> hashtree().
+-spec new({index(), tree_id_bin() | non_neg_integer()}, proplist()) ->
+    hashtree()  | no_return();
+    ({index(), tree_id_bin() | non_neg_integer()}, hashtree()) ->
+        hashtree() | no_return().
 new(TreeId, Options) when is_list(Options) ->
     State = new_segment_store(Options, #state{}),
     new(TreeId, State, Options);
@@ -223,7 +228,7 @@ new(TreeId, LinkedStore = #state{}) ->
 
 -spec new({index(), tree_id_bin() | non_neg_integer()},
           hashtree(),
-          proplist()) -> hashtree().
+          proplist()) -> hashtree() | no_return().
 new({Index,TreeId}, LinkedStore, Options) ->
     NumSegments = proplists:get_value(segments, Options, ?NUM_SEGMENTS),
     Width = proplists:get_value(width, Options, ?WIDTH),

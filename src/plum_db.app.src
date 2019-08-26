@@ -1,8 +1,13 @@
 {application, plum_db, [
     {description, "A database globally replicated via Plumtree (Epidemic Broadcast Trees) and Partisan. An offspring of Plumtree and Partisan, a descendant of Riak Core Metadata Store."},
-    {vsn, "0.2.1"},
+    {vsn, "0.2.2"},
     {registered, []},
     {mod, {plum_db_app, []}},
+    {start_phases, [
+        {init_db_partitions, []},
+        {init_db_hashtrees, []},
+        {aae_exchange, []}
+    ]},
     {applications, [
         kernel,
         stdlib,
