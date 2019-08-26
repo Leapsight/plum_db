@@ -1,18 +1,20 @@
-%% -----------------------------------------------------------------------------
-%%    Copyright 2018 Ngineo Limited t/a Leapsight
+%% =============================================================================
+%%  plum_db_partition_server.erl -
 %%
-%%    Licensed under the Apache License, Version 2.0 (the "License");
-%%    you may not use this file except in compliance with the License.
-%%    You may obtain a copy of the License at
+%%  Copyright (c) 2017-2019 Ngineo Limited t/a Leapsight. All rights reserved.
 %%
-%%        http://www.apache.org/licenses/LICENSE-2.0
+%%  Licensed under the Apache License, Version 2.0 (the "License");
+%%  you may not use this file except in compliance with the License.
+%%  You may obtain a copy of the License at
 %%
-%%    Unless required by applicable law or agreed to in writing, software
-%%    distributed under the License is distributed on an "AS IS" BASIS,
-%%    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%%    See the License for the specific language governing permissions and
-%%    limitations under the License.
-%% -----------------------------------------------------------------------------
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%%  Unless required by applicable law or agreed to in writing, software
+%%  distributed under the License is distributed on an "AS IS" BASIS,
+%%  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%  See the License for the specific language governing permissions and
+%%  limitations under the License.
+%% =============================================================================
 
 %% -----------------------------------------------------------------------------
 %% @doc  A wrapper for an elevelb instance.
@@ -42,7 +44,7 @@
     write_opts = []						::	opts(),
     fold_opts = [{fill_cache, false}]	::	opts(),
     iterators = []                      ::  iterators(),
-    helper = undefined                  ::  pid()
+    helper = undefined                  ::  pid() | undefined
 }).
 
 -record(partition_iterator, {
@@ -64,17 +66,31 @@
     ram_disk_tab            ::  atom()
 }).
 
--type opts()                :: 	[{atom(), term()}].
--type iterator()            ::  #partition_iterator{}.
--type iterators()           ::  [iterator()].
--type iterator_action()     ::  first
-                                | last | next | prev
-                                | prefetch | prefetch_stop
-                                | plum_db_prefix()
-                                | plum_db_pkey()
-                                | binary().
+-type opts()                    :: 	[{atom(), term()}].
+-type iterator()                ::  #partition_iterator{}.
+-type iterators()               ::  [iterator()].
+-type iterator_action()         ::  first
+                                    | last | next | prev
+                                    | prefetch | prefetch_stop
+                                    | plum_db_prefix()
+                                    | plum_db_pkey()
+                                    | binary().
+-type iterator_move_result()    ::  {ok,
+                                        Key :: binary() | plum_db_pkey(),
+                                        Value :: binary(),
+                                        iterator()
+                                    }
+                                    | {ok,
+                                        Key :: binary() | plum_db_pkey(),
+                                        iterator()
+                                    }
+                                    | {error, invalid_iterator, iterator()}
+                                    | {error, iterator_closed, iterator()}
+                                    | {error, no_match, iterator()}.
+
 
 -export_type([iterator/0]).
+-export_type([iterator_move_result/0]).
 
 -export([byte_size/1]).
 -export([delete/1]).
@@ -147,9 +163,9 @@ get(Partition, PKey) when is_integer(Partition) ->
 
 get(Name, {{Prefix, _}, _} = PKey) when is_atom(Name) ->
     case plum_db:prefix_type(Prefix) of
-        Type when Type == ram orelse Type == ramdisk ->
+        Type when Type == ram orelse Type == ram_disk ->
             case ets:lookup(table_name(Name, Type), PKey) of
-                [] when Type == ramdisk ->
+                [] when Type == ram_disk ->
                     %% During init we would be restoring the ram_disk prefixes
                     %% asynchronously.
                     %% So we need to fallback to disk until the restore is
@@ -311,12 +327,7 @@ iterator_close(Store, #partition_iterator{} = Iter) when is_atom(Store) ->
 %% @doc Iterates over the storage stack in order (disk -> ram_disk -> ram).
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator_move(iterator(), iterator_action()) ->
-    {ok, Key :: binary(), Value :: binary(), iterator()}
-    | {ok, Key :: binary(), iterator()}
-    | {error, invalid_iterator, iterator()}
-    | {error, iterator_closed, iterator()}
-    | {error, no_match, iterator()}.
+-spec iterator_move(iterator(), iterator_action()) -> iterator_move_result().
 
 iterator_move(
     #partition_iterator{disk_done = true} = Iter, {undefined, undefined}) ->
@@ -896,8 +907,14 @@ open_db(State0, RetriesLeft, _) ->
                 true ->
                     SleepFor = plum_db_config:get(store_open_retries_delay),
                     _ = lager:debug(
-                        "Leveldb backend retrying ~p in ~p ms after error ~s\n",
-                        [State0#state.data_root, SleepFor, OpenErr]
+                        "Leveldb backend retrying ~p in ~p ms after error; partition=~p, node=~p, reason=~s",
+                        [
+                            State0#state.partition,
+                            node(),
+                            State0#state.data_root,
+                            SleepFor,
+                            OpenErr
+                        ]
                     ),
                     timer:sleep(SleepFor),
                     open_db(State0, RetriesLeft - 1, Reason);
@@ -906,15 +923,24 @@ open_db(State0, RetriesLeft, _) ->
                         true ->
                             _ = lager:info(
                                 "Starting repair of corrupted leveldb store; "
-                                "data_root=~p, reason=~p",
-                                [State0#state.data_root, OpenErr]
+                                "partition=~p, node=~p, data_root=~p, reason=~p",
+                                [
+                                    State0#state.partition,
+                                    node(),
+                                    State0#state.data_root,
+                                    OpenErr
+                                ]
                             ),
                             _ = eleveldb:repair(
                                 State0#state.data_root, State0#state.open_opts),
                             _ = lager:info(
                                 "Finished repair of corrupted leveldb store; "
-                                "data_root=~p, reason=~p",
-                                [State0#state.data_root, OpenErr]
+                                "partition=~p, data_root=~p, reason=~p",
+                                [
+                                    State0#state.partition,
+                                    State0#state.data_root,
+                                    OpenErr
+                                ]
                             ),
                             open_db(State0, 0, Reason);
                         false ->
@@ -937,10 +963,7 @@ spawn_helper(State) ->
 %% @private
 init_ram_disk_prefixes_fun(State) ->
     fun() ->
-        _ = lager:info(
-            "Initialising partition ~p",
-            [State#state.partition]
-        ),
+        _ = lager:info("Initialising partition; partition=~p, node=~p", [State#state.partition, node()]),
         %% We create the in-memory db copy for ram and ram_disk prefixes
         Tab = State#state.ram_disk_tab,
 
@@ -949,13 +972,13 @@ init_ram_disk_prefixes_fun(State) ->
         {ok, DbIter} = eleveldb:iterator(
             State#state.db_ref, State#state.fold_opts),
 
-
         try
             Fun = fun
                 ({Prefix, ram_disk}, ok) ->
                     _ = lager:info(
-                        "Loading data from prefix ~p to ram",
-                        [Prefix]
+                        "Loading data from disk to ram; "
+                        "partition=~p, prefix=~p, node=~p",
+                        [State#state.partition, Prefix, node()]
                     ),
                     First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
                     Next = eleveldb:iterator_move(DbIter, First),
@@ -964,20 +987,28 @@ init_ram_disk_prefixes_fun(State) ->
                 (_, ok) ->
                     ok
             end,
-            lists:foldl(Fun, ok, PrefixList)
+            ok = lists:foldl(Fun, ok, PrefixList),
+            _ = lager:info(
+                "Finished initialisation of partition; "
+                "partition=~p, node=~p",
+                [State#state.partition, node()]
+            ),
+            _ = plum_db_events:notify(
+                partition_init_finished, {ok, State#state.partition}),
+            ok
         catch
             ?EXCEPTION(Class, Reason, Stacktrace) ->
                 _ = lager:error(
                     "Error while initialising partition; partition=~p, "
-                    "class=~p, reason=~p, stacktrace=~p",
-                    [State#state.partition, Class, Reason, ?STACKTRACE(Stacktrace)]
+                    "node=~p, class=~p, reason=~p, stacktrace=~p",
+                    [State#state.partition, node(), Class, Reason, ?STACKTRACE(Stacktrace)]
+                ),
+                _ = plum_db_events:notify(
+                    partition_init_finished,
+                    {error, Reason, State#state.partition}
                 ),
                 erlang:raise(Class, Reason, ?STACKTRACE(Stacktrace))
         after
-            _ = lager:info(
-                "Finished initialisation of partition ~p",
-                [State#state.partition]
-            ),
             eleveldb:iterator_close(DbIter)
         end
     end.
@@ -1059,18 +1090,22 @@ next_iterator(ram, _) ->
 %% @private
 prev_iterator(ram, #partition_iterator{ram_disk_tab = undefined} = Iter) ->
     prev_iterator(ram_disk, Iter);
+
 prev_iterator(ram, Iter) ->
     Iter#partition_iterator{
-        ram_disk = false,
+        ram_disk_done = false,
         ram_done = false
     };
+
 prev_iterator(ram_disk, #partition_iterator{disk = undefined}) ->
     undefined;
+
 prev_iterator(ram_disk, Iter) ->
     Iter#partition_iterator{
         disk_done = false,
         ram_disk_done = false
     };
+
 prev_iterator(disk, _) ->
     undefined.
 
@@ -1119,7 +1154,7 @@ ets_match_spec({_, _} = FullPrefix, KeysOnly) ->
 
 %% @private
 -spec matches_key(binary() | plum_db_pkey(), iterator()) ->
-    {true, plum_db_pkey()} | false | ?EOT.
+    {true, plum_db_pkey()} | {false, plum_db_pkey()} | ?EOT.
 
 matches_key(PKey, #partition_iterator{match_spec = undefined} = Iter) ->
     %% We try to match the prefix and if it doesn't we stop

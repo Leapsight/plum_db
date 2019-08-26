@@ -1,22 +1,22 @@
-%% -------------------------------------------------------------------
+%% =============================================================================
+%%  plum_db.erl -
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.  All Rights Reserved.
+%%  Copyright (c) 2013 Basho Technologies, Inc.  All Rights Reserved.
+%%  Copyright (c) 2017-2019 Ngineo Limited t/a Leapsight. All rights reserved.
 %%
-%% This file is provided to you under the Apache License,
-%% Version 2.0 (the "License"); you may not use this file
-%% except in compliance with the License.  You may obtain
-%% a copy of the License at
+%%  Licensed under the Apache License, Version 2.0 (the "License");
+%%  you may not use this file except in compliance with the License.
+%%  You may obtain a copy of the License at
 %%
-%%   http://www.apache.org/licenses/LICENSE-2.0
+%%     http://www.apache.org/licenses/LICENSE-2.0
 %%
-%% Unless required by applicable law or agreed to in writing,
-%% software distributed under the License is distributed on an
-%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-%% KIND, either express or implied.  See the License for the
-%% specific language governing permissions and limitations
-%% under the License.
-%%
-%% -------------------------------------------------------------------
+%%  Unless required by applicable law or agreed to in writing, software
+%%  distributed under the License is distributed on an "AS IS" BASIS,
+%%  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%  See the License for the specific language governing permissions and
+%%  limitations under the License.
+%% =============================================================================
+
 -module(plum_db).
 -behaviour(gen_server).
 -behaviour(plumtree_broadcast_handler).
@@ -211,6 +211,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -spec start_link() -> {ok, pid()} | ignore | {error, term()}.
+
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
@@ -404,6 +405,7 @@ fold(Fun, Acc0, FullPrefixPattern) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec fold(fold_fun(), any(), plum_db_prefix_pattern(), fold_opts()) -> any().
+
 fold(Fun, Acc0, FullPrefixPattern, Opts) ->
     It = iterator(FullPrefixPattern, Opts),
     try
@@ -431,6 +433,7 @@ do_fold(Fun, Acc, It) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec foreach(foreach_fun(), plum_db_prefix_pattern()) -> any().
+
 foreach(Fun, FullPrefixPattern) ->
     foreach(Fun, FullPrefixPattern, []).
 
@@ -442,6 +445,7 @@ foreach(Fun, FullPrefixPattern) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec foreach(foreach_fun(), plum_db_prefix_pattern(), fold_opts()) -> any().
+
 foreach(Fun, FullPrefixPattern, Opts) ->
     It = iterator(FullPrefixPattern, Opts),
     try
@@ -467,6 +471,7 @@ do_foreach(Fun, It) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec fold_elements(fold_elements_fun(), any(), plum_db_prefix()) -> any().
+
 fold_elements(Fun, Acc0, FullPrefix) ->
     fold_elements(Fun, Acc0, FullPrefix, []).
 
@@ -480,6 +485,7 @@ fold_elements(Fun, Acc0, FullPrefix) ->
 -spec fold_elements(
     fold_elements_fun(), any(), plum_db_prefix(), fold_opts()) ->
     any().
+
 fold_elements(Fun, Acc0, FullPrefix, Opts) ->
     It = iterator(FullPrefix, Opts),
     try
@@ -522,6 +528,7 @@ match(#continuation{} = Cont) ->
 %% -----------------------------------------------------------------------------
 -spec match(plum_db_prefix_pattern(), plum_db_pkey_pattern()) ->
     [{plum_db_key(), value_or_values()}].
+
 match(FullPrefix, KeyPattern) ->
     match(FullPrefix, KeyPattern, []).
 
@@ -577,6 +584,7 @@ match(FullPrefix0, KeyPattern, Opts0) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec to_list(plum_db_prefix()) -> [{plum_db_key(), value_or_values()}].
+
 to_list(FullPrefix) ->
     to_list(FullPrefix, []).
 
@@ -589,7 +597,6 @@ to_list(FullPrefix) ->
 %% -----------------------------------------------------------------------------
 -spec to_list(FullPrefix :: plum_db_prefix(), Opts :: fold_opts()) ->
     [{plum_db_key(), value_or_values()}].
-
 
 to_list(FullPrefix0, Opts) ->
     FullPrefix = normalise_prefix(FullPrefix0),
@@ -609,6 +616,7 @@ to_list(FullPrefix0, Opts) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec iterator() -> iterator().
+
 iterator() ->
     iterator({?WILDCARD, ?WILDCARD}).
 
@@ -618,6 +626,7 @@ iterator() ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec iterator(plum_db_prefix()) -> iterator().
+
 iterator(FullPrefix) ->
     iterator(FullPrefix, []).
 
@@ -672,6 +681,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec remote_iterator(node()) -> remote_iterator().
+
 remote_iterator(Node) ->
     remote_iterator(Node, {?WILDCARD, ?WILDCARD}).
 
@@ -742,6 +752,9 @@ iterate(#iterator{ref = Ref} = I) ->
 
 
 %% @private
+-spec iterate(plum_db_partition_server:iterator_move_result(), iterator()) ->
+    iterator().
+
 iterate({error, no_match, Ref1}, I0) ->
     %% We carry on trying to match the remaining keys
     iterate(I0#iterator{ref = Ref1});
@@ -829,6 +842,7 @@ iterator_prefix(#iterator{prefix = Prefix}) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec iterator_key(iterator()) -> plum_db_key() | undefined.
+
 iterator_key(#iterator{key = Key}) ->
     Key.
 
@@ -850,7 +864,6 @@ iterator_key(#iterator{key = Key}) ->
 %% -----------------------------------------------------------------------------
 -spec iterator_key_value(iterator() | remote_iterator() | iterator()) ->
     {plum_db_key() , plum_db_value()} | {error, conflict}.
-
 
 iterator_key_value(#iterator{opts = Opts} = I) ->
     Default = iterator_default(I),
@@ -974,6 +987,7 @@ prefix_hash(Partition, {_, _} = Prefix) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec prefixes() -> prefixes().
+
 prefixes() ->
     plum_db_config:get(prefixes).
 
@@ -983,6 +997,7 @@ prefixes() ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec prefix_type(term()) -> prefix_type() | undefined.
+
 prefix_type(Prefix) ->
     maps:get(Prefix, plum_db_config:get(prefixes), undefined).
 
@@ -993,6 +1008,7 @@ prefix_type(Prefix) ->
 %% -----------------------------------------------------------------------------
 -spec put(
     plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier()) -> ok.
+
 put(FullPrefix, Key, ValueOrFun) ->
     put(FullPrefix, Key, ValueOrFun, []).
 
@@ -1028,6 +1044,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec delete(plum_db_prefix(), plum_db_key()) -> ok.
+
 delete(FullPrefix, Key) ->
     delete(FullPrefix, Key, []).
 
@@ -1041,6 +1058,7 @@ delete(FullPrefix, Key) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec delete(plum_db_prefix(), plum_db_key(), delete_opts()) -> ok.
+
 delete(FullPrefix, Key, _Opts) ->
     put(FullPrefix, Key, ?TOMBSTONE, []).
 
@@ -1108,7 +1126,8 @@ init([]) ->
             named_table,
             {keypos, 1},
             {read_concurrency, true},
-            {write_concurrency, true}]
+            {write_concurrency, true}
+        ]
     ),
     State = #state{iterators = ?MODULE},
     {ok, State}.
@@ -1122,7 +1141,6 @@ init([]) ->
     | {noreply, state(), non_neg_integer()}
     | {stop, term(), term(), state()}
     | {stop, term(), state()}.
-
 
 handle_call({open_remote_iterator, Pid, FullPrefix, Opts}, _From, State) ->
     Iterator = new_remote_iterator(Pid, FullPrefix, Opts, State),
@@ -1333,9 +1351,7 @@ exchange(Peer, Opts0) ->
                 {ok, Pid} ->
                     {ok, Pid};
                 {error, Reason} ->
-                    {error, Reason};
-                ignore ->
-                    {error, ignore}
+                    {error, Reason}
             end;
         false ->
             {error, aae_disabled}
@@ -1369,7 +1385,6 @@ sync_exchange(Peer, Opts0) ->
             receive
                 {'DOWN', Ref, process, Pid, normal} ->
                     ok;
-
                 {'DOWN', Ref, process, Pid, Reason} ->
                     {error, Reason}
             after
@@ -1377,9 +1392,7 @@ sync_exchange(Peer, Opts0) ->
                     {error, timeout}
             end;
         {error, Reason} ->
-            {error, Reason};
-        ignore ->
-            {error, ignore}
+            {error, Reason}
     end.
 
 
@@ -1434,7 +1447,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 
 -spec take_with_context(
     plum_db_pkey_pattern(), undefined | plum_db_context()) ->
-        {Existing :: plum_db_object(), New :: plum_db_object()}.
+        {Existing :: plum_db_object() | undefined, New :: plum_db_object()}.
 
 take_with_context({?WILDCARD, _} = PKey, _) ->
     error(badarg, [PKey]);

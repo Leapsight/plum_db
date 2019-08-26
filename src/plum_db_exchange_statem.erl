@@ -1,3 +1,21 @@
+%% =============================================================================
+%%  plum_db_exchange_statem.erl -
+%%
+%%  Copyright (c) 2018-2019 Ngineo Limited t/a Leapsight. All rights reserved.
+%%
+%%  Licensed under the Apache License, Version 2.0 (the "License");
+%%  you may not use this file except in compliance with the License.
+%%  You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%%  Unless required by applicable law or agreed to in writing, software
+%%  distributed under the License is distributed on an "AS IS" BASIS,
+%%  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%  See the License for the specific language governing permissions and
+%%  limitations under the License.
+%% =============================================================================
+
 -module(plum_db_exchange_statem).
 -behaviour(gen_statem).
 
@@ -186,7 +204,7 @@ acquiring_locks(cast, {remote_lock_error, Reason}, State) ->
     {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
 
 acquiring_locks(Type, Content, State) ->
-    _ = handle_event(acquiring_locks, Type, Content, State),
+    _ = handle_unexpected_event(acquiring_locks, Type, Content, State),
     {next_state, acquiring_locks, State#state.timeout}.
 
 
@@ -242,7 +260,7 @@ updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
     {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
 
 updating_hashtrees(Type, Content, State) ->
-    _ = handle_event(updating_hashtrees, Type, Content, State),
+    _ = handle_unexpected_event(updating_hashtrees, Type, Content, State),
     {next_state, updating_hashtrees, State}.
 
 
@@ -312,7 +330,7 @@ exchanging_data(timeout, _, State) ->
     end;
 
 exchanging_data(Type, Content, State) ->
-    _ = handle_event(exchanging_data, Type, Content, State),
+    _ = handle_unexpected_event(exchanging_data, Type, Content, State),
     {next_state, exchanging_data, State}.
 
 
@@ -331,12 +349,12 @@ reset_state(State) ->
     }.
 
 
-handle_event(_, cast, {remote_lock_acquired, Partition}, State) ->
-    %% We received a late respose to an async_acquire_remote_lock
+handle_unexpected_event(_, cast, {remote_lock_acquired, Partition}, State) ->
+    %% We received a late response to an async_acquire_remote_lock
     %% Unlock it.
     release_remote_lock(Partition, State#state.peer);
 
-handle_event(StateLabel, Type, Event, State) ->
+handle_unexpected_event(StateLabel, Type, Event, State) ->
     _ = lager:info(
         "Invalid event; state=~p, type=~p, event=~p, state=~p",
         [StateLabel, Type, Event, State]
