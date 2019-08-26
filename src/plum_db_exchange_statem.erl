@@ -204,7 +204,7 @@ acquiring_locks(cast, {remote_lock_error, Reason}, State) ->
     {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
 
 acquiring_locks(Type, Content, State) ->
-    _ = handle_event(acquiring_locks, Type, Content, State),
+    _ = handle_unexpected_event(acquiring_locks, Type, Content, State),
     {next_state, acquiring_locks, State#state.timeout}.
 
 
@@ -260,7 +260,7 @@ updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
     {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
 
 updating_hashtrees(Type, Content, State) ->
-    _ = handle_event(updating_hashtrees, Type, Content, State),
+    _ = handle_unexpected_event(updating_hashtrees, Type, Content, State),
     {next_state, updating_hashtrees, State}.
 
 
@@ -330,7 +330,7 @@ exchanging_data(timeout, _, State) ->
     end;
 
 exchanging_data(Type, Content, State) ->
-    _ = handle_event(exchanging_data, Type, Content, State),
+    _ = handle_unexpected_event(exchanging_data, Type, Content, State),
     {next_state, exchanging_data, State}.
 
 
@@ -349,12 +349,12 @@ reset_state(State) ->
     }.
 
 
-handle_event(_, cast, {remote_lock_acquired, Partition}, State) ->
-    %% We received a late respose to an async_acquire_remote_lock
+handle_unexpected_event(_, cast, {remote_lock_acquired, Partition}, State) ->
+    %% We received a late response to an async_acquire_remote_lock
     %% Unlock it.
     release_remote_lock(Partition, State#state.peer);
 
-handle_event(StateLabel, Type, Event, State) ->
+handle_unexpected_event(StateLabel, Type, Event, State) ->
     _ = lager:info(
         "Invalid event; state=~p, type=~p, event=~p, state=~p",
         [StateLabel, Type, Event, State]

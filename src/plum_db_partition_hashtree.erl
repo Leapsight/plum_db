@@ -65,10 +65,10 @@
     %% the plum_db partition this hashtree represents
     partition       ::  non_neg_integer(),
     %% the tree managed by this process
-    tree            ::  hashtree_tree:tree(),
+    tree            ::  hashtree_tree:tree() | undefined,
     %% whether or not the tree has been built or a monitor ref
     %% if the tree is being built
-    built           ::  boolean() | reference(),
+    built           ::  boolean() | reference() | undefined,
     %% a monitor reference for a process that currently holds a
     %% lock on the tree
     lock            ::  {internal | external, reference(), pid()} | undefined,
@@ -76,9 +76,9 @@
     %% to calculate if the hashtree has expired
     build_ts_secs   ::  non_neg_integer() | undefined,
     %% Time in milliseconds after which the hashtree will be reset
-    ttl_secs        ::  non_neg_integer(),
+    ttl_secs        ::  non_neg_integer() | undefined,
     reset = false   ::  boolean(),
-    timer           ::  reference()
+    timer           ::  reference() | undefined
 }).
 
 
@@ -483,19 +483,26 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @private
 do_init(#state{data_root = DataRoot, partition = Partition} = State0) ->
-    TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
-    Tree = hashtree_tree:new(TreeId, [{data_dir, DataRoot}, {num_levels, 2}]),
-    TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
-    State = State0#state{
-        tree = Tree,
-        built = false,
-        build_ts_secs = undefined,
-        ttl_secs = TTL,
-        lock = undefined,
-        reset = false
-    },
-    NewState = build_async(State),
-    schedule_tick(NewState).
+
+    try
+        TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
+        Tree = hashtree_tree:new(
+            TreeId, [{data_dir, DataRoot}, {num_levels, 2}]),
+        TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
+        State = State0#state{
+            tree = Tree,
+            built = false,
+            build_ts_secs = undefined,
+            ttl_secs = TTL,
+            lock = undefined,
+            reset = false
+        },
+        NewState = build_async(State),
+        schedule_tick(NewState)
+    catch
+        _:Reason ->
+            {stop, Reason}
+    end.
 
 
 %% @private
