@@ -44,7 +44,7 @@
     write_opts = []						::	opts(),
     fold_opts = [{fill_cache, false}]	::	opts(),
     iterators = []                      ::  iterators(),
-    helper = undefined                  ::  pid()
+    helper = undefined                  ::  pid() | undefined
 }).
 
 -record(partition_iterator, {
@@ -163,9 +163,9 @@ get(Partition, PKey) when is_integer(Partition) ->
 
 get(Name, {{Prefix, _}, _} = PKey) when is_atom(Name) ->
     case plum_db:prefix_type(Prefix) of
-        Type when Type == ram orelse Type == ramdisk ->
+        Type when Type == ram orelse Type == ram_disk ->
             case ets:lookup(table_name(Name, Type), PKey) of
-                [] when Type == ramdisk ->
+                [] when Type == ram_disk ->
                     %% During init we would be restoring the ram_disk prefixes
                     %% asynchronously.
                     %% So we need to fallback to disk until the restore is
@@ -1071,18 +1071,22 @@ next_iterator(ram, _) ->
 %% @private
 prev_iterator(ram, #partition_iterator{ram_disk_tab = undefined} = Iter) ->
     prev_iterator(ram_disk, Iter);
+
 prev_iterator(ram, Iter) ->
     Iter#partition_iterator{
-        ram_disk = false,
+        ram_disk_done = false,
         ram_done = false
     };
+
 prev_iterator(ram_disk, #partition_iterator{disk = undefined}) ->
     undefined;
+
 prev_iterator(ram_disk, Iter) ->
     Iter#partition_iterator{
         disk_done = false,
         ram_disk_done = false
     };
+
 prev_iterator(disk, _) ->
     undefined.
 
