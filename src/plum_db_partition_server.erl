@@ -907,8 +907,14 @@ open_db(State0, RetriesLeft, _) ->
                 true ->
                     SleepFor = plum_db_config:get(store_open_retries_delay),
                     _ = lager:debug(
-                        "Leveldb backend retrying ~p in ~p ms after error ~s\n",
-                        [State0#state.data_root, SleepFor, OpenErr]
+                        "Leveldb backend retrying ~p in ~p ms after error; partition=~p, node=~p, reason=~s",
+                        [
+                            State0#state.partition,
+                            node(),
+                            State0#state.data_root,
+                            SleepFor,
+                            OpenErr
+                        ]
                     ),
                     timer:sleep(SleepFor),
                     open_db(State0, RetriesLeft - 1, Reason);
@@ -917,15 +923,24 @@ open_db(State0, RetriesLeft, _) ->
                         true ->
                             _ = lager:info(
                                 "Starting repair of corrupted leveldb store; "
-                                "data_root=~p, reason=~p",
-                                [State0#state.data_root, OpenErr]
+                                "partition=~p, node=~p, data_root=~p, reason=~p",
+                                [
+                                    State0#state.partition,
+                                    node(),
+                                    State0#state.data_root,
+                                    OpenErr
+                                ]
                             ),
                             _ = eleveldb:repair(
                                 State0#state.data_root, State0#state.open_opts),
                             _ = lager:info(
                                 "Finished repair of corrupted leveldb store; "
-                                "data_root=~p, reason=~p",
-                                [State0#state.data_root, OpenErr]
+                                "partition=~p, data_root=~p, reason=~p",
+                                [
+                                    State0#state.partition,
+                                    State0#state.data_root,
+                                    OpenErr
+                                ]
                             ),
                             open_db(State0, 0, Reason);
                         false ->
@@ -948,7 +963,7 @@ spawn_helper(State) ->
 %% @private
 init_ram_disk_prefixes_fun(State) ->
     fun() ->
-        _ = lager:info("Initialising partition ~p", [State#state.partition]),
+        _ = lager:info("Initialising partition; partition=~p, node=~p", [State#state.partition, node()]),
         %% We create the in-memory db copy for ram and ram_disk prefixes
         Tab = State#state.ram_disk_tab,
 
@@ -961,7 +976,10 @@ init_ram_disk_prefixes_fun(State) ->
             Fun = fun
                 ({Prefix, ram_disk}, ok) ->
                     _ = lager:info(
-                        "Loading data from prefix ~p to ram", [Prefix]),
+                        "Loading data from disk to ram; "
+                        "partition=~p, prefix=~p, node=~p",
+                        [State#state.partition, Prefix, node()]
+                    ),
                     First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
                     Next = eleveldb:iterator_move(DbIter, First),
                     init_prefix_iterate(
@@ -971,8 +989,9 @@ init_ram_disk_prefixes_fun(State) ->
             end,
             ok = lists:foldl(Fun, ok, PrefixList),
             _ = lager:info(
-                "Finished initialisation of partition ~p",
-                [State#state.partition]
+                "Finished initialisation of partition; "
+                "partition=~p, node=~p",
+                [State#state.partition, node()]
             ),
             _ = plum_db_events:notify(
                 partition_init_finished, {ok, State#state.partition}),
@@ -981,8 +1000,8 @@ init_ram_disk_prefixes_fun(State) ->
             ?EXCEPTION(Class, Reason, Stacktrace) ->
                 _ = lager:error(
                     "Error while initialising partition; partition=~p, "
-                    "class=~p, reason=~p, stacktrace=~p",
-                    [State#state.partition, Class, Reason, ?STACKTRACE(Stacktrace)]
+                    "node=~p, class=~p, reason=~p, stacktrace=~p",
+                    [State#state.partition, node(), Class, Reason, ?STACKTRACE(Stacktrace)]
                 ),
                 _ = plum_db_events:notify(
                     partition_init_finished,
