@@ -178,8 +178,9 @@ wait_for_partitions() ->
 wait_for_hashtrees() ->
     %% If aae is disabled the hastrees will never get build
     %% and we would block forever
-    plum_db_config:get(aae_enabled) andalso
-    plum_db_config:get(wait_for_hashtrees).
+    (plum_db_config:get(aae_enabled)
+        andalso plum_db_config:get(wait_for_hashtrees))
+    orelse wait_for_aae_exchange().
 
 
 %% @private
