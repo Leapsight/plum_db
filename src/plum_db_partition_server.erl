@@ -150,8 +150,8 @@ name(Partition) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-get(Key) ->
-    get(name(plum_db:get_partition(Key)), Key).
+get(PKey) ->
+    get(name(plum_db:get_partition(PKey)), PKey).
 
 
 %% -----------------------------------------------------------------------------

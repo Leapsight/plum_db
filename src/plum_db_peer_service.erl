@@ -24,6 +24,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -module(plum_db_peer_service).
+-include("plum_db.hrl").
 
 -define(DEFAULT_PEER_SERVICE, partisan_peer_service).
 
@@ -282,7 +283,7 @@ add_sup_callback(Function) ->
 %% @end
 %% -----------------------------------------------------------------------------
 cast_message(Name, ServerRef, Message) ->
-    do(cast_message, [Name, ServerRef, Message]).
+    do(cast_message, [Name, ?AAE_CHANNEL, ServerRef, Message]).
 
 
 %% -----------------------------------------------------------------------------
@@ -290,7 +291,7 @@ cast_message(Name, ServerRef, Message) ->
 %% @end
 %% -----------------------------------------------------------------------------
 forward_message(Name, ServerRef, Message) ->
-    do(forward_message, [Name, ServerRef, Message]).
+    do(forward_message, [Name, ?AAE_CHANNEL, ServerRef, Message]).
 
 
 
