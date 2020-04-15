@@ -23,6 +23,7 @@
 %% @end
 %% =============================================================================
 -module(plum_db_config).
+-include("plum_db.hrl").
 
 -define(ERROR, '$error_badarg').
 -define(APP, plum_db).
@@ -166,7 +167,7 @@ setup_env() ->
     PartisanOverrides = #{
         pid_encoding => false,
         connect_disterl => false,
-        channels => [aae_messages | Channels]
+        channels => [?AAE_CHANNEL | Channels]
     },
     PartisanEnv1 = maps:merge(
         maps:merge(PartisanDefaults, PartisanEnv0),
