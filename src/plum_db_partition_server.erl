@@ -963,7 +963,10 @@ spawn_helper(State) ->
 %% @private
 init_ram_disk_prefixes_fun(State) ->
     fun() ->
-        _ = lager:info("Initialising partition; partition=~p, node=~p", [State#state.partition, node()]),
+        _ = lager:info(
+            "Initialising partition; partition=~p, node=~p",
+            [State#state.partition, node()]
+        ),
         %% We create the in-memory db copy for ram and ram_disk prefixes
         Tab = State#state.ram_disk_tab,
 
@@ -994,7 +997,8 @@ init_ram_disk_prefixes_fun(State) ->
                 [State#state.partition, node()]
             ),
             _ = plum_db_events:notify(
-                partition_init_finished, {ok, State#state.partition}),
+                partition_init_finished, {ok, State#state.partition}
+            ),
             ok
         catch
             ?EXCEPTION(Class, Reason, Stacktrace) ->
