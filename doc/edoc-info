@@ -1,0 +1,9 @@
+%% encoding: UTF-8
+{application,plum_db}.
+{modules,[dvvset,hashtree,hashtree_tree,plum_db,plum_db_app,plum_db_config,
+          plum_db_console,plum_db_events,plum_db_exchange_statem,
+          plum_db_exchanges_sup,plum_db_mochiglobal,plum_db_object,
+          plum_db_partition_hashtree,plum_db_partition_server,
+          plum_db_partition_sup,plum_db_partition_worker,
+          plum_db_partitions_sup,plum_db_peer_service,plum_db_pubsub,
+          plum_db_startup_coordinator,plum_db_sup,plum_db_table_owner]}.

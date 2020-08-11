@@ -698,7 +698,7 @@ maybe_external_lock(_, From, State) ->
     State.
 
 
-%% @privateaybe
+%% @private
 do_lock(Pid, Type, State) ->
     LockRef = monitor(process, Pid),
     State#state{lock = {Type, LockRef, Pid}}.
