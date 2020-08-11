@@ -456,15 +456,17 @@ value_or_values() = [<a href="#type-plum_db_value">plum_db_value()</a> | <a href
 <code>broadcast/2</code> as the handling module returning the message id
 and payload.</td></tr><tr><td valign="top"><a href="#delete-2">delete/2</a></td><td>Same as delete(FullPrefix, Key, []).</td></tr><tr><td valign="top"><a href="#delete-3">delete/3</a></td><td>Logically deletes the value associated with the given prefix
 and key locally and then triggers a broradcast to notify other nodes in the
-cluster.</td></tr><tr><td valign="top"><a href="#exchange-1">exchange/1</a></td><td>Triggers an asynchronous exchange.</td></tr><tr><td valign="top"><a href="#fold-3">fold/3</a></td><td>Same as fold(Fun, Acc0, FullPrefix, []).</td></tr><tr><td valign="top"><a href="#fold-4">fold/4</a></td><td>Fold over all keys and values stored under a given prefix/subprefix.</td></tr><tr><td valign="top"><a href="#fold_elements-3">fold_elements/3</a></td><td>Same as fold_elements(Fun, Acc0, FullPrefix, []).</td></tr><tr><td valign="top"><a href="#fold_elements-4">fold_elements/4</a></td><td>Fold over all elements stored under a given prefix/subprefix.</td></tr><tr><td valign="top"><a href="#foreach-2">foreach/2</a></td><td>Same as fold(Fun, Acc0, FullPrefix, []).</td></tr><tr><td valign="top"><a href="#foreach-3">foreach/3</a></td><td>Fold over all keys and values stored under a given prefix/subprefix.</td></tr><tr><td valign="top"><a href="#get-2">get/2</a></td><td>Same as get(FullPrefix, Key, []).</td></tr><tr><td valign="top"><a href="#get-3">get/3</a></td><td>Retrieves the local value stored at the given prefix and key.</td></tr><tr><td valign="top"><a href="#get_object-1">get_object/1</a></td><td>Returns a Dotted Version Vector Set or undefined.</td></tr><tr><td valign="top"><a href="#get_object-2">get_object/2</a></td><td>Same as get/1 but reads the value from <code>Node</code>
-This is function is used by plum_db_exchange_statem.</td></tr><tr><td valign="top"><a href="#graft-1">graft/1</a></td><td>Returns the object associated with the given key and context
-(message id) if the currently stored version has an equal context.</td></tr><tr><td valign="top"><a href="#is_partition-1">is_partition/1</a></td><td></td></tr><tr><td valign="top"><a href="#is_stale-1">is_stale/1</a></td><td>Returns false if the update (or a causally newer update) has already
+cluster.</td></tr><tr><td valign="top"><a href="#exchange-1">exchange/1</a></td><td>Triggers an asynchronous exchange.</td></tr><tr><td valign="top"><a href="#exchange-2">exchange/2</a></td><td>Triggers an asynchronous exchange.</td></tr><tr><td valign="top"><a href="#fold-3">fold/3</a></td><td>Same as fold(Fun, Acc0, FullPrefix, []).</td></tr><tr><td valign="top"><a href="#fold-4">fold/4</a></td><td>Fold over all keys and values stored under a given prefix/subprefix.</td></tr><tr><td valign="top"><a href="#fold_elements-3">fold_elements/3</a></td><td>Same as fold_elements(Fun, Acc0, FullPrefix, []).</td></tr><tr><td valign="top"><a href="#fold_elements-4">fold_elements/4</a></td><td>Fold over all elements stored under a given prefix/subprefix.</td></tr><tr><td valign="top"><a href="#foreach-2">foreach/2</a></td><td>Same as fold(Fun, Acc0, FullPrefix, []).</td></tr><tr><td valign="top"><a href="#foreach-3">foreach/3</a></td><td>Fold over all keys and values stored under a given prefix/subprefix.</td></tr><tr><td valign="top"><a href="#get-2">get/2</a></td><td>Same as get(FullPrefix, Key, []).</td></tr><tr><td valign="top"><a href="#get-3">get/3</a></td><td>Retrieves the local value stored at the given fullprefix <code>FullPrefix</code>
+and key <code>Key</code> using options <code>Opts</code>.</td></tr><tr><td valign="top"><a href="#get_object-1">get_object/1</a></td><td>Returns a Dotted Version Vector Set or undefined.</td></tr><tr><td valign="top"><a href="#get_object-2">get_object/2</a></td><td>Same as get/1 but reads the value from <code>Node</code>
+This is function is used by plum_db_exchange_statem.</td></tr><tr><td valign="top"><a href="#graft-1">graft/1</a></td><td>Returns the object associated with the given prefixed key <code>Pkey</code> and
+context <code>Context</code> (message id) if the currently stored version has an equal
+context.</td></tr><tr><td valign="top"><a href="#is_partition-1">is_partition/1</a></td><td>Returns true if an identifier is a valid partition.</td></tr><tr><td valign="top"><a href="#is_stale-1">is_stale/1</a></td><td>Returns false if the update (or a causally newer update) has already
 been received (stored locally).</td></tr><tr><td valign="top"><a href="#iterate-1">iterate/1</a></td><td>Advances the iterator by one key, full-prefix or sub-prefix.</td></tr><tr><td valign="top"><a href="#iterator-0">iterator/0</a></td><td>Returns a full-prefix iterator: an iterator for all full-prefixes that
 have keys stored under them.</td></tr><tr><td valign="top"><a href="#iterator-1">iterator/1</a></td><td>Same as calling <code>iterator(FullPrefix, [])</code>.</td></tr><tr><td valign="top"><a href="#iterator-2">iterator/2</a></td><td>Return an iterator pointing to the first key stored under a prefix.</td></tr><tr><td valign="top"><a href="#iterator_close-1">iterator_close/1</a></td><td>Closes the iterator.</td></tr><tr><td valign="top"><a href="#iterator_default-1">iterator_default/1</a></td><td>Returns the value returned when an iterator points to a tombstone.</td></tr><tr><td valign="top"><a href="#iterator_done-1">iterator_done/1</a></td><td>Returns true if there is nothing more to iterate over.</td></tr><tr><td valign="top"><a href="#iterator_element-1">iterator_element/1</a></td><td></td></tr><tr><td valign="top"><a href="#iterator_key-1">iterator_key/1</a></td><td>Return the key pointed at by the iterator.</td></tr><tr><td valign="top"><a href="#iterator_key_value-1">iterator_key_value/1</a></td><td>Returns a single value pointed at by the iterator.</td></tr><tr><td valign="top"><a href="#iterator_key_values-1">iterator_key_values/1</a></td><td>Return the key and all sibling values pointed at by the iterator.</td></tr><tr><td valign="top"><a href="#iterator_prefix-1">iterator_prefix/1</a></td><td>Returns the full-prefix being iterated by this iterator.</td></tr><tr><td valign="top"><a href="#match-1">match/1</a></td><td></td></tr><tr><td valign="top"><a href="#match-2">match/2</a></td><td></td></tr><tr><td valign="top"><a href="#match-3">match/3</a></td><td></td></tr><tr><td valign="top"><a href="#merge-2">merge/2</a></td><td>Merges a remote copy of an object record sent via broadcast w/ the
-local view for the key contained in the message id.</td></tr><tr><td valign="top"><a href="#merge-3">merge/3</a></td><td>Same as merge/2 but merges the object on <code>Node</code></td></tr><tr><td valign="top"><a href="#partition_count-0">partition_count/0</a></td><td></td></tr><tr><td valign="top"><a href="#partitions-0">partitions/0</a></td><td></td></tr><tr><td valign="top"><a href="#prefix_hash-2">prefix_hash/2</a></td><td>Return the local hash associated with a full-prefix or prefix.</td></tr><tr><td valign="top"><a href="#prefix_type-1">prefix_type/1</a></td><td></td></tr><tr><td valign="top"><a href="#prefixes-0">prefixes/0</a></td><td>Returns a mapping of prefixes (the first element of a plum_db_prefix()
+local view for the key contained in the message id.</td></tr><tr><td valign="top"><a href="#merge-3">merge/3</a></td><td>Same as merge/2 but merges the object on <code>Node</code></td></tr><tr><td valign="top"><a href="#partition_count-0">partition_count/0</a></td><td>Returns the number of partitions.</td></tr><tr><td valign="top"><a href="#partitions-0">partitions/0</a></td><td>Returns the list of the partition identifiers starting at 0.</td></tr><tr><td valign="top"><a href="#prefix_hash-2">prefix_hash/2</a></td><td>Return the local hash associated with a full-prefix or prefix.</td></tr><tr><td valign="top"><a href="#prefix_type-1">prefix_type/1</a></td><td></td></tr><tr><td valign="top"><a href="#prefixes-0">prefixes/0</a></td><td>Returns a mapping of prefixes (the first element of a plum_db_prefix()
 tuple) to prefix_type() only for those prefixes for which a type was
 declared using the application optiont <code>prefixes</code>.</td></tr><tr><td valign="top"><a href="#put-3">put/3</a></td><td>Same as put(FullPrefix, Key, Value, []).</td></tr><tr><td valign="top"><a href="#put-4">put/4</a></td><td>Stores or updates the value at the given prefix and key locally and then
-triggers a broadcast to notify other nodes in the cluster.</td></tr><tr><td valign="top"><a href="#remote_iterator-1">remote_iterator/1</a></td><td>Create an iterator on <code>Node</code>.</td></tr><tr><td valign="top"><a href="#remote_iterator-2">remote_iterator/2</a></td><td></td></tr><tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td>Start plumtree_metadadata_manager and link to calling process.</td></tr><tr><td valign="top"><a href="#sync_exchange-1">sync_exchange/1</a></td><td>Triggers a synchronous exchange.</td></tr><tr><td valign="top"><a href="#sync_exchange-2">sync_exchange/2</a></td><td>Triggers a synchronous exchange.</td></tr><tr><td valign="top"><a href="#take-2">take/2</a></td><td></td></tr><tr><td valign="top"><a href="#take-3">take/3</a></td><td></td></tr><tr><td valign="top"><a href="#to_list-1">to_list/1</a></td><td>Same as to_list(FullPrefix, []).</td></tr><tr><td valign="top"><a href="#to_list-2">to_list/2</a></td><td>Return a list of all keys and values stored under a given
+triggers a broadcast to notify other nodes in the cluster.</td></tr><tr><td valign="top"><a href="#remote_iterator-1">remote_iterator/1</a></td><td>Create an iterator on <code>Node</code>.</td></tr><tr><td valign="top"><a href="#remote_iterator-2">remote_iterator/2</a></td><td></td></tr><tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td>Start the plum_db server and link to calling process.</td></tr><tr><td valign="top"><a href="#sync_exchange-1">sync_exchange/1</a></td><td>Triggers a synchronous exchange.</td></tr><tr><td valign="top"><a href="#sync_exchange-2">sync_exchange/2</a></td><td>Triggers a synchronous exchange.</td></tr><tr><td valign="top"><a href="#take-2">take/2</a></td><td></td></tr><tr><td valign="top"><a href="#take-3">take/3</a></td><td></td></tr><tr><td valign="top"><a href="#to_list-1">to_list/1</a></td><td>Same as to_list(FullPrefix, []).</td></tr><tr><td valign="top"><a href="#to_list-2">to_list/2</a></td><td>Return a list of all keys and values stored under a given
 prefix/subprefix.</td></tr></table>
 
 
@@ -484,6 +486,10 @@ broadcast_data(Plum_db_broadcast::<a href="#type-plum_db_broadcast">plum_db_broa
 Deconstructs a broadcast that is sent using
 `broadcast/2` as the handling module returning the message id
 and payload.
+
+> This function is part of the implementation of the
+plumtree_broadcast_handler behaviour.
+> You should never call it directly.
 
 <a name="delete-2"></a>
 
@@ -520,7 +526,29 @@ exchange(Peer::node()) -&gt; {ok, pid()} | {error, term()}
 </code></pre>
 <br />
 
-Triggers an asynchronous exchange
+Triggers an asynchronous exchange.
+Calls [`exchange/2`](#exchange-2) with an empty map as the second argument.
+> The exchange is only triggered if the application option `aae_enabled` is
+set to `true`.
+
+<a name="exchange-2"></a>
+
+### exchange/2 ###
+
+<pre><code>
+exchange(Peer::node(), Opts::map()) -&gt; {ok, pid()} | {error, term()}
+</code></pre>
+<br />
+
+Triggers an asynchronous exchange.
+The exchange is performed asynchronously by spawning a supervised process. Read the [`plum_db_exchanges_sup`](plum_db_exchanges_sup.md) documentation.
+
+`Opts` is a map accepting the following options:
+
+* `timeout` (milliseconds) –– timeout for the AAE exchange to conclude.
+
+> The exchange is only triggered if the application option `aae_enabled` is
+set to `true`.
 
 <a name="fold-3"></a>
 
@@ -614,19 +642,44 @@ get(FullPrefix::<a href="#type-plum_db_prefix">plum_db_prefix()</a>, Key::<a hre
 </code></pre>
 <br />
 
-Retrieves the local value stored at the given prefix and key.
+Retrieves the local value stored at the given fullprefix `FullPrefix`
+and key `Key` using options `Opts`.
 
-get/3 can take the following options:
+Returns the stored value if found. If no value is found and `Opts` contains
+a value for the key `default`, this value is returned.
+Otherwise returns the atom `undefined`.
 
-* `default`: value to return if no value is found, `undefined` if not given.
-* `resolver`: A function that resolves conflicts if they are encountered. If
-not given last-write-wins is used to resolve the conflicts
-* `allow_put`: whether or not to write and broadcast a resolved value.
-defaults to `true`.
+`Opts` is a property list that can take the following options:
 
-NOTE: an update will be broadcast if conflicts are resolved and
-`allow_put` is `true`. any further conflicts generated by
-concurrent writes during resolution are not resolved
+* `default` – value to return if no value is found, Defaults to `undefined`.
+* `resolver` – The atom `lww` or a `plum_db_resolver()` that resolves
+conflicts if they are encountered. Defaults to `lww` (last-write-wins).
+* `allow_put` – whether or not to write and broadcast a resolved value.
+Defaults to `true`.
+
+Example: Simple get
+
+```
+  > plum_db:get({foo, a}, x).
+  undefined.
+  > plum_db:get({foo, a}, x, [{default, 1}]).
+  1.
+  > plum_db:put({foo, a}, x, 100).
+  ok
+  > plum_db:get({foo, a}, x).
+  100.
+```
+
+Example: Resolving with a custom function
+
+```
+  Fun = fun(A, B) when A > B -> A; _ -> B end,
+  > plum_db:get({foo, a}, x, [{resolver, Fun}]).
+```
+
+> NOTE: an update will be broadcasted if conflicts are resolved and
+`allow_put` is `true`. However, any further conflicts generated by
+concurrent writes during resolution are not resolved.
 
 <a name="get_object-1"></a>
 
@@ -660,12 +713,17 @@ graft(X1::{<a href="#type-plum_db_pkey">plum_db_pkey()</a>, <a href="#type-plum_
 </code></pre>
 <br />
 
-Returns the object associated with the given key and context
-(message id) if the currently stored version has an equal context. Otherwise
-stale is returned.
-Because it assumed that a grafted context can only be causally older than
-the local view a stale response means there is another message that subsumes
-the grafted one.
+Returns the object associated with the given prefixed key `Pkey` and
+context `Context` (message id) if the currently stored version has an equal
+context. Otherwise returns the atom `stale`.
+
+Because it assumes that a grafted context can only be causally older than
+the local view, a `stale` response means there is another message that
+subsumes the grafted one.
+
+> This function is part of the implementation of the
+plumtree_broadcast_handler behaviour.
+> You should never call it directly.
 
 <a name="is_partition-1"></a>
 
@@ -675,6 +733,8 @@ the grafted one.
 is_partition(Id::<a href="#type-partition">partition()</a>) -&gt; boolean()
 </code></pre>
 <br />
+
+Returns true if an identifier is a valid partition.
 
 <a name="is_stale-1"></a>
 
@@ -687,6 +747,10 @@ is_stale(X1::{<a href="#type-plum_db_pkey">plum_db_pkey()</a>, <a href="#type-pl
 
 Returns false if the update (or a causally newer update) has already
 been received (stored locally).
+
+> This function is part of the implementation of the
+plumtree_broadcast_handler behaviour.
+> You should never call it directly.
 
 <a name="iterate-1"></a>
 
@@ -928,6 +992,10 @@ causally older than the current data stored then `false` is returned and no
 updates are merged. Otherwise, the remote copy is merged (possibly
 generating siblings) and `true` is returned.
 
+> This function is part of the implementation of the
+plumtree_broadcast_handler behaviour.
+> You should never call it directly.
+
 <a name="merge-3"></a>
 
 ### merge/3 ###
@@ -939,6 +1007,10 @@ merge(Node::node(), X2::{<a href="#type-plum_db_pkey">plum_db_pkey()</a>, undefi
 
 Same as merge/2 but merges the object on `Node`
 
+> This function is part of the implementation of the
+plumtree_broadcast_handler behaviour.
+> You should never call it directly.
+
 <a name="partition_count-0"></a>
 
 ### partition_count/0 ###
@@ -948,6 +1020,8 @@ partition_count() -&gt; non_neg_integer()
 </code></pre>
 <br />
 
+Returns the number of partitions.
+
 <a name="partitions-0"></a>
 
 ### partitions/0 ###
@@ -956,6 +1030,8 @@ partition_count() -&gt; non_neg_integer()
 partitions() -&gt; [<a href="#type-partition">partition()</a>]
 </code></pre>
 <br />
+
+Returns the list of the partition identifiers starting at 0.
 
 <a name="prefix_hash-2"></a>
 
@@ -1057,7 +1133,9 @@ start_link() -&gt; {ok, pid()} | ignore | {error, term()}
 </code></pre>
 <br />
 
-Start plumtree_metadadata_manager and link to calling process.
+Start the plum_db server and link to calling process.
+The plum_db server is responsible for managing local and remote iterators.
+No API function uses the server itself.
 
 <a name="sync_exchange-1"></a>
 
@@ -1068,7 +1146,10 @@ sync_exchange(Peer::node()) -&gt; ok | {error, term()}
 </code></pre>
 <br />
 
-Triggers a synchronous exchange
+Triggers a synchronous exchange.
+Calls [`sync_exchange/2`](#sync_exchange-2) with an empty map as the second argument.
+> The exchange is only triggered if the application option `aae_enabled` is
+set to `true`.
 
 <a name="sync_exchange-2"></a>
 
@@ -1079,7 +1160,17 @@ sync_exchange(Peer::node(), Opts0::map()) -&gt; ok | {error, term()}
 </code></pre>
 <br />
 
-Triggers a synchronous exchange
+Triggers a synchronous exchange.
+The exchange is performed synchronously by spawning a supervised process and
+waiting (blocking) till it finishes.
+Read the [`plum_db_exchanges_sup`](plum_db_exchanges_sup.md) documentation.
+
+`Opts` is a map accepting the following options:
+
+* `timeout` (milliseconds) –– timeout for the AAE exchange to conclude.
+
+> The exchange is only triggered if the application option `aae_enabled` is
+set to `true`.
 
 <a name="take-2"></a>
 
