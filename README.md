@@ -1,3 +1,5 @@
+{::options parse_block_html="true" /}
+
 # PlumDB
 
 [[_TOC_]]
@@ -6,20 +8,21 @@ PlumDB is a globally replicated database using eventual consistency. It uses [Ep
 
 It is an offspring of [Helium's Plumtree](https://github.com/helium/plumtree) – a descendant of [Riak Core](https://github.com/basho/riak_core)'s Metadata Store – and Partisan.
 
-## Differences with Plumtree
-
 The original Plumtree project was the result of extracting the Metadata Store from Riak Core and replacing the cluster membership state by an ORSWOT CRDT.
 
 PlumDB builds on top of Plumtree but changes its architecture offering additional features.
 
-|Feature|PlumDB|Plumtree|
-|---|---|---|
-|Cluster membership state| Partisan's membership state which uses an AWSET | ORSWOT (riak_dt)|
-|Data model| Riak Core Metadata (dvvset)| Riak Core Metadata (dvvset)|
-|Persistence|leveldb. A key is sharded across `N` instances of a store. Stores can be in-memory (`ets`), on disk (Basho's Eleveldb i.e. Leveldb) or both. `N` is configurable at deployment time.|Each prefix has its own ets and dets table.|
-|API|A simplification of the Riak Core Metadata API. A single function to iterate over the whole database i.e. across one or all shards and across a single or many prefixes. |Riak Core Metadata API (`plumtree_metadata_manager`) is used to iterate over prefixes whereas `plumtree_metadata` is used to iterate over keys within each prefix. The API is confusing and is the result of having a store (ets + dets) per prefix.|
-|Active anti-entropy|Based on Riak Core Metadata AAE, uses a separate instance of leveldb to store a merkle tree on disk. Updated to use the new API and gen_statem|Based on Riak Core Metadata AAE, uses a separate instance of leveldb to store a merkle tree on disk.|
-|Pubsub|Based on a combination of gen_event and [gproc](https://github.com/uwiger/gproc), allowing to register a Callback module or function to be executed when an event is generated. gproc dependency allows to pattern match events using a match spec | Based on gen_event, allowing to register a Callback module or function to be executed when an event is generated|
+<details>
+  <summary markdown="span">Differences between PlumDB with Plumtree</summary>
+    |Feature|PlumDB|Plumtree|
+    |---|---|---|
+    |Cluster membership state| Partisan's membership state which uses an AWSET | ORSWOT (riak_dt)|
+    |Data model| Riak Core Metadata (dvvset)| Riak Core Metadata (dvvset)|
+    |Persistence|leveldb. A key is sharded across `N` instances of a store. Stores can be in-memory (`ets`), on disk (Basho's Eleveldb i.e. Leveldb) or both. `N` is configurable at deployment time.|Each prefix has its own ets and dets table.|
+    |API|A simplification of the Riak Core Metadata API. A single function to iterate over the whole database i.e. across one or all shards and across a single or many prefixes. |Riak Core Metadata API (`plumtree_metadata_manager`) is used to iterate over prefixes whereas `plumtree_metadata` is used to iterate over keys within each prefix. The API is confusing and is the result of having a store (ets + dets) per prefix.|
+    |Active anti-entropy|Based on Riak Core Metadata AAE, uses a separate instance of leveldb to store a merkle tree on disk. Updated to use the new API and gen_statem|Based on Riak Core Metadata AAE, uses a separate instance of leveldb to store a merkle tree on disk.|
+    |Pubsub|Based on a combination of gen_event and [gproc](https://github.com/uwiger/gproc), allowing to register a Callback module or function to be executed when an event is generated. gproc dependency allows to pattern match events using a match spec | Based on gen_event, allowing to register a Callback module or function to be executed when an event is generated|
+</details>
 
 ## Usage
 
@@ -27,7 +30,9 @@ You will use PlumDB as a dependency in your Erlang application.
 
 ### Configuration
 
-PlumDB is configured using the standard Erlang app.config. The following is an example configuration.
+PlumDB is configured using the standard Erlang sys.config.
+
+The following is an example configuration:
 
 ```erlang
 {plum_db, [
@@ -71,6 +76,7 @@ dependencies:
     {broadcast_exchange_timer, 60000} % Perform AAE exchange every 1 min.
 ]}
 ```
+
 
 ## Standalone testing
 
@@ -171,4 +177,10 @@ The following are examples of prefix wildcards:
 * `{foo, '_'}` - matches all subprefixes of Prefix `foo`
 * `{foo, x}` - matches the subprefix `x` of prefix `foo`
 
-> Notice that the pattern `{'_', bar}` is NOT allowed.
+<div class="panel panel-info">
+    **Note**
+    {: .panel-heading}
+    <div class="panel-body">
+    Notice that the pattern `{'_', bar}` is NOT allowed.
+    </div>
+</div>
