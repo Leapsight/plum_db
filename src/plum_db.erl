@@ -314,10 +314,10 @@ get(FullPrefix, Key) ->
 %%
 %% get/3 can take the following options:
 %%
-%% * default: value to return if no value is found, `undefined' if not given.
-%% * resolver: A function that resolves conflicts if they are encountered. If
+%% * `default': value to return if no value is found, `undefined' if not given.
+%% * `resolver': A function that resolves conflicts if they are encountered. If
 %% not given last-write-wins is used to resolve the conflicts
-%% * allow_put: whether or not to write and broadcast a resolved value.
+%% * `allow_put': whether or not to write and broadcast a resolved value.
 %% defaults to `true'.
 %%
 %% NOTE: an update will be broadcast if conflicts are resolved and
@@ -636,30 +636,30 @@ iterator(FullPrefix) ->
 %%
 %% This function can take the following options:
 %%
-%% * resolver: either the atom `lww' or a function that resolves conflicts if
+%% * `resolver': either the atom `lww' or a function that resolves conflicts if
 %% they are encounted (see get/3 for more details). Conflict resolution is
 %% performed when values are retrieved (see iterator_key_value/1 and iterator_key_values/1).
 %% If no resolver is provided no resolution is performed. The default is to not
 %% provide a resolver.
-%% * allow_put: whether or not to write and broadcast a resolved value.
+%% * `allow_put': whether or not to write and broadcast a resolved value.
 %% defaults to `true'.
-%% * default: Used when the value an iterator points to is a tombstone. default
+%% * `default': Used when the value an iterator points to is a tombstone. default
 %% is either an arity-1 function or a value. If a function, the key the
 %% iterator points to is passed as the argument and the result is returned in
 %% place of the tombstone. If default is a value, the value is returned in
 %% place of the tombstone. This applies when using functions such as
 %% iterator_key_values/1 and iterator_key_values/1.
-%% * first - the key this iterator should start at, equivalent to calling
+%% * `first' - the key this iterator should start at, equivalent to calling
 %% iterator_move/2 passing the key as the second argument.
-%% * match: If match is undefined then all keys will may be visted by the
+%% * `match': If match is undefined then all keys will may be visted by the
 %% iterator, match can be:
 %%     * an erlang term - which will be matched exactly against a key
 %%     * '_' - the wilcard term which matches anything
 %%     * an erlang tuple containing terms and '_' - if tuples are used as keys
 %%     this can be used to iterate over some subset of keys
-%% * partitions: The list of partitions this iterator should cover. If
+%% * `partitions': The list of partitions this iterator should cover. If
 %% undefined it will cover all partitions (`pdb:partitions/0')
-%% * keys_only: wether to iterate only on keys (default: false)
+%% * `keys_only': wether to iterate only on keys (default: false)
 %%
 %% @end
 %% -----------------------------------------------------------------------------
