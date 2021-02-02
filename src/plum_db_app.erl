@@ -97,6 +97,10 @@ start(_StartType, _StartArgs) ->
 %% @doc Application behaviour callback
 %% @end
 %% -----------------------------------------------------------------------------
+start_phase(start_dependencies, normal, []) ->
+    {ok, _} = application:ensure_all_started(plumtree),
+    ok;
+
 start_phase(init_db_partitions = Phase, normal, []) ->
     case wait_for_partitions() of
         true ->
