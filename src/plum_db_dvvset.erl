@@ -39,7 +39,7 @@
 %% @end
 %%
 %%-------------------------------------------------------------------
--module(dvvset).
+-module(plum_db_dvvset).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
