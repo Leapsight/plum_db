@@ -977,7 +977,7 @@ init_ram_disk_prefixes_fun(State) ->
 
         try
             Fun = fun
-                ({Prefix, ram_disk}, ok) ->
+                ({Prefix, #{type := ram_disk}}, ok) ->
                     _ = lager:info(
                         "Loading data from disk to ram; "
                         "partition=~p, prefix=~p, node=~p",

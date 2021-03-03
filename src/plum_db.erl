@@ -19,7 +19,7 @@
 
 -module(plum_db).
 -behaviour(gen_server).
--behaviour(plumtree_broadcast_handler).
+-behaviour(partisan_plumtree_broadcast_handler).
 -include("plum_db.hrl").
 
 
@@ -1026,8 +1026,8 @@ prefixes() ->
 %% -----------------------------------------------------------------------------
 -spec prefix_type(term()) -> prefix_type() | undefined.
 
-prefix_type(Prefix) ->
-    maps:get(Prefix, plum_db_config:get(prefixes), undefined).
+prefix_type(Prefix) when is_atom(Prefix) orelse is_binary(Prefix) ->
+    plum_db_config:get([prefixes, Prefix, type], undefined).
 
 
 %% -----------------------------------------------------------------------------
@@ -1578,10 +1578,11 @@ maybe_tombstone(Value, _Default) ->
 
 %% @private
 broadcast(PKey, Obj) ->
+    %% TODO use third argument or prefix family config
     case plum_db_config:get(aae_enabled, true) of
         true ->
             Broadcast = #plum_db_broadcast{pkey = PKey, obj = Obj},
-            plumtree_broadcast:broadcast(Broadcast, plum_db);
+            partisan_plumtree_broadcast:broadcast(Broadcast, ?MODULE);
         false ->
             ok
     end.

@@ -51,11 +51,6 @@
 %% @end
 %% -----------------------------------------------------------------------------
 start_link() ->
-    %% It is important we init the config before starting the supervisor
-    %% as we override some user configuration for both Partisan and Plumtree
-    %% before they start (they are included applications and our supervisor
-    %% starts them).
-    ok = plum_db_config:init(),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 

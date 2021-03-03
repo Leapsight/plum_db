@@ -84,7 +84,13 @@
 %% @end
 %% -----------------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
-      case plum_db_sup:start_link() of
+    %% It is important we init the config before starting the supervisor
+    %% as we override some user configuration for Partisan.
+
+    ok = plum_db_config:init(),
+    {ok, _} = application:ensure_all_started(gproc),
+
+    case plum_db_sup:start_link() of
         {ok, Pid} ->
             {ok, Pid};
         Other ->
@@ -97,15 +103,19 @@ start(_StartType, _StartArgs) ->
 %% @end
 %% -----------------------------------------------------------------------------
 start_phase(start_dependencies, normal, []) ->
-    {ok, _} = application:ensure_all_started(plumtree),
+    _ = lager:info("Starting dependencies [partisan]"),
+    {ok, _} = application:ensure_all_started(partisan),
     ok;
 
 start_phase(init_db_partitions, normal, []) ->
+
     case wait_for_partitions() of
         true ->
             %% We block until all partitions are initialised
-            _ = lager:info("Application master is waiting for plum_db partitions to be initialised; start_phase=init_db_partitions"),
-            plum_db_startup_coordinator:wait_for_partitions();
+            _ = lager:info("Application master is waiting for plum_db partitions to be initialised ..."),
+            ok = plum_db_startup_coordinator:wait_for_partitions(),
+            _ = lager:info("All plum_db partitions initialised."),
+            ok;
         false ->
             ok
     end;
@@ -114,8 +124,10 @@ start_phase(init_db_hashtrees, normal, []) ->
     case wait_for_hashtrees() of
         true ->
             %% We block until all hashtrees are built
-            _ = lager:info("Application master is waiting for plum_db hashtrees to be built; start_phase=init_db_hashtrees"),
-            plum_db_startup_coordinator:wait_for_hashtrees();
+            _ = lager:info("Application master is waiting for plum_db hashtrees to be built ..."),
+            ok = plum_db_startup_coordinator:wait_for_hashtrees(),
+            _ = lager:info("All plum_db hastrees built."),
+            ok;
         false ->
             ok
     end,
@@ -128,7 +140,7 @@ start_phase(aae_exchange, normal, []) ->
     case wait_for_aae_exchange() of
         true ->
             MyNode = plum_db_peer_service:mynode(),
-            Members = plumtree_broadcast:broadcast_members(),
+            Members = partisan_plumtree_broadcast:broadcast_members(),
 
             case lists:delete(MyNode, Members) of
                 [] ->
