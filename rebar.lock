@@ -20,7 +20,7 @@
  {<<"lager">>,{pkg,<<"lager">>,<<"3.8.2">>},0},
  {<<"partisan">>,
   {git,"http://github.com/aramallo/partisan.git",
-       {ref,"6c0d35b1724f1d04bd8bff09e30192c5382abefd"}},
+       {ref,"19ece5389892baf358e401af6b024974de2ad997"}},
   0},
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"1.7.5">>},2},
  {<<"sext">>,{pkg,<<"sext">>,<<"1.8.0">>},0},
