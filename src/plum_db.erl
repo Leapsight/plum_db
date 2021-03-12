@@ -1579,13 +1579,8 @@ maybe_tombstone(Value, _Default) ->
 %% @private
 broadcast(PKey, Obj) ->
     %% TODO use third argument or prefix family config
-    case plum_db_config:get(aae_enabled, true) of
-        true ->
-            Broadcast = #plum_db_broadcast{pkey = PKey, obj = Obj},
-            partisan_plumtree_broadcast:broadcast(Broadcast, ?MODULE);
-        false ->
-            ok
-    end.
+    Broadcast = #plum_db_broadcast{pkey = PKey, obj = Obj},
+    partisan_plumtree_broadcast:broadcast(Broadcast, ?MODULE).
 
 
 %% @private
