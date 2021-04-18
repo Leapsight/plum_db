@@ -2,7 +2,7 @@
 %%  plum_db_partition_hashtree.erl -
 %%
 %%  Copyright (c) 2013 Basho Technologies, Inc.  All Rights Reserved.
-%%  Copyright (c) 2017-2019 Ngineo Limited t/a Leapsight. All rights reserved.
+%%  Copyright (c) 2017-2019 Leapsight t/a Leapsight. All rights reserved.
 %%
 %%  Licensed under the Apache License, Version 2.0 (the "License");
 %%  you may not use this file except in compliance with the License.
@@ -28,6 +28,10 @@
 
 
 %% API
+
+-export([async_insert/2]).
+-export([async_insert/3]).
+-export([async_insert/4]).
 -export([compare/4]).
 -export([get_bucket/5]).
 -export([insert/2]).
@@ -140,6 +144,33 @@ insert(Partition, PKey, Hash, IfMissing) ->
     Name = name(Partition),
     gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
 
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Same as insert(PKey, Hash, false).
+%% @end
+%% -----------------------------------------------------------------------------
+-spec async_insert(plum_db_pkey(), binary()) -> ok.
+async_insert(PKey, Hash) ->
+    async_insert(PKey, Hash, false).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Insert a hash for a full-prefix and key into the tree
+%% managed by the process. If `IfMissing' is `true' the hash is only
+%% inserted into the tree if the key is not already present.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec async_insert(plum_db_pkey(), binary(), boolean()) -> ok.
+async_insert(PKey, Hash, IfMissing) ->
+    Name = name(plum_db:get_partition(PKey)),
+    gen_server:cast(Name, {insert, PKey, Hash, IfMissing}).
+
+
+-spec async_insert(pbd:partition(), plum_db_pkey(), binary(), boolean()) -> ok.
+async_insert(Partition, PKey, Hash, IfMissing) ->
+    Name = name(Partition),
+    gen_server:cast(Name, {insert, PKey, Hash, IfMissing}).
 
 
 %% -----------------------------------------------------------------------------
@@ -394,9 +425,18 @@ handle_call({prefix_hash, Prefix}, _From, #state{tree = Tree} = State) ->
 handle_call(
     {insert, PKey, Hash, IfMissing}, _From, #state{tree = Tree} = State) ->
     {Prefixes, Key} = prepare_pkey(PKey),
-    Tree1 = hashtree_tree:insert(Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree),
+    Tree1 = hashtree_tree:insert(
+        Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree
+    ),
     {reply, ok, State#state{tree=Tree1}}.
 
+
+handle_cast({insert, PKey, Hash, IfMissing}, #state{tree = Tree} = State) ->
+    {Prefixes, Key} = prepare_pkey(PKey),
+    Tree1 = hashtree_tree:insert(
+        Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree
+    ),
+    {noreply, State#state{tree=Tree1}};
 
 handle_cast(reset, #state{built = true, lock = undefined} = State0) ->
     State1 = do_reset(State0),
