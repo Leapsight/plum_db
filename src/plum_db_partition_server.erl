@@ -854,7 +854,7 @@ init_state(Name, Partition, DataRoot, Config) ->
     RamTab = table_name(Partition, ram),
     {ok, RamTab} = plum_db_table_owner:add_or_claim(RamTab, EtsOpts),
 
-    %% TODO RamDisk Table should be restore on startup asynchronously and
+    %% FIXME RamDisk Table should be restore on startup asynchronously and
     %% during its restore all gets should go to disk, so we should not set
     %% the table name here but later when the restore is finished
     RamDiskTab = table_name(Partition, ram_disk),
