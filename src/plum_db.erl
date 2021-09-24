@@ -591,7 +591,7 @@ match(FullPrefix0, KeyPattern, Opts0) ->
             Cont = #continuation{
                 match_prefix = FullPrefix,
                 match_key = KeyPattern,
-                opts = [{first, Key} | Opts1]
+                opts = lists:keystore(first, 1, Opts1, {first, Key})
             },
             throw({break, {Acc, Cont}})
         end,
