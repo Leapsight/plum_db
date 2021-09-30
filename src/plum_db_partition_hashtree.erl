@@ -19,6 +19,7 @@
 
 -module(plum_db_partition_hashtree).
 -behaviour(gen_server).
+-include_lib("kernel/include/logger.hrl").
 
 
 %% default value for aae_hashtree_ttl config option
@@ -403,29 +404,34 @@ handle_cast(reset, #state{built = true, lock = undefined} = State0) ->
     {stop, normal, State1};
 
 handle_cast(reset, #state{built = true, lock = {internal, _, Pid}} = State) ->
-    _ = lager:info(
-        "Postponing hashtree reset; reason=ongoing_update, lock_owner=~p, "
-        "partition=~p, node=~p",
-        [Pid, State#state.partition, node()]
-    ),
+    ?LOG_INFO(#{
+        description => "Postponing hashtree reset",
+        reason => ongoing_update,
+        lock_owner => Pid,
+        partition => State#state.partition,
+        node => node()
+    }),
     NewState = schedule_reset(State),
     {noreply, NewState};
 
 handle_cast(reset, #state{built = true, lock = {external, _, Pid}} = State) ->
-    _ = lager:info(
-        "Postponing hashtree reset; reason=locked, lock_owner=~p, "
-        "partition=~p, node=~p",
-        [Pid, State#state.partition, node()]
-    ),
+    ?LOG_INFO(#{
+        description => "Postponing hashtree reset",
+        reason => locked,
+        lock_owner => Pid,
+        partition => State#state.partition,
+        node => node()
+    }),
     NewState = schedule_reset(State),
     {noreply, NewState};
 
 handle_cast(reset, #state{built = false} = State) ->
-    _ = lager:info(
-        "Skipping hashtree reset; reason=not_built, "
-        "partition=~p, node=~p",
-        [State#state.partition, node()]
-    ),
+    ?LOG_INFO(#{
+        description => "Skipping hashtree reset",
+        reason => not_built,
+        partition => State#state.partition,
+        node => node()
+    }),
     {noreply, State#state{reset = false}};
 
 handle_cast(_Msg, State) ->
@@ -460,7 +466,10 @@ handle_info({timeout, Ref, tick}, #state{timer = Ref} = State) ->
     {noreply, State4};
 
 handle_info(Event, State) ->
-    _ = lager:info("Received unknown event; event=~p", [Event]),
+    ?LOG_INFO(#{
+        reason => unsupported_event,
+        event => Event
+    }),
     {noreply, State}.
 
 
@@ -508,10 +517,11 @@ do_init(#state{data_root = DataRoot, partition = Partition} = State0) ->
 %% @private
 do_reset(#state{lock = undefined} = State) ->
     _ = hashtree_tree:destroy(State#state.tree),
-    _ = lager:info(
-        "Resetting hashtree; partition=~p, node=~p",
-        [State#state.partition, node()]
-    ),
+    ?LOG_INFO(#{
+        description => "Resetting hashtree",
+        partition => State#state.partition,
+        node => node()
+    }),
     do_init(State).
 
 
@@ -636,10 +646,11 @@ build_async(State) ->
                 FullPrefix = {?WILDCARD, ?WILDCARD},
                 Iterator = plum_db:iterator(
                     FullPrefix, [{partitions, [Partition]}]),
-                _ = lager:info(
-                    "Starting hashtree build; partition=~p, node=~p",
-                    [Partition, node()]
-                ),
+                ?LOG_INFO(#{
+                    description => "Starting hashtree build",
+                    partition => State#state.partition,
+                    node => node()
+                }),
                 build(Partition, Iterator)
             end),
             State#state{built = Ref};
@@ -663,20 +674,23 @@ build(Partition, Iterator) ->
 
 %% @private
 build_done(State) ->
-    _ = lager:info(
-        "Finished hashtree build; partition=~p, node=~p",
-        [State#state.partition, node()]
-    ),
+    ?LOG_INFO(#{
+        description => "Finished hashtree build",
+        partition => State#state.partition,
+        node => node()
+    }),
     _ = plum_db_events:notify(
         hashtree_build_finished, {ok, State#state.partition}),
     State#state{built = true, build_ts_secs = erlang:system_time(second)}.
 
 %% @private
 build_error(Reason, State) ->
-    _ = lager:error(
-        "Building tree failed; reason=~p, partition=~p",
-        [Reason, State#state.partition]
-    ),
+    ?LOG_ERROR(#{
+        description => "Building tree failed",
+        reason => Reason,
+        partition => State#state.partition,
+        node => node()
+    }),
     _ = plum_db_events:notify(
         hashtree_build_finished, {ok, State#state.partition}),
     State#state{built = false}.

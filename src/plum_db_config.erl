@@ -23,6 +23,7 @@
 %% @end
 %% =============================================================================
 -module(plum_db_config).
+-include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
 
 -define(ERROR, '$error_badarg').
@@ -275,10 +276,12 @@ validate_partitions(N) when is_integer(N) ->
         M ->
             %% We already have data in data_dir then
             %% we should coerce this value to the actual number of partitions
-            _ = lager:warning(
-                "The number of existing partitions on disk differ from the configuration, ignoring requested value and coercing configuration to the existing number instead; partitions=~p, existing=~p, data_dir=~p",
-                [N, M, DataDir]
-            ),
+            ?LOG_WARNING(#{
+                description => "The number of existing partitions on disk differ from the configuration, ignoring requested value and coercing configuration to the existing number instead",
+                partitions => N,
+                existing => M,
+                data_dir => DataDir
+            }),
             M
     end.
 

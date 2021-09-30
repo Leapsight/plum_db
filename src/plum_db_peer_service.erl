@@ -24,6 +24,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -module(plum_db_peer_service).
+-include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
 
 -define(DEFAULT_PEER_SERVICE, partisan_peer_service).
@@ -266,7 +267,10 @@ stop() ->
 %% @end
 %% -----------------------------------------------------------------------------
 stop(Reason) ->
-    lager:notice("Stopping; reason=~p", [Reason]),
+    ?LOG_NOTICE(#{
+        description => "Stopping",
+        reason => Reason
+    }),
     do(stop, [Reason]).
 
 

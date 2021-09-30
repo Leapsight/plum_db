@@ -100,6 +100,7 @@
 %% ``local_compare/2'' and ``do_remote/1'' for examples (-ifdef(TEST) only).
 
 -module(hashtree).
+-include_lib("kernel/include/logger.hrl").
 
 -export([new/0,
          new/2,
@@ -955,7 +956,7 @@ do_local(N) ->
     A4 = update_tree(A3),
     B4 = update_tree(B3),
     KeyDiff = local_compare(A4, B4),
-    lager:info("KeyDiff: ~p~n", [KeyDiff]),
+    ?LOG_INFO(#{key_diff => KeyDiff}),
     close(A4),
     close(B4),
     destroy(A4),
@@ -983,7 +984,7 @@ do_concurrent_build(N1, N2) ->
 
     [A4, B4] = peval([F1, F2]),
     KeyDiff = local_compare(A4, B4),
-    lager:info("KeyDiff: ~p~n", [KeyDiff]),
+    ?LOG_INFO(#{key_diff => KeyDiff}),
 
     close(A4),
     close(B4),
@@ -1019,8 +1020,7 @@ do_remote(N) ->
                      receive {remote, X} -> X end
              end,
     KeyDiff = compare(B4, Remote),
-    lager:info("KeyDiff: ~p~n", [KeyDiff]),
-
+    ?LOG_INFO(#{key_diff => KeyDiff}),
     %% Signal spawned process to print stats and exit
     Other ! done,
     ok.
@@ -1039,8 +1039,7 @@ message_loop(Tree, Msgs, Bytes) ->
             Size = byte_size(term_to_binary(Reply)),
             message_loop(Tree, Msgs+1, Bytes+Size);
         done ->
-            lager:info("Exchanged messages: ~b~n", [Msgs]),
-            lager:info("Exchanged bytes:    ~b~n", [Bytes]),
+            ?LOG_INFO(#{exchanged_messages => Msgs, exhanged_bytes => Bytes}),
             ok
     end.
 
