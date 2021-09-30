@@ -17,7 +17,6 @@
         tools,
         runtime_tools,
         os_mon,
-        lager,
         eleveldb,
         sext,
         gproc

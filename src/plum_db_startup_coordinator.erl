@@ -41,6 +41,7 @@
 %% -----------------------------------------------------------------------------
 -module(plum_db_startup_coordinator).
 -behaviour(gen_server).
+-include_lib("kernel/include/logger.hrl").
 
 -record(state, {
     remaining_partitions        ::  list(integer()),
@@ -277,7 +278,10 @@ handle_info({plum_db_event, hashtree_build_finished, Result}, State) ->
 
 
 handle_info(Event, State) ->
-    _ = lager:info("Received unknown info event; event=~p", [Event]),
+    ?LOG_ERROR(#{
+        reason => unsupported_event,
+        event => Event
+    }),
     {noreply, State}.
 
 

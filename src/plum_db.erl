@@ -20,6 +20,7 @@
 -module(plum_db).
 -behaviour(gen_server).
 -behaviour(plumtree_broadcast_handler).
+-include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
 
 
@@ -1355,8 +1356,10 @@ graft({PKey, Context}) ->
             %% There would have to be a serious error in implementation to hit
             %% this case.
             %% Catch if here b/c it would be much harder to detect
-            _ = lager:error(
-                "Object not found during graft; key=~p", [PKey]),
+            ?LOG_ERROR(#{
+                description => "Object not found during graft",
+                key => PKey
+            }),
             {error, {not_found, PKey}};
          Obj ->
             graft(Context, Obj)

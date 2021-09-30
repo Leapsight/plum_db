@@ -22,6 +22,7 @@
 %% -----------------------------------------------------------------------------
 -module(plum_db_partition_server).
 -behaviour(gen_server).
+-include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
 
 -define(IS_SEXT(X), X >= 8 andalso X =< 19).
@@ -832,13 +833,17 @@ init_state(Name, Partition, DataRoot, Config) ->
 
     case BS /= false andalso SSTBS == false of
         true ->
-            lager:warning(
-                "eleveldb block_size has been renamed sst_block_size "
-                "and the current setting of ~p is being ignored.  "
-                "Changing sst_block_size is strongly cautioned "
-                "against unless you know what you are doing.  Remove "
-                "block_size from app.config to get rid of this "
-                "message.\n", [BS]);
+            ?LOG_WARNING(#{
+                description => io_lib:format(
+                    "eleveldb block_size has been renamed 'sst_block_size' "
+                    "and the current setting of '~p' is being ignored.  "
+                    "Changing sst_block_size is strongly cautioned "
+                    "against unless you know what you are doing.  Remove "
+                    "block_size from app.config to get rid of this "
+                    "message.\n", [BS]
+                )
+            }),
+            ok;
         _ ->
             ok
     end,
@@ -906,42 +911,35 @@ open_db(State0, RetriesLeft, _) ->
             case lists:prefix("IO error: lock ", OpenErr) of
                 true ->
                     SleepFor = plum_db_config:get(store_open_retries_delay),
-                    _ = lager:debug(
-                        "Leveldb backend retrying ~p in ~p ms after error; partition=~p, node=~p, reason=~s",
-                        [
-                            State0#state.partition,
-                            node(),
-                            State0#state.data_root,
-                            SleepFor,
-                            OpenErr
-                        ]
-                    ),
+                    ?LOG_DEBUG(#{
+                        description => "Leveldb backend retrying after error",
+                        partition => State0#state.partition,
+                        node => node(),
+                        data_root => State0#state.data_root,
+                        timeout => SleepFor,
+                        reason => OpenErr
+                    }),
                     timer:sleep(SleepFor),
                     open_db(State0, RetriesLeft - 1, Reason);
                 false ->
                     case lists:prefix("Corruption", OpenErr) of
                         true ->
-                            _ = lager:info(
-                                "Starting repair of corrupted leveldb store; "
-                                "partition=~p, node=~p, data_root=~p, reason=~p",
-                                [
-                                    State0#state.partition,
-                                    node(),
-                                    State0#state.data_root,
-                                    OpenErr
-                                ]
-                            ),
+                            ?LOG_WARNING(#{
+                                description => "Starting repair of corrupted Leveldb store",
+                                partition => State0#state.partition,
+                                node => node(),
+                                data_root => State0#state.data_root,
+                                reason => OpenErr
+                            }),
                             _ = eleveldb:repair(
                                 State0#state.data_root, State0#state.open_opts),
-                            _ = lager:info(
-                                "Finished repair of corrupted leveldb store; "
-                                "partition=~p, data_root=~p, reason=~p",
-                                [
-                                    State0#state.partition,
-                                    State0#state.data_root,
-                                    OpenErr
-                                ]
-                            ),
+                            ?LOG_NOTICE(#{
+                                description => "Finished repair of corrupted Leveldb store",
+                                partition => State0#state.partition,
+                                node => node(),
+                                data_root => State0#state.data_root,
+                                reason => OpenErr
+                            }),
                             open_db(State0, 0, Reason);
                         false ->
                             {error, Reason}
@@ -963,10 +961,11 @@ spawn_helper(State) ->
 %% @private
 init_ram_disk_prefixes_fun(State) ->
     fun() ->
-        _ = lager:info(
-            "Initialising partition; partition=~p, node=~p",
-            [State#state.partition, node()]
-        ),
+        ?LOG_INFO(#{
+            description => "Initialising partition",
+            partition => State#state.partition,
+            node => node()
+        }),
         %% We create the in-memory db copy for ram and ram_disk prefixes
         Tab = State#state.ram_disk_tab,
 
@@ -978,11 +977,12 @@ init_ram_disk_prefixes_fun(State) ->
         try
             Fun = fun
                 ({Prefix, ram_disk}, ok) ->
-                    _ = lager:info(
-                        "Loading data from disk to ram; "
-                        "partition=~p, prefix=~p, node=~p",
-                        [State#state.partition, Prefix, node()]
-                    ),
+                    ?LOG_INFO(#{
+                        description => "Loading data from disk to ram",
+                        partition => State#state.partition,
+                        prefix => Prefix,
+                        node => node()
+                    }),
                     First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
                     Next = eleveldb:iterator_move(DbIter, First),
                     init_prefix_iterate(
@@ -991,22 +991,25 @@ init_ram_disk_prefixes_fun(State) ->
                     ok
             end,
             ok = lists:foldl(Fun, ok, PrefixList),
-            _ = lager:info(
-                "Finished initialisation of partition; "
-                "partition=~p, node=~p",
-                [State#state.partition, node()]
-            ),
+            ?LOG_INFO(#{
+                description => "Finished initialisation of partition",
+                partition => State#state.partition,
+                node => node()
+            }),
             _ = plum_db_events:notify(
                 partition_init_finished, {ok, State#state.partition}
             ),
             ok
         catch
-            ?EXCEPTION(Class, Reason, Stacktrace) ->
-                _ = lager:error(
-                    "Error while initialising partition; partition=~p, "
-                    "node=~p, class=~p, reason=~p, stacktrace=~p",
-                    [State#state.partition, node(), Class, Reason, ?STACKTRACE(Stacktrace)]
-                ),
+            Class:Reason:Stacktrace ->
+                ?LOG_ERROR(#{
+                    description => "Error while initialising partition",
+                    class => Class,
+                    reason => Reason,
+                    stacktrace => Stacktrace,
+                    partition => State#state.partition,
+                    node => node()
+                }),
                 _ = plum_db_events:notify(
                     partition_init_finished,
                     {error, Reason, State#state.partition}
