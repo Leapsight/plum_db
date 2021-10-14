@@ -102,7 +102,7 @@ get(Key) when is_tuple(Key) ->
     get(tuple_to_list(Key));
 
 get(Key) ->
-    plum_db_mochiglobal:get(Key).
+    persistent_term:get(Key).
 
 
 %% -----------------------------------------------------------------------------
@@ -125,7 +125,7 @@ get(Key, Default) when is_tuple(Key) ->
     get(tuple_to_list(Key), Default);
 
 get(Key, Default) ->
-    plum_db_mochiglobal:get(Key, Default).
+    persistent_term:get(Key, Default).
 
 
 %% -----------------------------------------------------------------------------
@@ -206,7 +206,7 @@ setup_env() ->
 %% @private
 do_set(Key, Value) ->
     application:set_env(?APP, Key, Value),
-    plum_db_mochiglobal:put(Key, Value).
+    persistent_term:put(Key, Value).
 
 
 %% @private
