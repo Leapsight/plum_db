@@ -98,6 +98,7 @@
 -export([delete/2]).
 -export([get/1]).
 -export([get/2]).
+-export([get/3]).
 -export([is_empty/1]).
 -export([iterator/2]).
 -export([iterator/3]).
@@ -155,14 +156,27 @@ get(PKey) ->
     get(name(plum_db:get_partition(PKey)), PKey).
 
 
+
 %% -----------------------------------------------------------------------------
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
 get(Partition, PKey) when is_integer(Partition) ->
-    get(name(Partition), PKey);
+    get(name(Partition), PKey, infinity);
 
-get(Name, {{Prefix, _}, _} = PKey) when is_atom(Name) ->
+get(Name, PKey) when is_atom(Name) ->
+    get(Name, PKey, infinity).
+
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+get(Partition, PKey, Timeout) when is_integer(Partition) ->
+    get(name(Partition), PKey, Timeout);
+
+get(Name, {{Prefix, _}, _} = PKey, _Timeout) when is_atom(Name) ->
     case plum_db:prefix_type(Prefix) of
         Type when Type == ram orelse Type == ram_disk ->
             case ets:lookup(table_name(Name, Type), PKey) of
@@ -171,15 +185,19 @@ get(Name, {{Prefix, _}, _} = PKey) when is_atom(Name) ->
                     %% asynchronously.
                     %% So we need to fallback to disk until the restore is
                     %% done.
-                    gen_server:call(Name, {get, PKey, Type}, infinity);
+
+                    % gen_server:call(Name, {get, PKey, Type}, Timeout);
+                    do_get_from_disk(Name, PKey);
                 [] ->
                     {error, not_found};
                 [{_, Obj}] ->
                     {ok, Obj}
             end;
-        Type ->
+        _Type ->
             %% Type is disk or undefined
-            gen_server:call(Name, {get, PKey, Type}, infinity)
+
+            % gen_server:call(Name, {get, PKey, Type}, Timeout)
+            do_get_from_disk(Name, PKey)
     end.
 
 
@@ -606,6 +624,12 @@ init([Name, Partition, Opts]) ->
             case open_db(State0) of
                 {ok, State1} ->
                     State2 = spawn_helper(State1),
+                    ok = plum_db_partitions_sup:set_db_info(
+                        Name, #{
+                            db_ref => State1#state.db_ref,
+                            read_opts => State1#state.read_opts
+                        }
+                    ),
                     {ok, State2};
                 {error, Reason} ->
                     {stop, Reason}
@@ -760,14 +784,24 @@ handle_info({'EXIT', Pid, normal}, #state{helper = Pid} = State) ->
 
     {noreply, State#state{helper = undefined}};
 
-handle_info({'EXIT', Pid, Reason}, #state{helper = Pid} = State) ->
-    {stop, Reason, State};
+handle_info({'EXIT', _, Reason}, #state{} = State) ->
+    case Reason of
+        restart ->
+            %% Used for testing and debugging purposes
+            exit(restart);
+        _ ->
+            {stop, Reason, State}
+    end;
 
 handle_info({'DOWN', Ref, process, _, _}, State0) ->
     State1 = close_iterator(Ref, State0),
     {noreply, State1};
 
-handle_info(_Info, State) ->
+handle_info(Event, State) ->
+    ?LOG_INFO(#{
+        description => "Unhandled event",
+        event => Event
+    }),
     {noreply, State}.
 
 
@@ -1068,6 +1102,16 @@ table_name(N, ram) when is_integer(N) ->
 table_name(N, ram_disk) when is_integer(N) ->
     list_to_atom(
         "plum_db_partition_" ++ integer_to_list(N) ++ "_server_ram_disk").
+
+
+%% @private
+do_get_from_disk(Name, PKey) ->
+    #{
+        db_ref := DbRef,
+        read_opts := Opts
+    } = plum_db_partitions_sup:get_db_info(Name),
+    result(eleveldb:get(DbRef, encode_key(PKey), Opts)).
+
 
 
 %% @private
