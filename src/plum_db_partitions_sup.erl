@@ -1,5 +1,5 @@
 %% =============================================================================
-%%  plum_db_partition_worker.erl -
+%%  plum_db_partitions_sup.erl -
 %%
 %%  Copyright (c) 2017-2021 Leapsight. All rights reserved.
 %%
