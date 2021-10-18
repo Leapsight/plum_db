@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v0.3.3
+
+### New Features
+
+* Increased throughput on reads and writes.
+
+### Bug fixes
+
+### Incompatible changes
+None.
+
 ## v0.2.0
 
 ### New Features
@@ -22,4 +33,4 @@
 ### Incompatible Changes
 
 * plum_db `object_update` event now includes the Existing Object, so previous subscriptions will need to be ammended to be able to work with the new callback signature.
-* Deprecates the use of `'undefined'` in full prefixes for the more standard and unambiguous `'_'` wilcard.
+* Deprecates the use of `'undefined'` in full prefixes for the more standard and unambiguous `'_'` wildcard.
