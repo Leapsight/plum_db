@@ -87,5 +87,5 @@ setup_db_info_tab() ->
         {read_concurrency, true}
     ],
 
-    {ok, ?MODULE} = plum_db_table_owner:add_or_claim(?MODULE, EtsOpts),
+    {ok, ?MODULE} = plum_db_table_owner:add(?MODULE, EtsOpts),
     ok.
