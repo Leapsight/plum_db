@@ -20,7 +20,7 @@
 -module(plum_db_partition_hashtree).
 -behaviour(gen_server).
 -include_lib("kernel/include/logger.hrl").
-
+-include("plum_db.hrl").
 
 %% default value for aae_hashtree_ttl config option
 %% Time in milliseconds after which the hashtree will be reset
@@ -57,7 +57,7 @@
 -export([terminate/2]).
 -export([code_change/3]).
 
--include("plum_db.hrl").
+
 
 
 -record(state, {
@@ -111,9 +111,21 @@ start_link(Partition) when is_integer(Partition) ->
 %% @end
 %% -----------------------------------------------------------------------------
 name(Partition) ->
-    list_to_atom(
-        "plum_db_partition_" ++ integer_to_list(Partition) ++ "_hashtree").
+    Key = {?MODULE, Partition},
 
+    case persistent_term:get(Key, undefined) of
+        undefined ->
+            plum_db:is_partition(Partition)
+                orelse error(invalid_partition_id),
+            Name = list_to_atom(
+                "plum_db_partition_" ++ integer_to_list(Partition) ++
+                "_hashtree"
+            ),
+            _ = persistent_term:put(Key, Name),
+            Name;
+        Name ->
+            Name
+    end.
 
 %% -----------------------------------------------------------------------------
 %% @doc Same as insert(PKey, Hash, false).

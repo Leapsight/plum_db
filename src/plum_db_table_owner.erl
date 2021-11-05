@@ -24,10 +24,13 @@
 
 %% API
 -export([add/2]).
+-export([add_and_claim/2]).
 -export([add_or_claim/2]).
+-export([claim/1]).
 -export([delete/1]).
 -export([give_away/2]).
 -export([lookup/1]).
+-export([exists/1]).
 
 %% SUPERVISOR CALLBACKS
 -export([start_link/0]).
@@ -54,20 +57,39 @@
 lookup(Name) when is_atom(Name) ->
 	case ets:lookup(?MODULE, Name) of
 		[] ->
-			false;
+			error;
 		[{Name, Tab}] ->
 			{ok, Tab}
 	end.
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Creates a new ets table, sets itself as heir and gives it away
-%% to Requester
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+exists(Name) ->
+	case lookup(Name) of
+		{ok, _} -> true;
+		error -> false
+	end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Creates a new ets table, sets itself as heir.
 %% @end
 %% -----------------------------------------------------------------------------
 add(Name, Opts)
 when is_atom(Name) andalso Name =/= undefined andalso is_list(Opts) ->
   gen_server:call(?MODULE, {add, Name, Opts}).
+
+%% -----------------------------------------------------------------------------
+%% @doc Creates a new ets table, sets itself as heir and gives it away
+%% to Requester
+%% @end
+%% -----------------------------------------------------------------------------
+add_and_claim(Name, Opts)
+when is_atom(Name) andalso Name =/= undefined andalso is_list(Opts) ->
+  gen_server:call(?MODULE, {add_and_claim, Name, Opts}).
 
 
 %% -----------------------------------------------------------------------------
@@ -95,6 +117,17 @@ delete(Name) when is_atom(Name) ->
 			%% Not the owner
 			false
 	end.
+
+%% -----------------------------------------------------------------------------
+%% @doc Used by the table owner to delegate the ownership to the calling
+%% process.
+%% The process must be local and not already the owner of the table.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec claim(Name :: atom()) -> boolean().
+
+claim(Name) when is_atom(Name)->
+	gen_server:call(?MODULE, {give_away, Name, self()}).
 
 
 %% -----------------------------------------------------------------------------
@@ -136,23 +169,41 @@ init([]) ->
 handle_call(stop, _From, St) ->
   {stop, normal, St};
 
-handle_call({add, Name, Opts0}, {From, _Tag}, St) ->
-  Opts1 = lists:keystore(heir, 1, Opts0, {heir, self(), []}),
-  Tab = ets:new(Name, Opts1),
-  ets:give_away(Tab, From, []),
-  ets:insert(?MODULE, [{Name, Tab}]),
-  {reply, {ok, Tab}, St};
+handle_call({add, Name, Opts0}, {_From, _Tag}, St) ->
+	Reply = case exists(Name) of
+		true ->
+			error;
+		false ->
+			Opts1 = set_heir(Opts0),
+			Tab = ets:new(Name, Opts1),
+			true = ets:insert(?MODULE, [{Name, Tab}]),
+			{ok, Tab}
+	end,
+	{reply, Reply, St};
+
+handle_call({add_and_claim, Name, Opts0}, {From, _Tag}, St) ->
+	Reply = case exists(Name) of
+		true ->
+			error;
+		false ->
+			Opts1 = set_heir(Opts0),
+			Tab = ets:new(Name, Opts1),
+			true = do_give_away(Tab, From),
+			true = ets:insert(?MODULE, [{Name, Tab}]),
+			{ok, Tab}
+	end,
+	{reply, Reply, St};
 
 handle_call({add_or_claim, Name, Opts0}, {From, _Tag}, St) ->
-  case ets:lookup(?MODULE, Name) of
-	[] ->
-		Opts1 = lists:keystore(heir, 1, Opts0, {heir, self(), []}),
-		Tab = ets:new(Name, Opts1),
-		ets:give_away(Tab, From, []),
-		ets:insert(?MODULE, [{Name, Tab}]),
+  case lookup(Name) of
+	{ok, Tab} ->
+		ok = give_away(Tab, From),
 		{reply, {ok, Tab}, St};
-	[{Name, Tab}] ->
-		ets:give_away(Tab, From, []),
+	error ->
+		Opts1 = set_heir(Opts0),
+		Tab = ets:new(Name, Opts1),
+		true = do_give_away(Tab, From),
+		ets:insert(?MODULE, [{Name, Tab}]),
 		{reply, {ok, Tab}, St}
   end;
 
@@ -168,10 +219,8 @@ handle_call({delete, Name}, {_From, _Tag}, St) ->
 
 
 handle_call({give_away, Name, NewOwner}, {From, _Tag}, St) ->
-	Reply =  case ets:lookup(?MODULE, Name) of
-		[] ->
-			false;
-		[{Name, Tab}] ->
+	Reply = case lookup(Name) of
+		{ok, Tab} ->
 			TrueOwner = ets:info(Tab, owner),
 			% If TrueOwner == self() the previous owner died
 			case
@@ -180,11 +229,13 @@ handle_call({give_away, Name, NewOwner}, {From, _Tag}, St) ->
 				node(self()) == node(NewOwner)
 			of
 				true ->
-					ets:give_away(Tab, NewOwner, []);
+					do_give_away(Tab, NewOwner);
 				false ->
 					% The table does not exist or belongs to another process
 					false
-			end
+			end;
+		error ->
+			false
 	end,
 	{reply, Reply, St};
 
@@ -218,3 +269,11 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, St, _Extra) ->
 	{ok, St}.
 
+
+%% @private
+set_heir(Opts) ->
+	lists:keystore(heir, 1, Opts, {heir, self(), []}).
+
+%% @private
+do_give_away(Tab, From) ->
+	true = ets:give_away(Tab, From, []).
