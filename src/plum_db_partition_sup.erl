@@ -74,18 +74,6 @@ init([Id]) ->
             modules => [plum_db_partition_server]
         },
         #{
-            id => plum_db_partition_worker:name(Id),
-            start => {
-                plum_db_partition_worker,
-                start_link,
-                [Id]
-            },
-            restart => permanent,
-            shutdown => 5000,
-            type => worker,
-            modules => [plum_db_partition_worker]
-        },
-        #{
             id => plum_db_partition_hashtree:name(Id),
             start => {
                 plum_db_partition_hashtree,

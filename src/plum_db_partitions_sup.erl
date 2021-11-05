@@ -1,5 +1,5 @@
 %% =============================================================================
-%%  plum_db_partition_worker.erl -
+%%  plum_db_partitions_sup.erl -
 %%
 %%  Copyright (c) 2017-2021 Leapsight. All rights reserved.
 %%
@@ -20,7 +20,11 @@
 -behaviour(supervisor).
 
 
+-export([get_db_info/1]).
+-export([set_db_info/2]).
 -export([start_link/0]).
+
+
 -export([init/1]).
 
 
@@ -33,6 +37,15 @@
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+
+get_db_info(ServerRef) ->
+    ets:lookup_element(?MODULE, ServerRef, 2).
+
+
+set_db_info(ServerRef, Data) ->
+    true = ets:insert(?MODULE, {ServerRef, Data}),
+    ok.
 
 
 
@@ -59,4 +72,20 @@ init([]) ->
         }
         || Id <- plum_db:partitions()
     ],
+
+    ok = setup_db_info_tab(),
+
     {ok, {RestartStrategy, Children}}.
+
+
+
+setup_db_info_tab() ->
+    EtsOpts = [
+        named_table,
+        public,
+        set,
+        {read_concurrency, true}
+    ],
+
+    {ok, ?MODULE} = plum_db_table_owner:add(?MODULE, EtsOpts),
+    ok.

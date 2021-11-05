@@ -35,17 +35,22 @@
 -record(state, {
     name                                ::  atom(),
     partition                           ::  non_neg_integer(),
-    db_ref 								::	eleveldb:db_ref() | undefined,
-    ram_tab                             ::  atom(),
-    ram_disk_tab                        ::  atom(),
+    actor_id                            ::  {integer(), node()} | undefined,
+    db_info                             ::  db_info() | undefined,
 	config = []							::	opts(),
 	data_root							::	file:filename(),
 	open_opts = []						::	opts(),
-	read_opts = []						::	opts(),
-    write_opts = []						::	opts(),
-    fold_opts = [{fill_cache, false}]	::	opts(),
     iterators = []                      ::  iterators(),
     helper = undefined                  ::  pid() | undefined
+}).
+
+-record(db_info, {
+    db_ref 								::	eleveldb:db_ref() | undefined,
+    ram_tab                             ::  atom(),
+    ram_disk_tab                        ::  atom(),
+	read_opts = []						::	opts(),
+    write_opts = []						::	opts(),
+    fold_opts = [{fill_cache, false}]	::	opts()
 }).
 
 -record(partition_iterator, {
@@ -68,6 +73,7 @@
 }).
 
 -type opts()                    :: 	[{atom(), term()}].
+-type db_info()                 ::  #db_info{}.
 -type iterator()                ::  #partition_iterator{}.
 -type iterators()               ::  [iterator()].
 -type iterator_action()         ::  first
@@ -89,15 +95,17 @@
                                     | {error, iterator_closed, iterator()}
                                     | {error, no_match, iterator()}.
 
-
+-export_type([db_info/0]).
 -export_type([iterator/0]).
 -export_type([iterator_move_result/0]).
 
 -export([byte_size/1]).
 -export([delete/1]).
 -export([delete/2]).
--export([get/1]).
--export([get/2]).
+-export([get/3]).
+-export([get/4]).
+-export([merge/3]).
+-export([merge/4]).
 -export([is_empty/1]).
 -export([iterator/2]).
 -export([iterator/3]).
@@ -106,8 +114,10 @@
 -export([key_iterator/2]).
 -export([key_iterator/3]).
 -export([name/1]).
--export([put/2]).
--export([put/3]).
+-export([put/4]).
+-export([put/5]).
+-export([take/3]).
+-export([take/4]).
 -export([start_link/2]).
 
 %% GEN_SERVER CALLBACKS
@@ -142,44 +152,20 @@ start_link(Partition, Opts) ->
 %% -----------------------------------------------------------------------------
 %% @private
 name(Partition) ->
-    N = valid_partition(Partition),
-    list_to_atom(
-        "plum_db_partition_" ++ integer_to_list(N) ++ "_server").
+    Key = {?MODULE, Partition},
 
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
-get(PKey) ->
-    get(name(plum_db:get_partition(PKey)), PKey).
-
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
-get(Partition, PKey) when is_integer(Partition) ->
-    get(name(Partition), PKey);
-
-get(Name, {{Prefix, _}, _} = PKey) when is_atom(Name) ->
-    case plum_db:prefix_type(Prefix) of
-        Type when Type == ram orelse Type == ram_disk ->
-            case ets:lookup(table_name(Name, Type), PKey) of
-                [] when Type == ram_disk ->
-                    %% During init we would be restoring the ram_disk prefixes
-                    %% asynchronously.
-                    %% So we need to fallback to disk until the restore is
-                    %% done.
-                    gen_server:call(Name, {get, PKey, Type}, infinity);
-                [] ->
-                    {error, not_found};
-                [{_, Obj}] ->
-                    {ok, Obj}
-            end;
-        Type ->
-            %% Type is disk or undefined
-            gen_server:call(Name, {get, PKey, Type}, infinity)
+    case persistent_term:get(Key, undefined) of
+        undefined ->
+            plum_db:is_partition(Partition)
+                orelse error(invalid_partition_id),
+            Name = list_to_atom(
+                "plum_db_partition_" ++ integer_to_list(Partition) ++
+                "_server"
+            ),
+            _ = persistent_term:put(Key, Name),
+            Name;
+        Name ->
+            Name
     end.
 
 
@@ -187,25 +173,81 @@ get(Name, {{Prefix, _}, _} = PKey) when is_atom(Name) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-put(PKey, Value) ->
-    put(name(plum_db:get_partition(PKey)), PKey, Value).
+get(Name, PKey, Opts) ->
+    get(Name, PKey, Opts, infinity).
 
 
 %% -----------------------------------------------------------------------------
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-put(Partition, PKey, Value) when is_integer(Partition) ->
-    put(name(Partition), PKey, Value);
+get({Name, _} = Ref, PKey, Opts, Timeout) when is_atom(Name) ->
+    gen_server:call(Ref, {get, PKey, Opts}, Timeout);
 
-put(Name, {{Prefix, _}, _} = PKey, Value) when is_atom(Name) ->
-    case plum_db:prefix_type(Prefix) of
-        ram ->
-            true = ets:insert(table_name(Name, ram), {PKey, Value}),
-            ok;
-        Type ->
-            gen_server:call(Name, {put, PKey, Value, Type}, infinity)
+get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
+    case get_option(allow_put, Opts, false) of
+        true ->
+            gen_server:call(Name, {get, PKey, Opts}, Timeout);
+        false ->
+            DBInfo = plum_db_partitions_sup:get_db_info(Name),
+            case do_get(PKey, DBInfo) of
+                {ok, Object} ->
+                    {ok, maybe_resolve(Object, Opts)};
+                {error, _} = Error ->
+                    Error
+            end
     end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+put(Name, PKey, ValueOrFun, Opts) ->
+    put(Name, PKey, ValueOrFun, Opts, infinity).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+put(Name, PKey, ValueOrFun, Opts, Timeout) when is_atom(Name) ->
+    gen_server:call(Name, {put, PKey, ValueOrFun, Opts}, Timeout).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+merge(Name, PKey, Obj) ->
+    merge(Name, PKey, Obj, infinity).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+merge({Name, _} = Ref, PKey, Obj, Timeout) when is_atom(Name) ->
+    gen_server:call(Ref, {merge, PKey, Obj}, Timeout);
+
+merge(Name, PKey, Obj, Timeout) ->
+    gen_server:call(Name, {merge, PKey, Obj}, Timeout).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+take(Name, PKey, Opts) ->
+    take(Name, PKey, Opts, infinity).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+take(Name, PKey, Opts, Timeout) ->
+    gen_server:call(Name, {take, PKey, Opts}, Timeout).
 
 
 %% -----------------------------------------------------------------------------
@@ -223,8 +265,8 @@ delete(Key) ->
 delete(Partition, Key) when is_integer(Partition) ->
     delete(name(Partition), Key);
 
-delete(Name, {{Prefix, _}, _} = PKey) when is_atom(Name) ->
-    case plum_db:prefix_type(Prefix) of
+delete(Name, PKey) when is_atom(Name) ->
+    case prefix_type(PKey) of
         ram ->
             true = ets:delete(table_name(Name, ram), PKey),
             ok;
@@ -606,6 +648,9 @@ init([Name, Partition, Opts]) ->
             case open_db(State0) of
                 {ok, State1} ->
                     State2 = spawn_helper(State1),
+                    ok = plum_db_partitions_sup:set_db_info(
+                        Name, State2#state.db_info
+                    ),
                     {ok, State2};
                 {error, Reason} ->
                     {stop, Reason}
@@ -614,69 +659,64 @@ init([Name, Partition, Opts]) ->
 		 	{stop, Reason}
     end.
 
-handle_call({get, PKey, Type}, _From, State)
-when (Type == disk) orelse (Type == undefined) ->
-    DbRef = State#state.db_ref,
-    Opts = State#state.read_opts,
-    Result = result(eleveldb:get(DbRef, encode_key(PKey), Opts)),
-    {reply, Result, State};
 
-handle_call({get, PKey, ram_disk}, _From, State) ->
-    Result = case
-        ets:lookup(State#state.ram_disk_tab, PKey)
-    of
-        [] ->
-            %% During init we would be restoring the ram_disk prefixes
-            %% asynchronously.
-            %% So we need to fallback to disk until the restore is
-            %% done.
-            DbRef = State#state.db_ref,
-            Opts = State#state.read_opts,
-            result(eleveldb:get(DbRef, encode_key(PKey), Opts));
-        [{_, Obj}] ->
-            {ok, Obj}
+handle_call({get, PKey, Opts}, _From, State) ->
+    Reply = case do_get(PKey, State) of
+        {ok, Object} ->
+            Resolved = maybe_resolve(Object, Opts),
+            ok = maybe_modify(PKey, Object, Opts, State, Resolved),
+            {ok, Resolved};
+        {error, _} = Error ->
+            Error
     end,
+
+    {reply, Reply, State};
+
+handle_call({put, PKey, ValueOrFun, Opts}, _From, State) ->
+    {_Existing, Result} = modify(PKey, ValueOrFun, Opts, State),
     {reply, Result, State};
 
-handle_call({get, PKey, ram}, _From, State) ->
-    %% This is for debugging to support direct gen_server:call calls
-    %% Normally the user will use get/1 that will catch this case
-    %% and resolve using ets directly on the calling process
-    Result = case ets:lookup(State#state.ram_tab, PKey) of
-        [] ->
-            {error, not_found};
-        [{_, Obj}] ->
-            {ok, Obj}
+handle_call({take, PKey, Opts}, _From, State) ->
+    {Existing, Result} = modify(PKey, ?TOMBSTONE, Opts, State),
+    Resolved = maybe_resolve(Existing, Opts),
+    %% We ignore allow_put here so we do not call maybe_modify/5
+    %% since we just deleted the object, we just respect the user option
+    %% to resolve the Existing
+    {reply, {Resolved, Result}, State};
+
+handle_call({merge, PKey, Obj}, _From, State) ->
+    %% We implement puts here since we need to do a read followed by a write
+    %% atomically, and we need to serialise them.
+    Existing = case do_get(PKey, State) of
+        {ok, O} ->
+            O;
+        {error, not_found} ->
+            undefined
     end,
-    {reply, Result, State};
 
-handle_call({put, PKey, Value, ram}, _From, State) ->
-    true = ets:insert(State#state.ram_tab, {PKey, Value}),
-    {reply, ok, State};
+    case plum_db_object:reconcile(Obj, Existing) of
+        false ->
+            %% The remote object is an anscestor of or is equal to the local one
+            {reply, false, State};
+        {true, Reconciled} ->
+            ok = do_put(PKey, Reconciled, State),
 
-handle_call({put, PKey, Value, Type}, _From, State) ->
-    DbRef = State#state.db_ref,
-    Opts = State#state.write_opts,
-    true = case Type of
-        ram_disk ->
-            ets:insert(State#state.ram_disk_tab, {PKey, Value});
-        _ ->
-            true
-    end,
-    Actions = [{put, encode_key(PKey), term_to_binary(Value)}],
-    Result = result(eleveldb:write(DbRef, Actions, Opts)),
-    {reply, Result, State};
+            %% We notify local subscribers and event handlers
+            ok = plum_db_events:update({PKey, Reconciled, Existing}),
+
+            {reply, true, State}
+    end;
 
 handle_call({delete, PKey}, _From, State) ->
-    DbRef = State#state.db_ref,
-    Opts = State#state.write_opts,
-    {{Prefix, _}, _} = PKey,
-    Result = case plum_db:prefix_type(Prefix) of
+    DbRef = db_ref(State),
+    Opts = write_opts(State),
+
+    Result = case prefix_type(PKey) of
         ram ->
-            true = ets:delete(State#state.ram_tab, PKey),
+            true = ets:delete(ram_tab(State), PKey),
             ok;
         ram_disk ->
-            true = ets:delete(State#state.ram_disk_tab, PKey),
+            true = ets:delete(ram_disk_tab(State), PKey),
             Actions = [{delete, encode_key(PKey)}],
             result(eleveldb:write(DbRef, Actions, Opts));
         _ ->
@@ -686,9 +726,9 @@ handle_call({delete, PKey}, _From, State) ->
     {reply, Result, State};
 
 handle_call(byte_size, _From, State) ->
-    DbRef = State#state.db_ref,
-    Ram = ets:info(State#state.ram_tab, memory),
-    RamDisk = ets:info(State#state.ram_disk_tab, memory),
+    DbRef = db_ref(State),
+    Ram = ets:info(ram_tab(State), memory),
+    RamDisk = ets:info(ram_disk_tab(State), memory),
     Ets = (Ram + RamDisk) * erlang:system_info(wordsize),
 
     try eleveldb:status(DbRef, <<"leveldb.total-bytes">>) of
@@ -700,9 +740,9 @@ handle_call(byte_size, _From, State) ->
     end;
 
 handle_call(is_empty, _From, State) ->
-    DbRef = State#state.db_ref,
-    Ram = ets:info(State#state.ram_tab, size),
-    RamDisk = ets:info(State#state.ram_disk_tab, size),
+    DbRef = db_ref(State),
+    Ram = ets:info(ram_tab(State), size),
+    RamDisk = ets:info(ram_disk_tab(State), size),
     Result = eleveldb:is_empty(DbRef) andalso (Ram + RamDisk) == 0,
     {reply, Result, State};
 
@@ -711,6 +751,7 @@ handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
     {Prefix, _} = FullPrefix,
 
     KeyPattern = proplists:get_value(match, Opts, undefined),
+
     MS = case KeyPattern of
         undefined ->
             undefined;
@@ -757,28 +798,41 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({'EXIT', Pid, normal}, #state{helper = Pid} = State) ->
-
     {noreply, State#state{helper = undefined}};
 
-handle_info({'EXIT', Pid, Reason}, #state{helper = Pid} = State) ->
-    {stop, Reason, State};
+handle_info({'EXIT', _, Reason}, #state{} = State) ->
+    case Reason of
+        restart ->
+            %% Used for testing and debugging purposes
+            exit(restart);
+        _ ->
+            {stop, Reason, State}
+    end;
 
 handle_info({'DOWN', Ref, process, _, _}, State0) ->
     State1 = close_iterator(Ref, State0),
     {noreply, State1};
 
-handle_info(_Info, State) ->
+handle_info(Event, State) ->
+    ?LOG_INFO(#{
+        description => "Unhandled event",
+        event => Event
+    }),
     {noreply, State}.
 
 
 terminate(_Reason, State) ->
-    %% Close iterators
-    Fun = fun(Iter, Acc) ->
-        close_iterator(Iter, Acc)
-    end,
-    _ = lists:foldl(Fun, State, State#state.iterators),
+    %% Close all iterators
+    _ = lists:foldl(
+        fun(Iter, Acc) ->
+            close_iterator(Iter, Acc)
+        end,
+        State,
+        State#state.iterators
+    ),
+
     %% Close eleveldb
-    catch eleveldb:close(State#state.db_ref),
+    catch eleveldb:close(db_ref(State)),
     ok.
 
 
@@ -800,24 +854,29 @@ init_state(Name, Partition, DataRoot, Config) ->
     MergedConfig = orddict:merge(
         fun(_K, VLocal, _VGlobal) -> VLocal end,
         orddict:from_list(Config), % Local
-        orddict:from_list(application:get_all_env(eleveldb))), % Global
+        orddict:from_list(application:get_all_env(eleveldb))
+    ), % Global
 
     %% Use a variable write buffer size in order to reduce the number
     %% of vnodes that try to kick off compaction at the same time
     %% under heavy uniform load...
     WriteBufferMin = config_value(
-        write_buffer_size_min, MergedConfig, 30 * 1024 * 1024),
+        write_buffer_size_min, MergedConfig, 30 * 1024 * 1024
+    ),
     WriteBufferMax = config_value(
-        write_buffer_size_max, MergedConfig, 60 * 1024 * 1024),
+        write_buffer_size_max, MergedConfig, 60 * 1024 * 1024
+    ),
     WriteBufferSize = WriteBufferMin + rand:uniform(
-        1 + WriteBufferMax - WriteBufferMin),
+        1 + WriteBufferMax - WriteBufferMin
+    ),
 
     %% Update the write buffer size in the merged config and make sure
     %% create_if_missing is set to true
     FinalConfig = orddict:store(
         write_buffer_size,
         WriteBufferSize,
-        orddict:store(create_if_missing, true, MergedConfig)),
+        orddict:store(create_if_missing, true, MergedConfig)
+    ),
 
     %% Parse out the open/read/write options
     {OpenOpts, _BadOpenOpts} = eleveldb:validate_options(open, FinalConfig),
@@ -825,7 +884,7 @@ init_state(Name, Partition, DataRoot, Config) ->
     {WriteOpts, _BadWriteOpts} = eleveldb:validate_options(write, FinalConfig),
 
     %% Use read options for folding, but FORCE fill_cache to false
-    FoldOpts = lists:keystore(fill_cache, 1, ReadOpts, {fill_cache, false}),
+    FoldOpts = set_option(fill_cache, false, ReadOpts),
 
     %% Warn if block_size is set
     SSTBS = proplists:get_value(sst_block_size, OpenOpts, false),
@@ -868,14 +927,17 @@ init_state(Name, Partition, DataRoot, Config) ->
     #state {
         name = Name,
         partition = Partition,
-        ram_tab = RamTab,
-        ram_disk_tab = RamDiskTab,
+        actor_id = {Partition, node()},
+        db_info = #db_info{
+            ram_tab = RamTab,
+            ram_disk_tab = RamDiskTab,
+            read_opts = ReadOpts,
+            write_opts = WriteOpts,
+            fold_opts = FoldOpts
+        },
 		config = FinalConfig,
         data_root = DataRoot,
-		open_opts = OpenOpts,
-		read_opts = ReadOpts,
-		write_opts = WriteOpts,
-		fold_opts = FoldOpts
+		open_opts = OpenOpts
 	}.
 
 
@@ -890,19 +952,21 @@ config_value(Key, Config, Default) ->
 
 
 %% @private
-open_db(State0) ->
+open_db(State) ->
     RetriesLeft = plum_db_config:get(store_open_retry_Limit),
-    open_db(State0, max(1, RetriesLeft), undefined).
+    open_db(State, max(1, RetriesLeft), undefined).
 
 
 %% @private
-open_db(_State0, 0, LastError) ->
+open_db(_State, 0, LastError) ->
     {error, LastError};
 
-open_db(State0, RetriesLeft, _) ->
-    case eleveldb:open(State0#state.data_root, State0#state.open_opts) of
+open_db(State, RetriesLeft, _) ->
+    case eleveldb:open(State#state.data_root, State#state.open_opts) of
         {ok, Ref} ->
-            {ok, State0#state{db_ref = Ref}};
+            DBInfo0 = State#state.db_info,
+            DBInfo = DBInfo0#db_info{db_ref = Ref},
+            {ok, State#state{db_info = DBInfo}};
         %% Check specifically for lock error, this can be caused if
         %% a crashed vnode takes some time to flush leveldb information
         %% out to disk.  The process is gone, but the NIF resource cleanup
@@ -913,34 +977,35 @@ open_db(State0, RetriesLeft, _) ->
                     SleepFor = plum_db_config:get(store_open_retries_delay),
                     ?LOG_DEBUG(#{
                         description => "Leveldb backend retrying after error",
-                        partition => State0#state.partition,
+                        partition => State#state.partition,
                         node => node(),
-                        data_root => State0#state.data_root,
+                        data_root => State#state.data_root,
                         timeout => SleepFor,
                         reason => OpenErr
                     }),
                     timer:sleep(SleepFor),
-                    open_db(State0, RetriesLeft - 1, Reason);
+                    open_db(State, RetriesLeft - 1, Reason);
                 false ->
                     case lists:prefix("Corruption", OpenErr) of
                         true ->
                             ?LOG_WARNING(#{
                                 description => "Starting repair of corrupted Leveldb store",
-                                partition => State0#state.partition,
+                                partition => State#state.partition,
                                 node => node(),
-                                data_root => State0#state.data_root,
+                                data_root => State#state.data_root,
                                 reason => OpenErr
                             }),
                             _ = eleveldb:repair(
-                                State0#state.data_root, State0#state.open_opts),
+                                State#state.data_root, State#state.open_opts
+                            ),
                             ?LOG_NOTICE(#{
                                 description => "Finished repair of corrupted Leveldb store",
-                                partition => State0#state.partition,
+                                partition => State#state.partition,
                                 node => node(),
-                                data_root => State0#state.data_root,
+                                data_root => State#state.data_root,
                                 reason => OpenErr
                             }),
-                            open_db(State0, 0, Reason);
+                            open_db(State, 0, Reason);
                         false ->
                             {error, Reason}
                     end
@@ -967,12 +1032,11 @@ init_ram_disk_prefixes_fun(State) ->
             node => node()
         }),
         %% We create the in-memory db copy for ram and ram_disk prefixes
-        Tab = State#state.ram_disk_tab,
+        Tab = ram_disk_tab(State),
 
         %% We load ram_disk prefixes from disk to ram
         PrefixList = maps:to_list(plum_db:prefixes()),
-        {ok, DbIter} = eleveldb:iterator(
-            State#state.db_ref, State#state.fold_opts),
+        {ok, DbIter} = eleveldb:iterator(db_ref(State), fold_opts(State)),
 
         try
             Fun = fun
@@ -1049,6 +1113,66 @@ init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab) ->
 
 
 %% @private
+get_option(Key, Opts, Default) ->
+    case lists:keyfind(Key, 1, Opts) of
+        {Key, Value} ->
+            Value;
+        _ ->
+            Default
+    end.
+
+%% @private
+set_option(Key, Value, Opts) ->
+    lists:keystore(Key, 1, Opts, {Key, Value}).
+
+
+%% @private
+db_ref(#state{db_info = V}) ->
+    db_ref(V);
+
+db_ref(#db_info{db_ref = V}) ->
+    V.
+
+
+%% @private
+ram_tab(#state{db_info = V}) ->
+    ram_tab(V);
+
+ram_tab(#db_info{ram_tab = V}) ->
+    V.
+
+
+%% @private
+ram_disk_tab(#state{db_info = V}) ->
+    ram_disk_tab(V);
+
+ram_disk_tab(#db_info{ram_disk_tab = V}) ->
+    V.
+
+
+%% @private
+read_opts(#state{db_info = V}) ->
+    read_opts(V);
+
+read_opts(#db_info{read_opts = V}) ->
+    V.
+
+
+%% @private
+write_opts(#state{db_info = V}) ->
+    write_opts(V);
+
+write_opts(#db_info{write_opts = V}) ->
+    V.
+
+%% @private
+fold_opts(#state{db_info = V}) ->
+    fold_opts(V);
+
+fold_opts(#db_info{fold_opts = V}) ->
+    V.
+
+%% @private
 table_name(#partition_iterator{ram_tab = Tab}, ram) ->
     Tab;
 
@@ -1068,6 +1192,144 @@ table_name(N, ram) when is_integer(N) ->
 table_name(N, ram_disk) when is_integer(N) ->
     list_to_atom(
         "plum_db_partition_" ++ integer_to_list(N) ++ "_server_ram_disk").
+
+
+%% @private
+prefix_type({{Prefix, _}, _}) ->
+    plum_db:prefix_type(Prefix).
+
+
+%% @private
+modify(PKey, ValueOrFun, Opts, State) ->
+    {Existing, Ctxt} = case do_get(PKey, State) of
+        {ok, Object} ->
+            {Object, plum_db_object:context(Object)};
+        {error, not_found} ->
+            {undefined, plum_db_object:empty_context()}
+    end,
+    modify(PKey, ValueOrFun, Opts, State, Existing, Ctxt).
+
+
+%% @private
+modify(PKey, ValueOrFun, _Opts, State, Existing, Ctxt) ->
+    Modified = plum_db_object:modify(
+        Existing, Ctxt, ValueOrFun, State#state.actor_id
+    ),
+    ok = do_put(PKey, Modified, State),
+    ok = broadcast(PKey, Modified),
+    {Existing, Modified}.
+
+
+%% @private
+maybe_resolve(Object, Opts) ->
+    case plum_db_object:value_count(Object) =< 1 of
+        true ->
+            Object;
+        false ->
+            Resolver = get_option(resolver, Opts, lww),
+            plum_db_object:resolve(Object, Resolver)
+    end.
+
+
+%% @private
+maybe_modify(PKey, Existing, Opts, State, NewObject) ->
+    case get_option(allow_put, Opts, false) of
+        false ->
+            ok;
+        true ->
+            Ctxt = plum_db_object:context(NewObject),
+            Value = plum_db_object:value(NewObject),
+            {_, _} = modify(PKey, Value, Opts, State, Existing, Ctxt),
+            ok
+    end.
+
+
+%% @private
+broadcast(PKey, Obj) ->
+    case plum_db_config:get(aae_enabled, true) of
+        true ->
+            Broadcast = #plum_db_broadcast{pkey = PKey, obj = Obj},
+            plumtree_broadcast:broadcast(Broadcast, plum_db);
+        false ->
+            ok
+    end.
+
+
+%% @private
+do_get(PKey, State) ->
+    do_get(PKey, State, prefix_type(PKey)).
+
+
+%% @private
+do_get(PKey, State, Type)
+when (Type == disk) orelse (Type == undefined) ->
+    DbRef = db_ref(State),
+    ReadOpts = read_opts(State),
+    result(eleveldb:get(DbRef, encode_key(PKey), ReadOpts));
+
+do_get(PKey, State, ram) ->
+    case ets:lookup(ram_tab(State), PKey) of
+        [] ->
+            {error, not_found};
+        [{_, Obj}] ->
+            {ok, Obj}
+    end;
+
+do_get(PKey, State, ram_disk) ->
+    case ets:lookup(ram_disk_tab(State), PKey) of
+        [] ->
+            %% During init we would be restoring the ram_disk prefixes
+            %% asynchronously.
+            %% So we need to fallback to disk until the restore is
+            %% done.
+            do_get(PKey, State, disk);
+        [{_, Obj}] ->
+            {ok, Obj}
+    end.
+
+
+maybe_update_hashtree(PKey, Object, State) ->
+    ok = case plum_db_config:get(aae_enabled) of
+        true ->
+            Hash = plum_db_object:hash(Object),
+            ok = plum_db_partition_hashtree:insert(
+                State#state.partition, PKey, Hash, false
+            );
+        false ->
+            ok
+    end.
+
+
+%% @private
+do_put(PKey, Value, State) ->
+    do_put(PKey, Value, State, prefix_type(PKey)).
+
+
+%% @private
+do_put(PKey, Value, State, undefined) ->
+    do_put(PKey, Value, State, disk);
+
+do_put(PKey, Value, State, ram) ->
+    ok = maybe_update_hashtree(PKey, Value, State),
+    true = ets:insert(ram_tab(State), {PKey, Value}),
+    ok;
+
+do_put(PKey, Value, State, ram_disk) ->
+    case do_put(PKey, Value, State, disk) of
+        ok ->
+            true = ets:insert(ram_disk_tab(State), {PKey, Value}),
+            ok;
+        Error ->
+            Error
+    end;
+
+do_put(PKey, Value, State, disk) ->
+    ok = maybe_update_hashtree(PKey, Value, State),
+
+    DbRef = db_ref(State),
+    Opts = write_opts(State),
+    Actions = [{put, encode_key(PKey), term_to_binary(Value)}],
+    result(eleveldb:write(DbRef, Actions, Opts)).
 
 
 %% @private
@@ -1207,22 +1469,10 @@ matches_prefix(Bin, Iter) when is_binary(Bin) ->
 matches_prefix(_, _) -> false.
 
 
-%% -----------------------------------------------------------------------------
-%% @private
-%% @doc Validates the id is within range, returning the Id if it is or failing
-%% with invalid_store_id otherwise.
-%% @end
-%% -----------------------------------------------------------------------------
-valid_partition(Id) ->
-   plum_db:is_partition(Id) orelse error(invalid_store_id),
-   Id.
-
-
-
 %% @private
 set_disk_iterator(#partition_iterator{} = PartIter0, State) ->
-    DbRef = State#state.db_ref,
-    Opts = State#state.fold_opts,
+    DbRef = db_ref(State),
+    Opts = fold_opts(State),
     KeysOnly = PartIter0#partition_iterator.keys_only,
 
     {ok, DbIter} = case KeysOnly of
@@ -1241,7 +1491,7 @@ set_disk_iterator(#partition_iterator{} = PartIter0, State) ->
 %% @private
 set_ram_iterator(#partition_iterator{} = PartIter0, State) ->
     PartIter0#partition_iterator{
-        ram_tab = State#state.ram_tab,
+        ram_tab = ram_tab(State),
         ram_done = false,
         ram = undefined
     }.
@@ -1250,7 +1500,7 @@ set_ram_iterator(#partition_iterator{} = PartIter0, State) ->
 %% @private
 set_ram_disk_iterator(#partition_iterator{} = PartIter0, State) ->
     PartIter0#partition_iterator{
-        ram_disk_tab = State#state.ram_disk_tab,
+        ram_disk_tab = ram_disk_tab(State),
         ram_disk_done = false,
         ram_disk = undefined
     }.
@@ -1366,5 +1616,3 @@ decode_key(Bin) ->
 
 %% decode_key(_L) when is_list(L) ->
 %%     error(not_implemented).
-
-

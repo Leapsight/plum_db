@@ -151,6 +151,7 @@
 -export([match/3]).
 -export([get_object/1]).
 -export([get_object/2]).
+-export([get_object/3]).
 -export([get_partition/1]).
 -export([is_partition/1]).
 -export([iterate/1]).
@@ -362,18 +363,12 @@ when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     PKey = prefixed_key(FullPrefix, Key),
     Default = get_option(default, Opts, undefined),
-    ResolveMethod = get_option(resolver, Opts, lww),
-    AllowPut = get_option(allow_put, Opts, true),
-    case get_object(PKey) of
+
+    case get_object(PKey, Opts) of
         undefined ->
             Default;
         Existing ->
-            %% Aa Dotted Version Vector Set is returned.
-            %% When reading the value for a subsequent call to put/3 the
-            %% context can be obtained using plum_db_object:context/1.
-            %% Values can obtained w/ plum_db_object:values/1.
-            maybe_tombstone(
-                maybe_resolve(PKey, Existing, ResolveMethod, AllowPut), Default)
+            maybe_tombstone(plum_db_object:value(Existing), Default)
     end.
 
 
@@ -384,14 +379,27 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% obtained w/ plum_db_object:values/1.
 %% @end
 %% -----------------------------------------------------------------------------
-get_object({{Prefix, SubPrefix}, _Key} = PKey)
+get_object(PKey) ->
+    get_object(PKey, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Returns a Dotted Version Vector Set or undefined.
+%% When reading the value for a subsequent call to put/3 the
+%% context can be obtained using plum_db_object:context/1. Values can
+%% obtained w/ plum_db_object:values/1.
+%% @end
+%% -----------------------------------------------------------------------------
+get_object({{Prefix, SubPrefix}, _Key} = PKey, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
-    case plum_db_partition_server:get(PKey) of
+    Name = plum_db_partition_server:name(get_partition(PKey)),
+
+    case plum_db_partition_server:get(Name, PKey, Opts) of
+        {ok, Obj} ->
+            Obj;
         {error, not_found} ->
-            undefined;
-        {ok, Existing} ->
-            Existing
+            undefined
     end.
 
 
@@ -400,23 +408,24 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% This is function is used by plum_db_exchange_statem.
 %% @end
 %% -----------------------------------------------------------------------------
--spec get_object(node(), plum_db_pkey()) -> plum_db_object() | undefined.
+-spec get_object(node(), plum_db_pkey(), get_opts()) ->
+    plum_db_object() | undefined.
 
-get_object(Node, PKey) when node() =:= Node ->
-    get_object(PKey);
+get_object(Node, PKey, Opts) when node() =:= Node ->
+    get_object(PKey, Opts);
 
-get_object(Node, {{Prefix, SubPrefix}, _Key} = PKey)
+get_object(Node, {{Prefix, SubPrefix}, _Key} = PKey, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
-    %% We call the corresponding plum_db_partition_worker instance
-    %% in the remote node.
     %% This assumes all nodes have the same number of plum_db partitions.
-    gen_server:call(
-        {plum_db_partition_worker:name(get_partition(PKey)), Node},
-        {get_object, PKey},
-        infinity
-    ).
+    Name = plum_db_partition_server:name(get_partition(PKey)),
 
+    case plum_db_partition_server:get({Name, Node}, PKey, Opts) of
+        {ok, Existing} ->
+            Existing;
+        {error, not_found} ->
+            undefined
+    end.
 
 %% -----------------------------------------------------------------------------
 %% @doc Same as fold(Fun, Acc0, FullPrefix, []).
@@ -683,7 +692,7 @@ iterator(FullPrefix) ->
 %% * `match': If match is undefined then all keys will may be visted by the
 %% iterator, match can be:
 %%     * an erlang term - which will be matched exactly against a key
-%%     * '_' - the wilcard term which matches anything
+%%     * '_' - the wildcard term which matches anything
 %%     * an erlang tuple containing terms and '_' - if tuples are used as keys
 %%     this can be used to iterate over some subset of keys
 %% * `partitions': The list of partitions this iterator should cover. If
@@ -765,14 +774,16 @@ iterate(#iterator{ref = undefined, partitions = []} = I) ->
 iterate(#iterator{ref = undefined, partitions = [H|_]} = I0) ->
     %% We finished with the previous partition and we still have
     %% more partitions to cover
+    Name = plum_db_partition_server:name(H),
     FullPrefix = I0#iterator.match_prefix,
     Opts = I0#iterator.opts,
     Ref = case I0#iterator.keys_only of
         true ->
-            plum_db_partition_server:key_iterator(H, FullPrefix, Opts);
+            plum_db_partition_server:key_iterator(Name, FullPrefix, Opts);
         false ->
-            plum_db_partition_server:iterator(H, FullPrefix, Opts)
+            plum_db_partition_server:iterator(Name, FullPrefix, Opts)
     end,
+
     Res = plum_db_partition_server:iterator_move(Ref, I0#iterator.first),
     iterate(Res, I0#iterator{ref = Ref});
 
@@ -790,9 +801,11 @@ iterate({error, no_match, Ref1}, I0) ->
 
 iterate({error, _, Ref1}, #iterator{partitions = [H|T]} = I) ->
     %% There are no more elements in the partition
-    ok = plum_db_partition_server:iterator_close(H, Ref1),
+    Name = plum_db_partition_server:name(H),
+    ok = plum_db_partition_server:iterator_close(Name, Ref1),
     I1 = iterator_reset_pointers(
-        I#iterator{ref = undefined, partitions = T}),
+        I#iterator{ref = undefined, partitions = T}
+    ),
     iterate(I1);
 
 iterate({ok, PKey, Ref1}, I0) ->
@@ -827,7 +840,8 @@ iterator_close(#iterator{ref = undefined}) ->
     ok;
 
 iterator_close(#iterator{ref = DBIter, partitions = [H|_]}) ->
-    plum_db_partition_server:iterator_close(H, DBIter).
+    Name = plum_db_partition_server:name(H),
+    plum_db_partition_server:iterator_close(Name, DBIter).
 
 
 %% -----------------------------------------------------------------------------
@@ -1059,13 +1073,20 @@ put(FullPrefix, Key, ValueOrFun) ->
     put_opts()) ->
     ok.
 
-put({Prefix, SubPrefix} = FullPrefix, Key, ValueOrFun, _Opts)
+put({Prefix, SubPrefix} = FullPrefix, Key, ValueOrFun, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     PKey = prefixed_key(FullPrefix, Key),
-    Context = current_context(PKey),
-    Updated = put_with_context(PKey, Context, ValueOrFun),
-    broadcast(PKey, Updated).
+    _ = plum_db_partition_server:put(
+        plum_db_partition_server:name(get_partition(PKey)),
+        PKey,
+        ValueOrFun,
+        Opts,
+        infinity
+    ),
+    ok.
+
+
 
 
 %% -----------------------------------------------------------------------------
@@ -1113,24 +1134,16 @@ take({Prefix, SubPrefix} = FullPrefix, Key, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     PKey = prefixed_key(FullPrefix, Key),
-    Context = current_context(PKey),
-    {Existing, Updated} = take_with_context(PKey, Context),
-    _ = broadcast(PKey, Updated),
+    Name = plum_db_partition_server:name(get_partition(PKey)),
+
+    {Existing, _} = plum_db_partition_server:take(Name, PKey),
 
     case Existing of
         undefined ->
             undefined;
         Existing ->
-            %% Aa Dotted Version Vector Set is returned.
-            %% When reading the value for a subsequent call to put/3 the
-            %% context can be obtained using plum_db_object:context/1.
-            %% Values can obtained w/ plum_db_object:values/1.
             Default = get_option(default, Opts, undefined),
-            ResolveMethod = get_option(resolver, Opts, lww),
-            %% We do not want to resolve, since we just deleted and broadcasted
-            AllowPut = false,
-            maybe_tombstone(
-                maybe_resolve(PKey, Existing, ResolveMethod, AllowPut), Default)
+            maybe_tombstone(plum_db_object:value(Existing), Default)
     end.
 
 
@@ -1282,9 +1295,10 @@ broadcast_data(#plum_db_broadcast{pkey = Key, obj = Obj}) ->
     undefined | plum_db_object()) -> boolean().
 
 merge({PKey, _Context}, Obj) ->
-    gen_server:call(
-        plum_db_partition_worker:name(get_partition(PKey)),
-        {merge, PKey, Obj},
+    plum_db_partition_server:merge(
+        plum_db_partition_server:name(get_partition(PKey)),
+        PKey,
+        Obj,
         infinity
     ).
 
@@ -1304,12 +1318,12 @@ merge({PKey, _Context}, Obj) ->
     boolean().
 
 merge(Node, {PKey, _Context}, Obj) ->
-    Partition = get_partition(PKey),
     %% Merge is implemented by the worker as an atomic read-merge-write op
     %% TODO: Evaluate using the merge operation in RocksDB when available
-    gen_server:call(
-        {plum_db_partition_worker:name(Partition), Node},
-        {merge, PKey, Obj},
+    plum_db_partition_server:merge(
+        {plum_db_partition_server:name(get_partition(PKey)), Node},
+        PKey,
+        Obj,
         infinity
     ).
 
@@ -1486,64 +1500,6 @@ iterator_reset_pointers(#iterator{} = I) ->
 
 
 %% @private
-current_context(PKey) ->
-    case plum_db_partition_server:get(PKey) of
-        {ok, CurrentMeta} -> plum_db_object:context(CurrentMeta);
-        {error, not_found} -> plum_db_object:empty_context()
-    end.
-
-
-%% -----------------------------------------------------------------------------
-%% @private
-%% @doc The most recently read context
-%% should be passed as the second argument to prevent unneccessary
-%% siblings.
-%% Context is a dvvset.
-%% @end
-%% -----------------------------------------------------------------------------
--spec put_with_context(
-    plum_db_pkey_pattern(), undefined | plum_db_context(), term()) -> plum_db_object().
-
-put_with_context({?WILDCARD, _} = PKey, _, _) ->
-    error(badarg, [PKey]);
-
-put_with_context({{_, _}, _} = PKey, undefined, ValueOrFun) ->
-    %% empty list is an empty dvvset
-    put_with_context(PKey, [], ValueOrFun);
-
-put_with_context({{Prefix, SubPrefix}, _Key} = PKey, Context, ValueOrFun)
-when (is_binary(Prefix) orelse is_atom(Prefix))
-andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
-    gen_server:call(
-        plum_db_partition_worker:name(get_partition(PKey)),
-        {put, PKey, Context, ValueOrFun},
-        infinity
-    ).
-
-
-
--spec take_with_context(
-    plum_db_pkey_pattern(), undefined | plum_db_context()) ->
-        {Existing :: plum_db_object() | undefined, New :: plum_db_object()}.
-
-take_with_context({?WILDCARD, _} = PKey, _) ->
-    error(badarg, [PKey]);
-
-take_with_context({{_, _}, _} = PKey, undefined) ->
-    %% empty list is an empty dvvset
-    take_with_context(PKey, []);
-
-take_with_context({{Prefix, SubPrefix}, _Key} = PKey, Context)
-when (is_binary(Prefix) orelse is_atom(Prefix))
-andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
-    gen_server:call(
-        plum_db_partition_worker:name(get_partition(PKey)),
-        {take, PKey, Context},
-        infinity
-    ).
-
-
-%% @private
 maybe_resolve(PKey, Existing, Method, AllowPut) ->
     SibCount = plum_db_object:value_count(Existing),
     maybe_resolve(PKey, Existing, SibCount, Method, AllowPut).
@@ -1554,15 +1510,20 @@ maybe_resolve(_PKey, Existing, 1, _Method, _AllowPut) ->
     plum_db_object:value(Existing);
 
 maybe_resolve(PKey, Existing, _, Method, AllowPut) ->
-    Reconciled = plum_db_object:resolve(Existing, Method),
-    RContext = plum_db_object:context(Reconciled),
-    RValue = plum_db_object:value(Reconciled),
+    Resolved = plum_db_object:resolve(Existing, Method),
+    RValue = plum_db_object:value(Resolved),
     case AllowPut of
         false ->
             ok;
         true ->
-            Stored = put_with_context(PKey, RContext, RValue),
-            broadcast(PKey, Stored)
+            _ = plum_db_partition_server:put(
+                plum_db_partition_server:name(get_partition(PKey)),
+                PKey,
+                RValue,
+                [],
+                infinity
+            ),
+            ok
     end,
     RValue.
 
@@ -1575,19 +1536,10 @@ maybe_tombstones(Values, Default) ->
 %% @private
 maybe_tombstone(?TOMBSTONE, Default) ->
     Default;
+
 maybe_tombstone(Value, _Default) ->
     Value.
 
-
-%% @private
-broadcast(PKey, Obj) ->
-    case plum_db_config:get(aae_enabled, true) of
-        true ->
-            Broadcast = #plum_db_broadcast{pkey = PKey, obj = Obj},
-            plumtree_broadcast:broadcast(Broadcast, plum_db);
-        false ->
-            ok
-    end.
 
 
 %% @private
@@ -1677,7 +1629,7 @@ get_covering_partitions(FullPrefix) ->
 
 %% @private
 normalise_prefix({?WILDCARD, _})  ->
-    %% If the Prefix is a wilcard the fullprefix is a wilcard
+    %% If the Prefix is a wildcard the fullprefix is a wildcard
     {?WILDCARD, ?WILDCARD};
 normalise_prefix(FullPrefix) when tuple_size(FullPrefix) =:= 2 ->
     FullPrefix.
