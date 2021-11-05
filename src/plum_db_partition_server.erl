@@ -685,8 +685,7 @@ handle_call({take, PKey, Opts}, _From, State) ->
     {reply, {Resolved, Result}, State};
 
 handle_call({merge, PKey, Obj}, _From, State) ->
-    %% We implement puts here since we need to do a read followed by a write
-    %% atomically, and we need to serialise them.
+    %% We need to do a read followed by a write atomically
     Existing = case do_get(PKey, State) of
         {ok, O} ->
             O;
