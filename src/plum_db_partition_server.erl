@@ -102,6 +102,7 @@
 -export([byte_size/1]).
 -export([delete/1]).
 -export([delete/2]).
+-export([get/2]).
 -export([get/3]).
 -export([get/4]).
 -export([merge/3]).
@@ -114,8 +115,10 @@
 -export([key_iterator/2]).
 -export([key_iterator/3]).
 -export([name/1]).
+-export([put/3]).
 -export([put/4]).
 -export([put/5]).
+-export([take/2]).
 -export([take/3]).
 -export([take/4]).
 -export([start_link/2]).
@@ -173,6 +176,14 @@ name(Partition) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
+get(Name, PKey) ->
+    get(Name, PKey, [], infinity).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
 get(Name, PKey, Opts) ->
     get(Name, PKey, Opts, infinity).
 
@@ -197,6 +208,14 @@ get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
                     Error
             end
     end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+put(Name, PKey, ValueOrFun) ->
+    put(Name, PKey, ValueOrFun, [], infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -232,6 +251,14 @@ merge({Name, _} = Ref, PKey, Obj, Timeout) when is_atom(Name) ->
 
 merge(Name, PKey, Obj, Timeout) ->
     gen_server:call(Name, {merge, PKey, Obj}, Timeout).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+take(Name, PKey) ->
+    take(Name, PKey, [], infinity).
 
 
 %% -----------------------------------------------------------------------------
