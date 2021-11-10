@@ -1,5 +1,12 @@
 # CHANGELOG
 
+
+## v0.3.5
+
+
+### Bug fixes
+* Fixes a bug during AAE exchange introduced in 0.3.4 due to an API change
+
 ## v0.3.4
 
 ### New Features
