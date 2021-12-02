@@ -476,7 +476,7 @@ fold(Fun, Acc, #continuation{} = Cont, Opts0) ->
             get_option(remove_tombstones, Opts, false)
     end,
 
-    maybe_sort(do_fold(Fun, Acc, It, RemoveTombs, Limit), Opts);
+    do_fold(Fun, Acc, It, RemoveTombs, Limit);
 
 fold(Fun, Acc, FullPrefixPattern, Opts) ->
     It = iterator(FullPrefixPattern, Opts),
@@ -488,7 +488,7 @@ fold(Fun, Acc, FullPrefixPattern, Opts) ->
             get_option(remove_tombstones, Opts, false)
     end,
 
-    maybe_sort(do_fold(Fun, Acc, It, RemoveTombs, Limit), Opts).
+    do_fold(Fun, Acc, It, RemoveTombs, Limit).
 
 
 %% @private
@@ -645,7 +645,7 @@ match(?EOT, _) ->
 
 match(#continuation{} = Cont, Opts) ->
     Fun = fun(KV, Acc) -> [KV | Acc] end,
-    fold(Fun, [], Cont, Opts).
+    maybe_sort(fold(Fun, [], Cont, Opts), Opts).
 
 
 %% -----------------------------------------------------------------------------
@@ -662,7 +662,7 @@ match(FullPrefix0, KeyPattern, Opts0) ->
     %% KeyPattern overrides any match option present in Opts0
     Opts = [{match, KeyPattern} | lists:keydelete(match, 1, Opts0)],
     Fun = fun(KV, Acc) -> [KV | Acc] end,
-    fold(Fun, [], FullPrefix, Opts).
+    maybe_sort(fold(Fun, [], FullPrefix, Opts), Opts).
 
 
 %% -----------------------------------------------------------------------------
