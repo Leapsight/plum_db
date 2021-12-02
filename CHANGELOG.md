@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.7
+
+
+### Bug fixes
+* Fixes bug when not using limit option
+
+
+
 ## v0.3.6
 ### New Features
 * `fold` operation now supports limits and continuations
