@@ -521,7 +521,7 @@ do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt) ->
     case iterator_done(It) of
         true when is_integer(Limit) ->
             {Acc0, ?EOT};
-        true when is_integer(Limit) ->
+        true ->
             Acc0;
         false when Cnt < Limit ->
             Acc1 = do_fold_acc(iterator_key_values(It), Fun, Acc0, RemoveTombs),
