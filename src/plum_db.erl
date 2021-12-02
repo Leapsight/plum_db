@@ -55,13 +55,20 @@
     match_prefix            ::  plum_db_prefix() | atom() | binary()
 }).
 
+
 -record(continuation, {
+    %% The query
     match_prefix            ::  plum_db_prefix_pattern(),
-    match_key               ::  plum_db_pkey_pattern(),
     first                   ::  plum_db_pkey() | undefined,
+    %% Pointers :: The current position decomposed into prefix, key and object
+    prefix                  ::  plum_db_prefix() | undefined,
+    key                     ::  plum_db_pkey() | undefined,
+    object                  ::  plum_db_object() | undefined,
+    %% Options
+    keys_only = false       ::  boolean(),
+    partitions              ::  [partition()],
     opts = []               ::  it_opts()
 }).
-
 
 -type prefix_type()         ::  ram | ram_disk | disk.
 -type prefixes()            ::  #{binary() | atom() => prefix_type()}.
@@ -70,7 +77,7 @@
 -type remote_iterator()     ::  #remote_iterator{}.
 -opaque iterator()          ::  #iterator{}.
 -opaque continuation()      ::  #continuation{}.
-
+-type eot()                 ::  ?EOT.
 
 %% Get Option Types
 -type iterator_element()    ::  {plum_db_pkey(), plum_db_object()}.
@@ -431,7 +438,12 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% @doc Same as fold(Fun, Acc0, FullPrefix, []).
 %% @end
 %% -----------------------------------------------------------------------------
--spec fold(fold_fun(), any(), plum_db_prefix_pattern()) -> any().
+-spec fold(
+    Fun :: fold_fun(),
+    Acc0 :: any(),
+    PrefixPatternOrCont :: plum_db_prefix_pattern() | continuation() | eot()) ->
+    any() | {any(), continuation() | eot()}.
+
 fold(Fun, Acc0, FullPrefixPattern) ->
     fold(Fun, Acc0, FullPrefixPattern, []).
 
@@ -440,29 +452,93 @@ fold(Fun, Acc0, FullPrefixPattern) ->
 %% @doc Fold over all keys and values stored under a given prefix/subprefix.
 %% Available options are the same as those provided to iterator/2. To return
 %% early, throw {break, Result} in your fold function.
+%%
 %% @end
 %% -----------------------------------------------------------------------------
--spec fold(fold_fun(), any(), plum_db_prefix_pattern(), fold_opts()) -> any().
+-spec fold(
+    Fun :: fold_fun(),
+    Acc0 :: any(),
+    PrefixPatternOrCont :: plum_db_prefix_pattern() | continuation() | eot(),
+    Opts :: fold_opts()) ->
+    any() | {any(), continuation() | eot()}.
 
-fold(Fun, Acc0, FullPrefixPattern, Opts) ->
+fold(_, _, ?EOT, _) ->
+    ?EOT;
+
+fold(Fun, Acc, #continuation{} = Cont, Opts0) ->
+    It = iterator(Cont, Opts0),
+    Opts = It#iterator.opts,
+    Limit = get_option(limit, Opts, infinity),
+    RemoveTombs = case get_option(resolver, Opts, undefined) of
+        undefined ->
+            false;
+        _ ->
+            get_option(remove_tombstones, Opts, false)
+    end,
+
+    maybe_sort(do_fold(Fun, Acc, It, RemoveTombs, Limit), Opts);
+
+fold(Fun, Acc, FullPrefixPattern, Opts) ->
     It = iterator(FullPrefixPattern, Opts),
+    Limit = get_option(limit, Opts, infinity),
+    RemoveTombs = case get_option(resolver, Opts, undefined) of
+        undefined ->
+            false;
+        _ ->
+            get_option(remove_tombstones, Opts, false)
+    end,
+
+    maybe_sort(do_fold(Fun, Acc, It, RemoveTombs, Limit), Opts).
+
+
+%% @private
+maybe_sort({Acc, Cont}, Opts) ->
+    {maybe_sort(Acc, Opts), Cont};
+
+maybe_sort(Acc, Opts) when is_list(Acc) ->
+    case get_option(sort, Opts, asc) of
+        asc ->
+            lists:reverse(Acc);
+        desc ->
+            Acc
+    end.
+
+
+%% @private
+do_fold(Fun, Acc, It, RemoveTombs, Limit) ->
     try
-        do_fold(Fun, Acc0, It)
+        do_fold_next(Fun, Acc, It, RemoveTombs, Limit, 0)
     catch
-        {break, Result} -> Result
+        {break, Result} ->
+            Result
     after
         ok = iterator_close(It)
     end.
 
+
 %% @private
-do_fold(Fun, Acc, It) ->
+do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt) ->
     case iterator_done(It) of
-        true ->
-            Acc;
+        true when is_integer(Limit) ->
+            {Acc0, ?EOT};
+        true when is_integer(Limit) ->
+            Acc0;
+        false when Cnt < Limit ->
+            Acc1 = do_fold_acc(iterator_key_values(It), Fun, Acc0, RemoveTombs),
+            do_fold_next(Fun, Acc1, iterate(It), RemoveTombs, Limit, Cnt + 1);
         false ->
-            Acc1 = Fun(iterator_key_values(It), Acc),
-            do_fold(Fun, Acc1, iterate(It))
+            Cont = new_continuation(It),
+            {Acc0, Cont}
     end.
+
+
+%% @private
+do_fold_acc({_, ?TOMBSTONE}, _, Acc, true) ->
+    Acc;
+
+do_fold_acc(KV, Fun, Acc, _) ->
+    Fun(KV, Acc).
+
 
 
 
@@ -549,26 +625,27 @@ do_fold_elements(Fun, Acc, It) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec match(continuation()) ->
+-spec match(continuation() | eot()) ->
     {[{plum_db_key(), value_or_values()}], continuation()}
     | ?EOT.
 
-match(#continuation{} = Cont) ->
-    FullPrefix = Cont#continuation.match_prefix,
-    KeyPattern = Cont#continuation.match_key,
-    Opts = Cont#continuation.opts,
-    match(FullPrefix, KeyPattern, Opts).
-
+match(Cont) ->
+    match(Cont, []).
 
 %% -----------------------------------------------------------------------------
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec match(plum_db_prefix_pattern(), plum_db_pkey_pattern()) ->
-    [{plum_db_key(), value_or_values()}].
+-spec match(continuation() | eot(), match_opts()) ->
+    {[{plum_db_key(), value_or_values()}], continuation()}
+    | ?EOT.
 
-match(FullPrefix, KeyPattern) ->
-    match(FullPrefix, KeyPattern, []).
+match(?EOT, _) ->
+    ?EOT;
+
+match(#continuation{} = Cont, Opts) ->
+    Fun = fun(KV, Acc) -> [KV | Acc] end,
+    fold(Fun, [], Cont, Opts).
 
 
 %% -----------------------------------------------------------------------------
@@ -583,38 +660,9 @@ match(FullPrefix, KeyPattern) ->
 match(FullPrefix0, KeyPattern, Opts0) ->
     FullPrefix = normalise_prefix(FullPrefix0),
     %% KeyPattern overrides any match option present in Opts0
-    Opts1 = [{match, KeyPattern} | lists:keydelete(match, 1, Opts0)],
-    Limit = get_option(limit, Opts1, infinity),
-    RemoveTombstones = case get_option(resolver, Opts1, undefined) of
-        undefined ->
-            false;
-        _ ->
-            get_option(remove_tombstones, Opts1, false)
-    end,
-    Fun = fun
-        ({_, ?TOMBSTONE}, {Acc, Cnt})
-        when Cnt =< Limit andalso RemoveTombstones ->
-            {Acc, Cnt};
-        ({Key, ValOrVals}, {Acc, Cnt}) when Cnt < Limit ->
-            {[{Key, ValOrVals} | Acc], Cnt + 1};
-        ({Key, _}, {Acc, _}) ->
-            Cont = #continuation{
-                match_prefix = FullPrefix,
-                match_key = KeyPattern,
-                opts = lists:keystore(first, 1, Opts1, {first, Key})
-            },
-            throw({break, {Acc, Cont}})
-        end,
-    case fold(Fun, {[], 0}, FullPrefix, Opts1) of
-        {_, #continuation{}} = Res ->
-            Res;
-        {[], _} when is_integer(Limit) ->
-            ?EOT;
-        {L, _} when is_integer(Limit) ->
-            {L, ?EOT};
-        {L, _} ->
-            L
-    end.
+    Opts = [{match, KeyPattern} | lists:keydelete(match, 1, Opts0)],
+    Fun = fun(KV, Acc) -> [KV | Acc] end,
+    fold(Fun, [], FullPrefix, Opts).
 
 
 %% -----------------------------------------------------------------------------
@@ -663,10 +711,10 @@ iterator() ->
 %% @doc Same as calling `iterator(FullPrefix, [])'.
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator(plum_db_prefix()) -> iterator().
+-spec iterator(plum_db_prefix() | continuation()) -> iterator().
 
-iterator(FullPrefix) ->
-    iterator(FullPrefix, []).
+iterator(Term) ->
+    iterator(Term, []).
 
 
 %% -----------------------------------------------------------------------------
@@ -701,7 +749,11 @@ iterator(FullPrefix) ->
 %%
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator(plum_db_prefix_pattern(), it_opts()) -> iterator().
+-spec iterator(plum_db_prefix_pattern() | continuation(), it_opts()) ->
+    iterator().
+
+iterator(#continuation{} = Cont, Opts) ->
+    new_iterator(Cont, Opts);
 
 iterator({Prefix, SubPrefix} = FullPrefix, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
@@ -1588,6 +1640,27 @@ close_remote_iterator(Ref, #state{iterators = Iterators} = State) ->
 
 
 %% @private
+new_iterator(#continuation{} = Cont, Opts0) ->
+    %% We respect the previous options but we add resolver which was removed
+    %% when creating the continuation
+    Resolver = get_option(resolver, Opts0, undefined),
+    Opts = lists:keystore(
+        resolver, 1, Cont#continuation.opts, {resolver, Resolver}
+    ),
+
+    I = #iterator{
+        match_prefix = Cont#continuation.match_prefix,
+        first = Cont#continuation.first,
+        prefix = Cont#continuation.prefix,
+        key = Cont#continuation.key,
+        object = Cont#continuation.object,
+        keys_only = Cont#continuation.keys_only,
+        partitions = Cont#continuation.partitions,
+        opts = Opts
+    },
+    %% We fetch the first key
+    iterate(I);
+
 new_iterator(FullPrefix, Opts) ->
     FirstKey = case proplists:get_value(first, Opts, undefined) of
         undefined -> FullPrefix;
@@ -1614,6 +1687,25 @@ new_iterator(FullPrefix, Opts) ->
     iterate(I).
 
 
+
+
+%% @private
+new_continuation(#iterator{} = I) ->
+    MatchPrefix = I#iterator.match_prefix,
+    First = {I#iterator.prefix, I#iterator.key},
+    #continuation{
+        match_prefix = MatchPrefix,
+        first = First,
+        prefix = I#iterator.prefix,
+        key = I#iterator.key,
+        object = I#iterator.object,
+        keys_only = I#iterator.keys_only,
+        partitions = I#iterator.partitions,
+        %% Resolver can be a fun so the caller needs to provide it when using
+        %% the continuation. This will allow uis to serialize and externalize
+        %% the continuation e.g. HTTP.
+        opts = lists:keydelete(resolver, 1, I#iterator.opts)
+    }.
 
 %% -----------------------------------------------------------------------------
 %% @doc

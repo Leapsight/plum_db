@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.6
+### New Features
+* `fold` operation now supports limits and continuations
+
+### Bug fixes
+* Fixes continuations previous limitations to work only on a single partition
+
 
 ## v0.3.5
 
