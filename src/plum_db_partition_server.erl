@@ -1269,13 +1269,8 @@ maybe_modify(PKey, Existing, Opts, State, NewObject) ->
 
 %% @private
 broadcast(PKey, Obj) ->
-    case plum_db_config:get(aae_enabled, true) of
-        true ->
-            Broadcast = #plum_db_broadcast{pkey = PKey, obj = Obj},
-            plumtree_broadcast:broadcast(Broadcast, plum_db);
-        false ->
-            ok
-    end.
+    Broadcast = #plum_db_broadcast{pkey = PKey, obj = Obj},
+    plumtree_broadcast:broadcast(Broadcast, plum_db).
 
 
 %% @private
