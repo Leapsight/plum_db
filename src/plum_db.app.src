@@ -9,6 +9,10 @@
         {init_db_hashtrees, []},
         {aae_exchange, []}
     ]},
+    {included_applications, [
+        gproc,
+        partisan
+    ]},
     {applications, [
         kernel,
         stdlib,

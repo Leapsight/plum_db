@@ -24,6 +24,8 @@
 %% =============================================================================
 -module(plum_db_config).
 -behaviour(app_config).
+
+-include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
 
 
@@ -58,7 +60,7 @@ init() ->
     ok = setup_env(),
     ok = app_config:init(?APP, #{callback_mod => ?MODULE}),
     ok = coerce_partitions(),
-    ?LOG_NOTICE(#{description => "PlumDB configuration initialised}")
+    ?LOG_NOTICE(#{description => "PlumDB configuration initialised}"}),
     ok.
 
 

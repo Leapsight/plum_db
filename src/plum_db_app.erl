@@ -104,9 +104,13 @@ start(_StartType, _StartArgs) ->
 %% @doc Application behaviour callback
 %% @end
 %% -----------------------------------------------------------------------------
-start_phase(start_dependencies, normal, []) ->
-    ?LOG_INFO(#{description => "Starting dependencies [partisan]"}),
-    {ok, _} = application:ensure_all_started(partisan),
+start_phase(start_dependencies = Phase, normal, []) ->
+    ?LOG_INFO(#{
+        description => "Starting dependencies [partisan]",
+        start_phase => Phase
+    }),
+
+    {ok, _} = application:ensure_all_started(partisan, permanent),
     ok;
 
 start_phase(init_db_partitions = Phase, normal, []) ->
