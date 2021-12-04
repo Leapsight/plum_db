@@ -1,6 +1,6 @@
 %%-------------------------------------------------------------------
 %%
-%% File:      dvvset.erl
+%% File:      plum_db_dvvset.erl
 %%
 %% @author    Ricardo Tomé Gonçalves <tome.wave@gmail.com>
 %% @author    Paulo Sérgio Almeida <pssalmeida@gmail.com>
@@ -39,7 +39,7 @@
 %% @end
 %%
 %%-------------------------------------------------------------------
--module(dvvset).
+-module(plum_db_dvvset).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

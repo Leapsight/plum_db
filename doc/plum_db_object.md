@@ -16,7 +16,7 @@
 
 
 <pre><code>
-plum_db_context() = <a href="dvvset.md#type-vector">dvvset:vector()</a>
+plum_db_context() = <a href="dvvset.md#type-vector">plum_db_dvvset:vector()</a>
 </code></pre>
 
 
@@ -36,7 +36,7 @@ plum_db_modifier() = fun(([<a href="#type-plum_db_value">plum_db_value()</a> | <
 
 
 <pre><code>
-plum_db_object() = {object, <a href="dvvset.md#type-clock">dvvset:clock()</a>}
+plum_db_object() = {object, <a href="dvvset.md#type-clock">plum_db_dvvset:clock()</a>}
 </code></pre>
 
 
