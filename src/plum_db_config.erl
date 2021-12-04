@@ -58,7 +58,7 @@ init() ->
     ok = setup_env(),
     ok = app_config:init(?APP, #{callback_mod => ?MODULE}),
     ok = coerce_partitions(),
-    _ = lager:info("PlumDB configuration initialised~n"),
+    ?LOG_NOTICE(#{description => "PlumDB configuration initialised}")
     ok.
 
 

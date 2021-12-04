@@ -104,7 +104,7 @@ start(_StartType, _StartArgs) ->
 %% @end
 %% -----------------------------------------------------------------------------
 start_phase(start_dependencies, normal, []) ->
-    _ = lager:info("Starting dependencies [partisan]"),
+    ?LOG_INFO(#{description => "Starting dependencies [partisan]"}),
     {ok, _} = application:ensure_all_started(partisan),
     ok;
 
