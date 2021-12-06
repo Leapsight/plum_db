@@ -208,7 +208,7 @@
 -export([terminate/2]).
 -export([code_change/3]).
 
-%% plumtree_broadcast_handler callbacks
+%% partisan_plumtree_broadcast_handler callbacks
 -export([broadcast_data/1]).
 -export([exchange/1]).
 -export([graft/1]).
@@ -1358,7 +1358,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% =============================================================================
-%% API: PLUMTREE_BROADCAST_HANDLER CALLBACKS
+%% API: PARTISAN_PLUMTREE_BROADCAST_HANDLER CALLBACKS
 %% =============================================================================
 
 
@@ -1369,7 +1369,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% and payload.
 %%
 %% > This function is part of the implementation of the
-%% plumtree_broadcast_handler behaviour.
+%% partisan_plumtree_broadcast_handler behaviour.
 %% > You should never call it directly.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1389,7 +1389,7 @@ broadcast_data(#plum_db_broadcast{pkey = Key, obj = Obj}) ->
 %% generating siblings) and `true' is returned.
 %%
 %% > This function is part of the implementation of the
-%% plumtree_broadcast_handler behaviour.
+%% partisan_plumtree_broadcast_handler behaviour.
 %% > You should never call it directly.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1410,7 +1410,7 @@ merge({PKey, _Context}, Obj) ->
 %% @doc Same as merge/2 but merges the object on `Node'
 %%
 %% > This function is part of the implementation of the
-%% plumtree_broadcast_handler behaviour.
+%% partisan_plumtree_broadcast_handler behaviour.
 %% > You should never call it directly.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1436,7 +1436,7 @@ merge(Node, {PKey, _Context}, Obj) ->
 %% been received (stored locally).
 %%
 %% > This function is part of the implementation of the
-%% plumtree_broadcast_handler behaviour.
+%% partisan_plumtree_broadcast_handler behaviour.
 %% > You should never call it directly.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1460,7 +1460,7 @@ is_stale({PKey, Context}) ->
 %% subsumes the grafted one.
 %%
 %% > This function is part of the implementation of the
-%% plumtree_broadcast_handler behaviour.
+%% partisan_plumtree_broadcast_handler behaviour.
 %% > You should never call it directly.
 %% @end
 %% -----------------------------------------------------------------------------

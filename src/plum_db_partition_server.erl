@@ -1270,7 +1270,7 @@ maybe_modify(PKey, Existing, Opts, State, NewObject) ->
 %% @private
 broadcast(PKey, Obj) ->
     Broadcast = #plum_db_broadcast{pkey = PKey, obj = Obj},
-    plumtree_broadcast:broadcast(Broadcast, plum_db).
+    partisan_plumtree_broadcast:broadcast(Broadcast, plum_db).
 
 
 %% @private
