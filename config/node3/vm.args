@@ -1,17 +1,25 @@
+## -----------------------------------------------------------------------------
+## Distributed Erlang
+## -----------------------------------------------------------------------------
+
 ## Name of the node
 -name plum_db3@127.0.0.1
 
 ## Cookie for distributed erlang
 -setcookie plum_db
 
+## Explicit connections only.
+-connect_all false
+
+## Connections between hidden nodes and other nodes are not transitive, they must be set up explicitly.
+-hidden
+
 ## Increase distribution port buffer size.
 +zdbbl 32768
 
+## -----------------------------------------------------------------------------
+## Erlang
+## -----------------------------------------------------------------------------
+
 ## Enable multi_time_warp
 +C multi_time_warp
-
-## Hidden nodes
--hidden
-
-## Explicit connections only.
--connect_all false
