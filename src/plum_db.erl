@@ -78,6 +78,7 @@
 -opaque iterator()          ::  #iterator{}.
 -opaque continuation()      ::  #continuation{}.
 -type eot()                 ::  ?EOT.
+-type continuation_or_eot() ::  continuation() | eot().
 
 %% Get Option Types
 -type iterator_element()    ::  {plum_db_pkey(), plum_db_object()}.
@@ -441,8 +442,8 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 -spec fold(
     Fun :: fold_fun(),
     Acc0 :: any(),
-    PrefixPatternOrCont :: plum_db_prefix_pattern() | continuation() | eot()) ->
-    any() | {any(), continuation() | eot()}.
+    PrefixPatternOrCont :: plum_db_prefix_pattern() | continuation_or_eot()) ->
+    any() | {any(), continuation_or_eot()}.
 
 fold(Fun, Acc0, FullPrefixPattern) ->
     fold(Fun, Acc0, FullPrefixPattern, []).
@@ -458,9 +459,9 @@ fold(Fun, Acc0, FullPrefixPattern) ->
 -spec fold(
     Fun :: fold_fun(),
     Acc0 :: any(),
-    PrefixPatternOrCont :: plum_db_prefix_pattern() | continuation() | eot(),
+    PrefixPatternOrCont :: plum_db_prefix_pattern() | continuation_or_eot(),
     Opts :: fold_opts()) ->
-    any() | {any(), continuation() | eot()}.
+    any() | {any(), continuation_or_eot()}.
 
 fold(_, _, ?EOT, _) ->
     ?EOT;
@@ -492,6 +493,9 @@ fold(Fun, Acc, FullPrefixPattern, Opts) ->
 
 
 %% @private
+maybe_sort(?EOT, _) ->
+    ?EOT;
+
 maybe_sort({Acc, Cont}, Opts) ->
     {maybe_sort(Acc, Opts), Cont};
 
@@ -519,6 +523,8 @@ do_fold(Fun, Acc, It, RemoveTombs, Limit) ->
 %% @private
 do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt) ->
     case iterator_done(It) of
+        true when is_integer(Limit), length(Acc0) == 0 ->
+            ?EOT;
         true when is_integer(Limit) ->
             {Acc0, ?EOT};
         true ->
@@ -625,8 +631,8 @@ do_fold_elements(Fun, Acc, It) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec match(continuation() | eot()) ->
-    {[{plum_db_key(), value_or_values()}], continuation()}
+-spec match(continuation_or_eot()) ->
+    {[{plum_db_key(), value_or_values()}], continuation_or_eot()}
     | ?EOT.
 
 match(Cont) ->
@@ -636,7 +642,7 @@ match(Cont) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec match(continuation() | eot(), match_opts()) ->
+-spec match(continuation_or_eot(), match_opts()) ->
     {[{plum_db_key(), value_or_values()}], continuation()}
     | ?EOT.
 
