@@ -1247,6 +1247,9 @@ modify(PKey, ValueOrFun, _Opts, State, Existing, Ctxt) ->
 
 
 %% @private
+maybe_resolve(undefined, _) ->
+    undefined;
+
 maybe_resolve(Object, Opts) ->
     case plum_db_object:value_count(Object) =< 1 of
         true ->
