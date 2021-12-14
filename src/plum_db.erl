@@ -521,7 +521,7 @@ do_fold(Fun, Acc, It, RemoveTombs, Limit) ->
 
 
 %% @private
-do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt) ->
+do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt0) ->
     case iterator_done(It) of
         true when is_integer(Limit), length(Acc0) == 0 ->
             ?EOT;
@@ -529,9 +529,10 @@ do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt) ->
             {Acc0, ?EOT};
         true ->
             Acc0;
-        false when Cnt < Limit ->
-            Acc1 = do_fold_acc(iterator_key_values(It), Fun, Acc0, RemoveTombs),
-            do_fold_next(Fun, Acc1, iterate(It), RemoveTombs, Limit, Cnt + 1);
+        false when Cnt0 < Limit ->
+            KV = iterator_key_values(It),
+            {Acc1, Cnt} = do_fold_acc(KV, Fun, Acc0, Cnt0, RemoveTombs),
+            do_fold_next(Fun, Acc1, iterate(It), RemoveTombs, Limit, Cnt);
         false ->
             Cont = new_continuation(It),
             {Acc0, Cont}
@@ -539,11 +540,11 @@ do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt) ->
 
 
 %% @private
-do_fold_acc({_, ?TOMBSTONE}, _, Acc, true) ->
-    Acc;
+do_fold_acc({_, ?TOMBSTONE}, _, Acc, Cnt, true) ->
+    {Acc, Cnt};
 
-do_fold_acc(KV, Fun, Acc, _) ->
-    Fun(KV, Acc).
+do_fold_acc(KV, Fun, Acc, Cnt, _) ->
+    {Fun(KV, Acc), Cnt + 1}.
 
 
 
