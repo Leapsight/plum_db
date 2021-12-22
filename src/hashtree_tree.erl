@@ -105,6 +105,7 @@
 -module(hashtree_tree).
 
 -export([new/2,
+         delete/3,
          destroy/1,
          insert/4,
          insert/5,
@@ -229,6 +230,19 @@ insert(Prefixes, Key, Hash, Opts, Tree) ->
             {error, bad_prefixes}
     end.
 
+
+-spec delete(prefixes(), binary(), tree()) -> tree() | {error, term()}.
+
+delete(Prefixes, Key, Tree) ->
+    NodeName = prefixes_to_node_name(Prefixes),
+    case valid_prefixes(NodeName, Tree) of
+        true ->
+            delete_hash(Key, NodeName, Tree);
+        false ->
+            {error, bad_prefixes}
+    end.
+
+
 %% @doc Snapshot the tree for updating. The return tree should be
 %% updated using {@link update_perform/1} and to perform future operations
 %% on the tree
@@ -339,6 +353,15 @@ insert_hash(Key, Hash, Opts, NodeName, Tree) ->
 %% @private
 insert_hash(Key, Hash, Opts, NodeName, Node, Tree=#hashtree_tree{dirty=Dirty}) ->
     Node2 = hashtree:insert(Key, Hash, Node, Opts),
+    Dirty2 = gb_sets:add_element(NodeName, Dirty),
+    _ = set_node(NodeName, Node2, Tree),
+    Tree#hashtree_tree{dirty=Dirty2}.
+
+
+%% @private
+delete_hash(Key, NodeName, Tree=#hashtree_tree{dirty=Dirty}) ->
+    Node = get_node(NodeName, Tree),
+    Node2 = hashtree:delete(Key, Node),
     Dirty2 = gb_sets:add_element(NodeName, Dirty),
     _ = set_node(NodeName, Node2, Tree),
     Tree#hashtree_tree{dirty=Dirty2}.

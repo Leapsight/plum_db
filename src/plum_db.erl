@@ -137,6 +137,10 @@
 -type delete_opts()         :: [].
 
 
+%% Erase Option types
+-type erase_opts()         :: [].
+
+
 -export_type([prefixes/0]).
 -export_type([prefix_type/0]).
 -export_type([partition/0]).
@@ -145,6 +149,8 @@
 
 -export([delete/2]).
 -export([delete/3]).
+-export([erase/2]).
+-export([erase/3]).
 -export([exchange/2]).
 -export([fold/3]).
 -export([fold/4]).
@@ -1170,6 +1176,44 @@ delete(FullPrefix, Key) ->
 
 delete(FullPrefix, Key, _Opts) ->
     put(FullPrefix, Key, ?TOMBSTONE, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Same as delete(FullPrefix, Key, [])
+%% @end
+%% -----------------------------------------------------------------------------
+-spec erase(plum_db_prefix(), plum_db_key()) -> ok.
+
+erase(FullPrefix, Key) ->
+    erase(FullPrefix, Key, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Logically erases the value associated with the given prefix
+%% and key locally and then triggers a broradcast to notify other nodes in the
+%% cluster. Currently there are no erase options.
+%%
+%% NOTE: currently deletion is logical and no GC is performed.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec erase(plum_db_prefix(), plum_db_key(), erase_opts()) -> ok.
+
+erase({?WILDCARD, _} = PKey, _, _) ->
+    error(badarg, [PKey]);
+
+erase({_, ?WILDCARD} = PKey, _, _) ->
+    error(badarg, [PKey]);
+
+erase(_, ?WILDCARD = Key, _) ->
+    error(badarg, [Key]);
+
+erase({Prefix, SubPrefix} = FullPrefix, Key, Opts)
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
+    PKey = prefixed_key(FullPrefix, Key),
+    Server = plum_db_partition_server:name(get_partition(PKey)),
+    Timeout = get_option(timeout, Opts, infinity),
+    ok = plum_db_partition_server:erase(Server, PKey, Timeout).
 
 
 %% -----------------------------------------------------------------------------

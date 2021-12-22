@@ -33,6 +33,8 @@
 -export([get_bucket/5]).
 -export([insert/2]).
 -export([insert/3]).
+-export([delete/1]).
+-export([delete/2]).
 -export([insert/4]).
 -export([key_hashes/4]).
 -export([lock/1]).
@@ -126,6 +128,27 @@ name(Partition) ->
         Name ->
             Name
     end.
+
+%% -----------------------------------------------------------------------------
+%% @doc Same as insert(PKey, Hash, false).
+%% @end
+%% -----------------------------------------------------------------------------
+-spec delete(plum_db_pkey()) -> ok.
+
+delete(PKey) ->
+    delete(name(plum_db:get_partition(PKey)), PKey).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Same as insert(PKey, Hash, false).
+%% @end
+%% -----------------------------------------------------------------------------
+-spec delete(pbd:partition(), plum_db_pkey()) -> ok.
+
+delete(Partition, PKey) ->
+    Name = name(Partition),
+    gen_server:call(Name, {delete, PKey}, infinity).
+
 
 %% -----------------------------------------------------------------------------
 %% @doc Same as insert(PKey, Hash, false).
@@ -408,6 +431,12 @@ handle_call(
     {insert, PKey, Hash, IfMissing}, _From, #state{tree = Tree} = State) ->
     {Prefixes, Key} = prepare_pkey(PKey),
     Tree1 = hashtree_tree:insert(Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree),
+    {reply, ok, State#state{tree=Tree1}};
+
+handle_call(
+    {delete, PKey}, _From, #state{tree = Tree} = State) ->
+    {Prefixes, Key} = prepare_pkey(PKey),
+    Tree1 = hashtree_tree:delete(Prefixes, Key, Tree),
     {reply, ok, State#state{tree=Tree1}}.
 
 

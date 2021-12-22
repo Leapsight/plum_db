@@ -100,8 +100,7 @@
 -export_type([iterator_move_result/0]).
 
 -export([byte_size/1]).
--export([delete/1]).
--export([delete/2]).
+-export([erase/3]).
 -export([get/2]).
 -export([get/3]).
 -export([get/4]).
@@ -281,25 +280,11 @@ take(Name, PKey, Opts, Timeout) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-delete(Key) ->
-    delete(name(plum_db:get_partition(Key)), Key).
+erase(Partition, Key, Timeout) when is_integer(Partition) ->
+    erase(name(Partition), Key, Timeout);
 
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
-delete(Partition, Key) when is_integer(Partition) ->
-    delete(name(Partition), Key);
-
-delete(Name, PKey) when is_atom(Name) ->
-    case prefix_type(PKey) of
-        ram ->
-            true = ets:delete(table_name(Name, ram), PKey),
-            ok;
-        _ ->
-            gen_server:call(Name, {delete, PKey}, infinity)
-    end.
+erase(Name, PKey, Timeout) when is_atom(Name) ->
+    gen_server:call(Name, {erase, PKey}, Timeout).
 
 
 %% -----------------------------------------------------------------------------
@@ -711,6 +696,33 @@ handle_call({take, PKey, Opts}, _From, State) ->
     %% to resolve the Existing
     {reply, {Resolved, Result}, State};
 
+handle_call({erase, PKey}, _From, State) ->
+    DbRef = db_ref(State),
+    Opts = write_opts(State),
+
+    Existing = case do_get(PKey, State) of
+        {ok, O} ->
+            O;
+        {error, not_found} ->
+            undefined
+    end,
+
+    ok = maybe_hashtree_delete(PKey, Existing, State),
+
+    Result = case prefix_type(PKey) of
+        ram ->
+            true = ets:delete(ram_tab(State), PKey),
+            ok;
+        ram_disk ->
+            true = ets:delete(ram_disk_tab(State), PKey),
+            Actions = [{delete, encode_key(PKey)}],
+            result(eleveldb:write(DbRef, Actions, Opts));
+        _ ->
+            Actions = [{delete, encode_key(PKey)}],
+            result(eleveldb:write(DbRef, Actions, Opts))
+    end,
+    {reply, Result, State};
+
 handle_call({merge, PKey, Obj}, _From, State) ->
     %% We need to do a read followed by a write atomically
     Existing = case do_get(PKey, State) of
@@ -732,24 +744,6 @@ handle_call({merge, PKey, Obj}, _From, State) ->
 
             {reply, true, State}
     end;
-
-handle_call({delete, PKey}, _From, State) ->
-    DbRef = db_ref(State),
-    Opts = write_opts(State),
-
-    Result = case prefix_type(PKey) of
-        ram ->
-            true = ets:delete(ram_tab(State), PKey),
-            ok;
-        ram_disk ->
-            true = ets:delete(ram_disk_tab(State), PKey),
-            Actions = [{delete, encode_key(PKey)}],
-            result(eleveldb:write(DbRef, Actions, Opts));
-        _ ->
-            Actions = [{delete, encode_key(PKey)}],
-            result(eleveldb:write(DbRef, Actions, Opts))
-    end,
-    {reply, Result, State};
 
 handle_call(byte_size, _From, State) ->
     DbRef = db_ref(State),
@@ -1317,13 +1311,44 @@ do_get(PKey, State, ram_disk) ->
     end.
 
 
-maybe_update_hashtree(PKey, Object, State) ->
-    ok = case plum_db_config:get(aae_enabled) of
+%% @private
+maybe_hashtree_insert(PKey, Object, State) ->
+    case plum_db_config:get(aae_enabled) of
         true ->
             Hash = plum_db_object:hash(Object),
             ok = plum_db_partition_hashtree:insert(
                 State#state.partition, PKey, Hash, false
             );
+        false ->
+            ok
+    end.
+
+
+%% @private
+maybe_hashtree_delete(PKey, Existing, State) ->
+    case plum_db_config:get(aae_enabled) of
+        true ->
+            Partition = State#state.partition,
+            ActorId = State#state.actor_id,
+            Hash = plum_db_object:hash(Existing),
+            Ctxt =
+                case Existing == undefined of
+                    true ->
+                        plum_db_object:empty_context();
+                    false ->
+                        plum_db_object:context(Existing)
+                end,
+
+            %% We create and insert the Erased object, this will be actually
+            %% removed the next time we rebuild the tree, but until
+            %% then we needed as a tombstone to avoid this becoming a
+            %% 'missing key' when we compare with another hashtree.
+            Erased = plum_db_object:modify(Existing, Ctxt, ?ERASED, ActorId),
+
+            ok = plum_db_partition_hashtree:insert(
+                Partition, PKey, Hash, false
+            ),
+            ok = broadcast(PKey, Erased);
         false ->
             ok
     end.
@@ -1339,7 +1364,7 @@ do_put(PKey, Value, State, undefined) ->
     do_put(PKey, Value, State, disk);
 
 do_put(PKey, Value, State, ram) ->
-    ok = maybe_update_hashtree(PKey, Value, State),
+    ok = maybe_hashtree_insert(PKey, Value, State),
     true = ets:insert(ram_tab(State), {PKey, Value}),
     ok;
 
@@ -1353,7 +1378,7 @@ do_put(PKey, Value, State, ram_disk) ->
     end;
 
 do_put(PKey, Value, State, disk) ->
-    ok = maybe_update_hashtree(PKey, Value, State),
+    ok = maybe_hashtree_insert(PKey, Value, State),
 
     DbRef = db_ref(State),
     Opts = write_opts(State),
