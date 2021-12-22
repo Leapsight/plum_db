@@ -85,7 +85,13 @@
 %% @end
 %% -----------------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
-      case plum_db_sup:start_link() of
+    %% It is important we init the config before starting the supervisor
+    %% as we override some user configuration for Partisan.
+
+    ok = plum_db_config:init(),
+    {ok, _} = application:ensure_all_started(gproc),
+
+    case plum_db_sup:start_link() of
         {ok, Pid} ->
             {ok, Pid};
         Other ->
@@ -98,7 +104,8 @@ start(_StartType, _StartArgs) ->
 %% @end
 %% -----------------------------------------------------------------------------
 start_phase(start_dependencies, normal, []) ->
-    {ok, _} = application:ensure_all_started(plumtree),
+    _ = lager:info("Starting dependencies [partisan]"),
+    {ok, _} = application:ensure_all_started(partisan),
     ok;
 
 start_phase(init_db_partitions = Phase, normal, []) ->
@@ -135,7 +142,7 @@ start_phase(aae_exchange = Phase, normal, []) ->
     case wait_for_aae_exchange() of
         true ->
             MyNode = plum_db_peer_service:mynode(),
-            Members = plumtree_broadcast:broadcast_members(),
+            Members = partisan_plumtree_broadcast:broadcast_members(),
 
             case lists:delete(MyNode, Members) of
                 [] ->

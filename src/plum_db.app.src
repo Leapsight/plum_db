@@ -20,9 +20,7 @@
         os_mon,
         eleveldb,
         sext,
-        gproc,
-        partisan,
-        plumtree
+        app_config
     ]},
     {env, []},
     {modules, []},
