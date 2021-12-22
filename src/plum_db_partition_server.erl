@@ -21,7 +21,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -module(plum_db_partition_server).
--behaviour(gen_server).
+-behaviour(partisan_gen_server).
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
 
@@ -145,7 +145,9 @@
 
 start_link(Partition, Opts) ->
     Name = name(Partition),
-    gen_server:start_link({local, Name}, ?MODULE, [Name, Partition, Opts], []).
+    partisan_gen_server:start_link(
+        {local, Name}, ?MODULE, [Name, Partition, Opts], [{channel, aae}]
+    ).
 
 
 %% -----------------------------------------------------------------------------
@@ -160,6 +162,7 @@ name(Partition) ->
         undefined ->
             plum_db:is_partition(Partition)
                 orelse error(invalid_partition_id),
+
             Name = list_to_atom(
                 "plum_db_partition_" ++ integer_to_list(Partition) ++
                 "_server"
@@ -192,14 +195,15 @@ get(Name, PKey, Opts) ->
 %% @end
 %% -----------------------------------------------------------------------------
 get({Name, _} = Ref, PKey, Opts, Timeout) when is_atom(Name) ->
-    gen_server:call(Ref, {get, PKey, Opts}, Timeout);
+    partisan_gen_server:call(Ref, {get, PKey, Opts}, Timeout);
 
 get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
     case get_option(allow_put, Opts, false) of
         true ->
-            gen_server:call(Name, {get, PKey, Opts}, Timeout);
+            partisan_gen_server:call(Name, {get, PKey, Opts}, Timeout);
         false ->
             DBInfo = plum_db_partitions_sup:get_db_info(Name),
+
             case do_get(PKey, DBInfo) of
                 {ok, Object} ->
                     {ok, maybe_resolve(Object, Opts)};
@@ -230,7 +234,7 @@ put(Name, PKey, ValueOrFun, Opts) ->
 %% @end
 %% -----------------------------------------------------------------------------
 put(Name, PKey, ValueOrFun, Opts, Timeout) when is_atom(Name) ->
-    gen_server:call(Name, {put, PKey, ValueOrFun, Opts}, Timeout).
+    partisan_gen_server:call(Name, {put, PKey, ValueOrFun, Opts}, Timeout).
 
 
 %% -----------------------------------------------------------------------------
@@ -246,10 +250,10 @@ merge(Name, PKey, Obj) ->
 %% @end
 %% -----------------------------------------------------------------------------
 merge({Name, _} = Ref, PKey, Obj, Timeout) when is_atom(Name) ->
-    gen_server:call(Ref, {merge, PKey, Obj}, Timeout);
+    partisan_gen_server:call(Ref, {merge, PKey, Obj}, Timeout);
 
 merge(Name, PKey, Obj, Timeout) ->
-    gen_server:call(Name, {merge, PKey, Obj}, Timeout).
+    partisan_gen_server:call(Name, {merge, PKey, Obj}, Timeout).
 
 
 %% -----------------------------------------------------------------------------
@@ -273,7 +277,7 @@ take(Name, PKey, Opts) ->
 %% @end
 %% -----------------------------------------------------------------------------
 take(Name, PKey, Opts, Timeout) ->
-    gen_server:call(Name, {take, PKey, Opts}, Timeout).
+    partisan_gen_server:call(Name, {take, PKey, Opts}, Timeout).
 
 
 %% -----------------------------------------------------------------------------
@@ -284,7 +288,7 @@ erase(Partition, Key, Timeout) when is_integer(Partition) ->
     erase(name(Partition), Key, Timeout);
 
 erase(Name, PKey, Timeout) when is_atom(Name) ->
-    gen_server:call(Name, {erase, PKey}, Timeout).
+    partisan_gen_server:call(Name, {erase, PKey}, Timeout).
 
 
 %% -----------------------------------------------------------------------------
@@ -295,7 +299,7 @@ is_empty(Id) when is_integer(Id) ->
     is_empty(name(Id));
 
 is_empty(Store) when is_pid(Store); is_atom(Store) ->
-    gen_server:call(Store, is_empty, infinity).
+    partisan_gen_server:call(Store, is_empty, infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -306,7 +310,7 @@ byte_size(Id) when is_integer(Id) ->
     ?MODULE:byte_size(name(Id));
 
 byte_size(Store) when is_pid(Store); is_atom(Store) ->
-    gen_server:call(Store, byte_size, infinity).
+    partisan_gen_server:call(Store, byte_size, infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -334,7 +338,7 @@ iterator(Id, FullPrefix, Opts) when is_integer(Id) ->
 
 iterator(Name, FullPrefix, Opts) when is_atom(Name) andalso is_list(Opts) ->
     Cmd = {iterator, self(), FullPrefix, [{keys_only, false}|Opts]},
-    Iter = gen_server:call(Name, Cmd, infinity),
+    Iter = partisan_gen_server:call(Name, Cmd, infinity),
     true = maybe_safe_fixtables(Iter, true),
     Iter.
 
@@ -359,7 +363,7 @@ key_iterator(Id, FullPrefix, Opts) when is_integer(Id) ->
 
 key_iterator(Name, FullPrefix, Opts) when is_atom(Name) andalso is_list(Opts) ->
     Cmd = {iterator, self(), FullPrefix, [{keys_only, true}|Opts]},
-    Iter = gen_server:call(Name, Cmd, infinity),
+    Iter = partisan_gen_server:call(Name, Cmd, infinity),
     true = maybe_safe_fixtables(Iter, true),
     Iter.
 
@@ -372,7 +376,7 @@ iterator_close(Id, Iter) when is_integer(Id) ->
     iterator_close(name(Id), Iter);
 
 iterator_close(Store, #partition_iterator{} = Iter) when is_atom(Store) ->
-    Res = gen_server:call(Store, {iterator_close, Iter}, infinity),
+    Res = partisan_gen_server:call(Store, {iterator_close, Iter}, infinity),
     true = maybe_safe_fixtables(Iter, false),
     Res.
 

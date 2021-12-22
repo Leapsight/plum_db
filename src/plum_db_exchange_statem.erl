@@ -17,7 +17,7 @@
 %% =============================================================================
 
 -module(plum_db_exchange_statem).
--behaviour(gen_statem).
+-behaviour(partisan_gen_statem).
 -include_lib("kernel/include/logger.hrl").
 
 -record(state, {
@@ -78,7 +78,7 @@ start(Peer, Opts) when is_list(Opts) ->
     start(Peer, maps:from_list(Opts));
 
 start(Peer, Opts) when is_map(Opts) ->
-    gen_statem:start(?MODULE, [Peer, Opts], []).
+    partisan_gen_statem:start(?MODULE, [Peer, Opts], [{channel, aae}]).
 
 
 -spec start_link(node(), list() | map()) ->
@@ -88,7 +88,7 @@ start_link(Peer, Opts) when is_list(Opts) ->
     start_link(Peer, maps:from_list(Opts));
 
 start_link(Peer, Opts) when is_map(Opts) ->
-    gen_statem:start_link(?MODULE, [Peer, Opts], []).
+    partisan_gen_statem:start_link(?MODULE, [Peer, Opts], [{channel, aae}]).
 
 
 
@@ -436,7 +436,7 @@ update_request(Node, Partition) ->
 %% @private
 do_async(F) ->
     Statem = self(),
-    _ = spawn_link(fun() -> gen_statem:cast(Statem, F()) end),
+    _ = spawn_link(fun() -> partisan_gen_statem:cast(Statem, F()) end),
     ok.
 
 

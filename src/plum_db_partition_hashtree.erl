@@ -18,7 +18,7 @@
 %% =============================================================================
 
 -module(plum_db_partition_hashtree).
--behaviour(gen_server).
+-behaviour(partisan_gen_server).
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
 
@@ -86,9 +86,10 @@
 
 
 
-%%%===================================================================
-%%% API
-%%%===================================================================
+%% =============================================================================
+%% API
+%% =============================================================================
+
 
 
 
@@ -105,7 +106,10 @@ start_link(Partition) when is_integer(Partition) ->
     Dir = plum_db_config:get(hashtrees_dir),
     DataRoot = filename:join([Dir, integer_to_list(Partition)]),
     Name = name(Partition),
-    gen_server:start_link({local, Name}, ?MODULE, [Partition, DataRoot], []).
+
+    partisan_gen_server:start_link(
+        {local, Name}, ?MODULE, [Partition, DataRoot], [{channel, aae}]
+    ).
 
 
 %% -----------------------------------------------------------------------------
@@ -147,7 +151,7 @@ delete(PKey) ->
 
 delete(Partition, PKey) ->
     Name = name(Partition),
-    gen_server:call(Name, {delete, PKey}, infinity).
+    partisan_gen_server:call(Name, {delete, PKey}, infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -168,13 +172,13 @@ insert(PKey, Hash) ->
 -spec insert(plum_db_pkey(), binary(), boolean()) -> ok.
 insert(PKey, Hash, IfMissing) ->
     Name = name(plum_db:get_partition(PKey)),
-    gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
+    partisan_gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
 
 
 -spec insert(pbd:partition(), plum_db_pkey(), binary(), boolean()) -> ok.
 insert(Partition, PKey, Hash, IfMissing) ->
     Name = name(Partition),
-    gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
+    partisan_gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
 
 
 
@@ -191,7 +195,7 @@ prefix_hash(Partition, Prefix) when is_integer(Partition) ->
     prefix_hash(name(Partition), Prefix);
 
 prefix_hash(Server, Prefix) when is_pid(Server) orelse is_atom(Server) ->
-    gen_server:call(Server, {prefix_hash, Prefix}, infinity).
+    partisan_gen_server:call(Server, {prefix_hash, Prefix}, infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -207,7 +211,7 @@ prefix_hash(Server, Prefix) when is_pid(Server) orelse is_atom(Server) ->
     non_neg_integer()) -> orddict:orddict().
 
 get_bucket(Node, Partition, Prefixes, Level, Bucket) ->
-    gen_server:call(
+    partisan_gen_server:call(
         {name(Partition), Node},
         {get_bucket, Prefixes, Level, Bucket},
         infinity
@@ -223,7 +227,7 @@ get_bucket(Node, Partition, Prefixes, Level, Bucket) ->
     node(), non_neg_integer(), hashtree_tree:tree_node(), non_neg_integer()) -> orddict:orddict().
 
 key_hashes(Node, Partition, Prefixes, Segment) ->
-    gen_server:call(
+    partisan_gen_server:call(
         {name(Partition), Node}, {key_hashes, Prefixes, Segment}, infinity).
 
 
@@ -261,7 +265,8 @@ lock(Node, Partition) ->
 -spec lock(node(), plum_db:partition(), pid()) -> ok | not_built | locked.
 
 lock(Node, Partition, Pid) ->
-    gen_server:call({name(Partition), Node}, {lock, Pid}, infinity).
+    PidRef = partisan_util:pid(Pid),
+    partisan_gen_server:call({name(Partition), Node}, {lock, PidRef}, infinity).
 
 
 
@@ -300,8 +305,9 @@ release_lock(Node, Partition) ->
     ok | {error, not_locked | not_allowed}.
 
 release_lock(Node, Partition, Pid) ->
-    gen_server:call(
-        {name(Partition), Node}, {release_lock, external, Pid}, infinity).
+    PidRef = partisan_util:pid(Pid),
+    partisan_gen_server:call(
+        {name(Partition), Node}, {release_lock, external, PidRef}, infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -332,7 +338,7 @@ update(Partition) ->
     ok | not_locked | not_built | ongoing_update.
 
 update(Node, Partition) ->
-    gen_server:call({name(Partition), Node}, update, infinity).
+    partisan_gen_server:call({name(Partition), Node}, update, infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -352,7 +358,7 @@ reset(Partition) ->
 -spec reset(node(), plum_db:partition()) -> ok.
 
 reset(Node, Partition) ->
-    gen_server:cast({name(Partition), Node}, reset).
+    partisan_gen_server:cast({name(Partition), Node}, reset).
 
 
 %% -----------------------------------------------------------------------------
@@ -375,7 +381,7 @@ reset(Node, Partition) ->
     X) -> X.
 
 compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
-    gen_server:call(
+    partisan_gen_server:call(
         name(Partition),
         {compare, RemoteFun, HandlerFun, HandlerAcc},
         infinity).
@@ -403,14 +409,14 @@ handle_call(update, From, State0) ->
     State1 = maybe_external_update(From, State0),
     {noreply, State1};
 
-handle_call({lock, Pid}, From, State0) ->
-    State1 = maybe_external_lock(Pid, From, State0),
+handle_call({lock, PidRef}, From, State0) ->
+    State1 = maybe_external_lock(PidRef, From, State0),
     State2 = maybe_reset(State1),
     {noreply, State2};
 
-handle_call({release_lock, Type, Pid}, From, State0) ->
-    {Reply, State1} = do_release_lock(Type, Pid, State0),
-    gen_server:reply(From, Reply),
+handle_call({release_lock, Type, PidRef}, From, State0) ->
+    {Reply, State1} = do_release_lock(Type, PidRef, State0),
+    partisan_gen_server:reply(From, Reply),
     State2 = maybe_reset(State1),
     {noreply, State2};
 
@@ -573,14 +579,14 @@ maybe_compare_async(
     compare_async(From, RemoteFun, HandlerFun, HandlerAcc, State);
 
 maybe_compare_async(From, _, _, HandlerAcc, _State) ->
-    gen_server:reply(From, HandlerAcc).
+    partisan_gen_server:reply(From, HandlerAcc).
 
 
 %% @private
 compare_async(From, RemoteFun, HandlerFun, HandlerAcc, #state{tree = Tree}) ->
     spawn_link(fun() ->
         Res = hashtree_tree:compare(Tree, RemoteFun, HandlerFun, HandlerAcc),
-        gen_server:reply(From, Res)
+        partisan_gen_server:reply(From, Res)
     end).
 
 
@@ -589,18 +595,18 @@ compare_async(From, RemoteFun, HandlerFun, HandlerAcc, #state{tree = Tree}) ->
 
 maybe_external_update(
     From, #state{built = true, lock = undefined, reset = true} = State) ->
-    gen_server:reply(From, ongoing_update),
+    partisan_gen_server:reply(From, ongoing_update),
     %% We will reset on next tick
     State;
 
 maybe_external_update(
     From, #state{built = true, lock = undefined} = State) ->
-    gen_server:reply(From, not_locked),
+    partisan_gen_server:reply(From, not_locked),
     State;
 
 maybe_external_update(
     From, #state{built = true, lock = {internal, _, _}} = State) ->
-    gen_server:reply(From, ongoing_update),
+    partisan_gen_server:reply(From, ongoing_update),
     State;
 
 maybe_external_update(
@@ -608,7 +614,7 @@ maybe_external_update(
     update_async(From, false, State);
 
 maybe_external_update(From, State) ->
-    gen_server:reply(From, not_built),
+    partisan_gen_server:reply(From, not_built),
     State.
 
 
@@ -634,7 +640,7 @@ update_async(From, Lock, #state{tree = Tree} = State) ->
             hashtree_tree:update_perform(Tree2),
             case From of
                 undefined -> ok;
-                _ -> gen_server:reply(From, ok)
+                _ -> partisan_gen_server:reply(From, ok)
             end
         end
     ),
@@ -739,29 +745,29 @@ build_error(Reason, State) ->
 
 %% @private
 maybe_external_lock(
-    Pid, From, #state{lock = undefined, built = true} = State) ->
-    NewState = do_lock(Pid, external, State),
-    gen_server:reply(From, ok),
+    PidRef, From, #state{lock = undefined, built = true} = State) ->
+    NewState = do_lock(PidRef, external, State),
+    partisan_gen_server:reply(From, ok),
     NewState;
 
 maybe_external_lock(_, From, #state{built = true} = State) ->
-    gen_server:reply(From, locked),
+    partisan_gen_server:reply(From, locked),
     State;
 
 maybe_external_lock(_, From, State) ->
-    gen_server:reply(From, not_built),
+    partisan_gen_server:reply(From, not_built),
     State.
 
 
 %% @private
-do_lock(Pid, Type, State) ->
-    LockRef = monitor(process, Pid),
-    State#state{lock = {Type, LockRef, Pid}}.
+do_lock(PidRef, Type, State) ->
+    LockRef = partisan_monitor:monitor(PidRef),
+    State#state{lock = {Type, LockRef, PidRef}}.
 
 
 %% @private
-do_release_lock(Type, Pid, #state{lock = {Type, LockRef, Pid}} = State) ->
-    true = demonitor(LockRef),
+do_release_lock(Type, PidRef, #state{lock = {Type, LockRef, PidRef}} = State) ->
+    true = partisan_monitor:demonitor(LockRef),
     {ok, State#state{lock = undefined}};
 
 do_release_lock(_, _, #state{lock = undefined} = State) ->

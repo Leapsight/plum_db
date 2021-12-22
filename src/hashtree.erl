@@ -811,26 +811,29 @@ iterate({ok, K, V}, IS=#itr_state{itr=Itr,
     end.
 
 -spec compare(integer(), integer(), hashtree(), remote_fun(), acc_fun(X), X) -> X.
-compare(Level, Bucket, Tree, Remote, AccFun, KeyAcc) when Level == Tree#state.levels+1 ->
-    Keys = compare_segments(Bucket, Tree, Remote),
+compare(Level, Bucket, Tree, CallRemote, AccFun, KeyAcc)
+when Level == Tree#state.levels + 1 ->
+    Keys = compare_segments(Bucket, Tree, CallRemote),
     AccFun(Keys, KeyAcc);
-compare(Level, Bucket, Tree, Remote, AccFun, KeyAcc) ->
+
+compare(Level, Bucket, Tree, CallRemote, AccFun, KeyAcc) ->
     HL1 = get_bucket(Level, Bucket, Tree),
-    HL2 = Remote(get_bucket, {Level, Bucket}),
+    %% This functions calls a remote node to the bucket
+    HL2 = CallRemote(get_bucket, {Level, Bucket}),
     Union = lists:ukeysort(1, HL1 ++ HL2),
     Inter = ordsets:intersection(ordsets:from_list(HL1),
                                  ordsets:from_list(HL2)),
     Diff = ordsets:subtract(Union, Inter),
     KeyAcc3 =
         lists:foldl(fun({Bucket2, _}, KeyAcc2) ->
-                            compare(Level+1, Bucket2, Tree, Remote, AccFun, KeyAcc2)
+                            compare(Level+1, Bucket2, Tree, CallRemote, AccFun, KeyAcc2)
                     end, KeyAcc, Diff),
     KeyAcc3.
 
 -spec compare_segments(integer(), hashtree(), remote_fun()) -> [keydiff()].
-compare_segments(Segment, Tree=#state{id=Id}, Remote) ->
+compare_segments(Segment, Tree=#state{id=Id}, CallRemote) ->
     [{_, KeyHashes1}] = key_hashes(Tree, Segment),
-    KeyHashes2 = Remote(key_hashes, Segment),
+    KeyHashes2 = CallRemote(key_hashes, Segment),
     HL1 = orddict:from_list(KeyHashes1),
     HL2 = orddict:from_list(KeyHashes2),
     Delta = orddict_delta(HL1, HL2),
@@ -1012,29 +1015,79 @@ do_remote(N) ->
     B4 = update_tree(B3),
 
     %% Compare with remote tree through message passing
-    Remote = fun(get_bucket, {L, B}) ->
-                     Other ! {get_bucket, self(), L, B},
-                     receive {remote, X} -> X end;
-                (key_hashes, Segment) ->
-                     Other ! {key_hashes, self(), Segment},
-                     receive {remote, X} -> X end
-             end,
+    Remote = fun
+        (get_bucket, {L, B}) ->
+            ?LOG_WARNING(#{
+                other => Other,
+                self => self()
+            }),
+            Other ! {get_bucket, self(), L, B},
+            receive {remote, X} -> X end;
+        (key_hashes, Segment) ->
+            ?LOG_WARNING(#{
+                other => Other,
+                self => self()
+            }),
+            Other ! {key_hashes, self(), Segment},
+            receive {remote, X} -> X end
+    end,
+
     KeyDiff = compare(B4, Remote),
     ?LOG_INFO(#{key_diff => KeyDiff}),
     %% Signal spawned process to print stats and exit
     Other ! done,
     ok.
 
+
+send(To, Msg) ->
+    Ref = partisan_util:ref(make_ref()),
+
+    %% Figure out remote node.
+    {Node, ServerRef} = case Process of
+        {RemoteProcess, RemoteNode} ->
+            {RemoteNode, RemoteProcess};
+        _ ->
+            {node(), Process}
+    end,
+
+    partisan_pluggable_peer_service_manager:forward_message(
+        Node, undefined, ServerRef, Message, []
+    ),
+
+    Ref.
+
+
+wait_for_reply(Ref) ->
+    receive
+        {Ref, {remote, X}} ->
+            X;
+        Other ->
+            ?LOG_WARNING(#{
+                description => "Received unexpected response",
+                response => Other
+            }),
+            exit(timeout)
+    after Timeout ->
+        ?LOG_WARNING(#{
+            description => "Timed out at while waiting for response to message",
+            node => node(),
+            message => Request
+        }),
+        exit(timeout)
+    end.
+
 message_loop(Tree, Msgs, Bytes) ->
     receive
         {get_bucket, From, L, B} ->
             Reply = get_bucket(L, B, Tree),
+            %% TODO use partisan to reply
             From ! {remote, Reply},
             Size = byte_size(term_to_binary(Reply)),
             message_loop(Tree, Msgs+1, Bytes+Size);
         {key_hashes, From, Segment} ->
             [{_, KeyHashes2}] = key_hashes(Tree, Segment),
             Reply = KeyHashes2,
+            %% TODO use partisan to reply
             From ! {remote, Reply},
             Size = byte_size(term_to_binary(Reply)),
             message_loop(Tree, Msgs+1, Bytes+Size);
