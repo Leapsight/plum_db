@@ -285,21 +285,26 @@ exchanging_data(timeout, _, State) ->
     RemoteFun = fun
         (Prefixes, {get_bucket, {Level, Bucket}}) ->
             plum_db_partition_hashtree:get_bucket(
-                Peer, Partition, Prefixes, Level, Bucket);
+                Peer, Partition, Prefixes, Level, Bucket
+            );
         (Prefixes, {key_hashes, Segment}) ->
             plum_db_partition_hashtree:key_hashes(
-                Peer, Partition, Prefixes, Segment)
+                Peer, Partition, Prefixes, Segment
+            )
     end,
+
     HandlerFun = fun(Diff, Acc) ->
         repair(Peer, Diff),
         track_repair(Diff, Acc)
     end,
+
     Res = plum_db_partition_hashtree:compare(
         Partition,
         RemoteFun,
         HandlerFun,
         #exchange{local = 0, remote = 0, keys = 0}
     ),
+
     #exchange{
         local = LocalPrefixes,
         remote = RemotePrefixes,
@@ -429,7 +434,6 @@ update_request(Node, Partition) ->
 
 
 %% @private
-%% "borrowed" from riak_kv_exchange_fsm
 do_async(F) ->
     Statem = self(),
     _ = spawn_link(fun() -> gen_statem:cast(Statem, F()) end),
@@ -464,8 +468,7 @@ repair_full_prefix(Type, Peer, Iterator) ->
         false ->
             {{FullPrefix, Key}, Obj} = plum_db:iterator_element(Iterator),
             repair_other(Type, Peer, {FullPrefix, Key}, Obj),
-            repair_full_prefix(
-                Type, Peer, plum_db:iterate(Iterator))
+            repair_full_prefix(Type, Peer, plum_db:iterate(Iterator))
     end.
 
 
@@ -473,6 +476,7 @@ repair_full_prefix(Type, Peer, Iterator) ->
 repair_other(local, _Peer, PKey, Obj) ->
     %% local missing data, merge remote data locally
     merge(undefined, PKey, Obj);
+
 repair_other(remote, Peer, PKey, Obj) ->
     %% remote missing data, merge local data into remote node
     merge(Peer, PKey, Obj).
@@ -517,21 +521,21 @@ repair_iterator_type(remote) ->
 
 
 %% @private
-track_repair({missing_prefix, local, Prefix}, Acc=#exchange{local = Local}) ->
+track_repair({missing_prefix, local, Prefix}, #exchange{local = Local} = Acc) ->
     ?LOG_DEBUG(#{
         description => "Local store is missing data for prefix",
         prefix => Prefix
     }),
-    Acc#exchange{local=Local+1};
+    Acc#exchange{local = Local + 1};
 
 track_repair(
-    {missing_prefix, remote, Prefix}, Acc=#exchange{remote = Remote}) ->
+    {missing_prefix, remote, Prefix}, #exchange{remote = Remote} = Acc) ->
     ?LOG_DEBUG(#{
         description => "Remote store is missing data for prefix",
         prefix => Prefix
     }),
     Acc#exchange{remote = Remote + 1};
 
-track_repair({key_diffs, _, Diffs}, Acc=#exchange{keys = Keys}) ->
+track_repair({key_diffs, _, Diffs}, #exchange{keys = Keys} = Acc) ->
     Acc#exchange{keys = Keys + length(Diffs)}.
 
