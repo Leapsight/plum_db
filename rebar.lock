@@ -27,7 +27,7 @@
   1},
  {<<"partisan">>,
   {git,"http://github.com/aramallo/partisan.git",
-       {ref,"5a57ff9611f2da64d6a6ddc48195cf2d7f4107dc"}},
+       {ref,"b54b8c509438d623e500359d75d1270774643cd9"}},
   0},
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"2.0.2">>},2},
  {<<"sext">>,{pkg,<<"sext">>,<<"1.8.0">>},0},
