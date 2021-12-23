@@ -51,11 +51,6 @@
 %% @end
 %% -----------------------------------------------------------------------------
 start_link() ->
-    %% It is important we init the config before starting the supervisor
-    %% as we override some user configuration for both Partisan and Plumtree
-    %% before they start (they are included applications and our supervisor
-    %% starts them).
-    ok = plum_db_config:init(),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 
@@ -69,9 +64,6 @@ start_link() ->
 init([]) ->
     RestartStrategy = {one_for_one, 5, 60},
     Children = [
-        %% We start the included applications
-        ?CHILD(partisan_sup, supervisor, [], permanent),
-        ?CHILD(plumtree_sup, supervisor, [], permanent),
         %% We start the plum_db processes
         ?CHILD(plum_db_events, worker, [], permanent),
         ?CHILD(plum_db_startup_coordinator, worker, [], transient),

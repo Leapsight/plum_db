@@ -18,8 +18,8 @@
 %% =============================================================================
 
 -module(plum_db).
--behaviour(gen_server).
--behaviour(plumtree_broadcast_handler).
+-behaviour(partisan_gen_server).
+-behaviour(partisan_plumtree_broadcast_handler).
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
 
@@ -208,7 +208,7 @@
 -export([terminate/2]).
 -export([code_change/3]).
 
-%% plumtree_broadcast_handler callbacks
+%% partisan_plumtree_broadcast_handler callbacks
 -export([broadcast_data/1]).
 -export([exchange/1]).
 -export([graft/1]).
@@ -232,7 +232,7 @@
 -spec start_link() -> {ok, pid()} | ignore | {error, term()}.
 
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    partisan_gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 
 %% -----------------------------------------------------------------------------
@@ -809,9 +809,10 @@ remote_iterator(Node, FullPrefix) ->
     remote_iterator().
 
 remote_iterator(Node, FullPrefix, Opts) when is_tuple(FullPrefix) ->
-    Ref = gen_server:call(
+    PidRef = partisan_utils:pid(),
+    Ref = partisan_gen_server:call(
         {?MODULE, Node},
-        {open_remote_iterator, self(), FullPrefix, Opts},
+        {open_remote_iterator, PidRef, FullPrefix, Opts},
         infinity
     ),
     #remote_iterator{ref = Ref, match_prefix = FullPrefix, node = Node}.
@@ -825,7 +826,7 @@ remote_iterator(Node, FullPrefix, Opts) when is_tuple(FullPrefix) ->
 -spec iterate(iterator() | remote_iterator()) -> iterator() | remote_iterator().
 
 iterate(#remote_iterator{ref = Ref, node = Node} = I) ->
-    _ = gen_server:call({?MODULE, Node}, {iterate, Ref}, infinity),
+    _ = partisan_gen_server:call({?MODULE, Node}, {iterate, Ref}, infinity),
     I;
 
 iterate(#iterator{done = true} = I) ->
@@ -899,7 +900,7 @@ iterate({ok, PKey, V, Ref1}, I0) ->
 -spec iterator_close(iterator() | iterator() | remote_iterator()) -> ok.
 
 iterator_close(#remote_iterator{ref = Ref, node = Node}) ->
-    gen_server:call({?MODULE, Node}, {iterator_close, Ref}, infinity);
+    partisan_gen_server:call({?MODULE, Node}, {iterator_close, Ref}, infinity);
 
 iterator_close(#iterator{ref = undefined}) ->
     ok;
@@ -916,7 +917,7 @@ iterator_close(#iterator{ref = DBIter, partitions = [H|_]}) ->
 -spec iterator_done(iterator() | iterator() | remote_iterator()) -> boolean().
 
 iterator_done(#remote_iterator{ref = Ref, node = Node}) ->
-    gen_server:call({?MODULE, Node}, {iterator_done, Ref}, infinity);
+    partisan_gen_server:call({?MODULE, Node}, {iterator_done, Ref}, infinity);
 
 iterator_done(#iterator{done = true}) ->
     true;
@@ -935,7 +936,7 @@ iterator_done(#iterator{}) ->
 -spec iterator_prefix(iterator() | remote_iterator()) -> plum_db_prefix().
 
 iterator_prefix(#remote_iterator{ref = Ref, node = Node}) ->
-    gen_server:call({?MODULE, Node}, {prefix, Ref}, infinity);
+    partisan_gen_server:call({?MODULE, Node}, {prefix, Ref}, infinity);
 
 iterator_prefix(#iterator{prefix = Prefix}) ->
     Prefix.
@@ -995,7 +996,7 @@ iterator_key_value(#iterator{opts = Opts} = I) ->
     end;
 
 iterator_key_value(#remote_iterator{ref = Ref, node = Node}) ->
-    gen_server:call({?MODULE, Node}, {iterator_key_value, Ref}, infinity).
+    partisan_gen_server:call({?MODULE, Node}, {iterator_key_value, Ref}, infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -1045,7 +1046,7 @@ iterator_key_values(#iterator{opts = Opts} = I) ->
     iterator_element().
 
 iterator_element(#remote_iterator{ref = Ref, node = Node}) ->
-    gen_server:call({?MODULE, Node}, {iterator_element, Ref}, infinity);
+    partisan_gen_server:call({?MODULE, Node}, {iterator_element, Ref}, infinity);
 
 iterator_element(#iterator{prefix = P, key = K, object = Obj}) ->
     {{P, K}, Obj}.
@@ -1106,8 +1107,8 @@ prefixes() ->
 %% -----------------------------------------------------------------------------
 -spec prefix_type(term()) -> prefix_type() | undefined.
 
-prefix_type(Prefix) ->
-    maps:get(Prefix, plum_db_config:get(prefixes), undefined).
+prefix_type(Prefix) when is_atom(Prefix) orelse is_binary(Prefix) ->
+    plum_db_config:get([prefixes, Prefix, type], undefined).
 
 
 %% -----------------------------------------------------------------------------
@@ -1287,8 +1288,8 @@ init([]) ->
     | {stop, term(), term(), state()}
     | {stop, term(), state()}.
 
-handle_call({open_remote_iterator, Pid, FullPrefix, Opts}, _From, State) ->
-    Iterator = new_remote_iterator(Pid, FullPrefix, Opts, State),
+handle_call({open_remote_iterator, PidRef, FullPrefix, Opts}, _From, State) ->
+    Iterator = new_remote_iterator(PidRef, FullPrefix, Opts, State),
     {reply, Iterator, State};
 
 handle_call({iterate, RemoteRef}, _From, State) ->
@@ -1358,7 +1359,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% =============================================================================
-%% API: PLUMTREE_BROADCAST_HANDLER CALLBACKS
+%% API: PARTISAN_PLUMTREE_BROADCAST_HANDLER CALLBACKS
 %% =============================================================================
 
 
@@ -1369,7 +1370,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% and payload.
 %%
 %% > This function is part of the implementation of the
-%% plumtree_broadcast_handler behaviour.
+%% partisan_plumtree_broadcast_handler behaviour.
 %% > You should never call it directly.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1389,7 +1390,7 @@ broadcast_data(#plum_db_broadcast{pkey = Key, obj = Obj}) ->
 %% generating siblings) and `true' is returned.
 %%
 %% > This function is part of the implementation of the
-%% plumtree_broadcast_handler behaviour.
+%% partisan_plumtree_broadcast_handler behaviour.
 %% > You should never call it directly.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1410,7 +1411,7 @@ merge({PKey, _Context}, Obj) ->
 %% @doc Same as merge/2 but merges the object on `Node'
 %%
 %% > This function is part of the implementation of the
-%% plumtree_broadcast_handler behaviour.
+%% partisan_plumtree_broadcast_handler behaviour.
 %% > You should never call it directly.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1436,7 +1437,7 @@ merge(Node, {PKey, _Context}, Obj) ->
 %% been received (stored locally).
 %%
 %% > This function is part of the implementation of the
-%% plumtree_broadcast_handler behaviour.
+%% partisan_plumtree_broadcast_handler behaviour.
 %% > You should never call it directly.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1460,7 +1461,7 @@ is_stale({PKey, Context}) ->
 %% subsumes the grafted one.
 %%
 %% > This function is part of the implementation of the
-%% plumtree_broadcast_handler behaviour.
+%% partisan_plumtree_broadcast_handler behaviour.
 %% > You should never call it directly.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1661,8 +1662,8 @@ get_option(Key, Opts, Default) ->
     end.
 
 %% @private
-new_remote_iterator(Pid, FullPrefix, Opts, #state{iterators = Iterators}) ->
-    Ref = monitor(process, Pid),
+new_remote_iterator(PidRef, FullPrefix, Opts, #state{iterators = Iterators}) ->
+    Ref = partisan_monitor:monitor(PidRef),
     Iterator = new_iterator(FullPrefix, Opts),
     ets:insert(Iterators, [{Ref, Iterator}]),
     Ref.

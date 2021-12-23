@@ -34,6 +34,137 @@
 %% on-disk segments. For example, a tree with a width of 4 and 16 segments
 %% would look like the following:
 %%
+%% <pre><code class="mermaid">
+%% %%{init: {'theme': 'neutral' } }%%
+%% graph TD
+%%   r[" "]
+%%
+%%   a[" "]; b[" "]; c[" "]; d[" "]
+%%
+%%   a1[" "]; a2[" "]; a3[" "]; a4[" "];
+%%   a11[" "]; a12[" "]; a13[" "]; a14[" "]; a15[" "]; a16[" "];
+%%   a21[" "]; a22[" "]; a23[" "]; a24[" "]; a25[" "]; a26[" "];
+%%   a31[" "]; a32[" "]; a33[" "]; a34[" "]; a35[" "]; a36[" "];
+%%   a41[" "]; a42[" "]; a43[" "]; a44[" "]; a45[" "]; a46[" "];
+%%
+%%   b1[" "]; b2[" "]; b3[" "]; b4[" "];
+%%   b11[" "]; b12[" "]; b13[" "]; b14[" "]; b15[" "]; b16[" "];
+%%   b21[" "]; b22[" "]; b23[" "]; b24[" "]; b25[" "]; b26[" "];
+%%   b31[" "]; b32[" "]; b33[" "]; b34[" "]; b35[" "]; b36[" "];
+%%   b41[" "]; b42[" "]; b43[" "]; b44[" "]; b45[" "]; b46[" "];
+%%
+%%   c1[" "]; c2[" "]; c3[" "]; c4[" "];
+%%   c11[" "]; c12[" "]; c13[" "]; c14[" "]; c15[" "]; c16[" "];
+%%   c21[" "]; c22[" "]; c23[" "]; c24[" "]; c25[" "]; c26[" "];
+%%   c31[" "]; c32[" "]; c33[" "]; c34[" "]; c35[" "]; c36[" "];
+%%   c41[" "]; c42[" "]; c43[" "]; c44[" "]; c45[" "]; c46[" "];
+%%
+%%   d1[" "]; d2[" "]; d3[" "]; d4[" "];
+%%   d11[" "]; d12[" "]; d13[" "]; d14[" "]; d15[" "]; d16[" "];
+%%   d21[" "]; d22[" "]; d23[" "]; d24[" "]; d25[" "]; d26[" "];
+%%   d31[" "]; d32[" "]; d33[" "]; d34[" "]; d35[" "]; d36[" "];
+%%   d41[" "]; d42[" "]; d43[" "]; d44[" "]; d45[" "]; d46[" "];
+%%
+%%   subgraph " "
+%%   a; b; c; d
+%%   end
+%%
+%%   r --> a; r --> b; r --> c; r --> d
+%%
+%%   subgraph A [" "]
+%%   a2; a2; a3; a4
+%%   end
+%%
+%%   subgraph A1 [" "]
+%%   a11; a12; a13; a14; a15; a16
+%%   end
+%%   subgraph A2 [" "]
+%%   a21; a22; a23; a24; a25; a26
+%%   end
+%%   subgraph A3 [" "]
+%%   a31; a32; a33; a34; a35; a36
+%%   end
+%%   subgraph A4 [" "]
+%%   a41; a42; a43; a44; a45; a46
+%%   end
+%%
+%%   a --> a1; a --> a2; a --> a3; a --> a4
+%%   a1 --- a11 --- a12 --- a13 --- a14 --- a15 --- a16
+%%   a2 --- a21 --- a22 --- a23 --- a24 --- a25 --- a26
+%%   a3 --- a31 --- a32 --- a33 --- a34 --- a35 --- a36
+%%   a4 --- a41 --- a42 --- a43 --- a44 --- a45 --- a46
+%%
+%%   subgraph B [" "]
+%%   b1; b2; b3; b4
+%%   end
+%%
+%%   subgraph B1 [" "]
+%%   b11; b12; b13; b14; b15; b16
+%%   end
+%%   subgraph B2 [" "]
+%%   b21; b22; b23; b24; b25; b26
+%%   end
+%%   subgraph B3 [" "]
+%%   b31; b32; b33; b34; b35; b36
+%%   end
+%%   subgraph B4 [" "]
+%%   b41; b42; b43; b44; b45; b46
+%%   end
+%%
+%%   b --> b1; b --> b2; b --> b3; b --> b4
+%%   b1 --- b11 --- b12 --- b13 --- b14 --- b15 --- b16
+%%   b2 --- b21 --- b22 --- b23 --- b24 --- b25 --- b26
+%%   b3 --- b31 --- b32 --- b33 --- b34 --- b35 --- b36
+%%   b4 --- b41 --- b42 --- b43 --- b44 --- b45 --- b46
+%%
+%%   subgraph C [" "]
+%%   c1; c2; c3; c4
+%%   end
+%%
+%%   subgraph C1 [" "]
+%%   c11; c12; c13; c14; c15; c16
+%%   end
+%%   subgraph C2 [" "]
+%%   c21; c22; c23; c24; c25; c26
+%%   end
+%%   subgraph C3 [" "]
+%%   c31; c32; c33; c34; c35; c36
+%%   end
+%%   subgraph C4 [" "]
+%%   c41; c42; c43; c44; c45; c46
+%%   end
+%%
+%%   c --> c1; c --> c2; c --> c3; c --> c4
+%%   c1 --- c11 --- c12 --- c13 --- c14 --- c15 --- c16
+%%   c2 --- c21 --- c22 --- c23 --- c24 --- c25 --- c26
+%%   c3 --- c31 --- c32 --- c33 --- c34 --- c35 --- c36
+%%   c4 --- c41 --- c42 --- c43 --- c44 --- c45 --- c46
+%%
+%%   subgraph D [" "]
+%%   d1; d2; d3; d4
+%%   end
+%%
+%%   subgraph D1 [" "]
+%%   d11; d12; d13; d14; d15; d16
+%%   end
+%%   subgraph D2 [" "]
+%%   d21; d22; d23; d24; d25; d26
+%%   end
+%%   subgraph D3 [" "]
+%%   d31; d32; d33; d34; d35; d36
+%%   end
+%%   subgraph D4 [" "]
+%%   d41; d42; d43; d44; d45; d46
+%%   end
+%%
+%%   d --> d1; d --> d2; d --> d3; d --> d4
+%%   d1 --- d11 --- d12 --- d13 --- d14 --- d15 --- d16
+%%   d2 --- d21 --- d22 --- d23 --- d24 --- d25 --- d26
+%%   d3 --- d31 --- d32 --- d33 --- d34 --- d35 --- d36
+%%   d4 --- d41 --- d42 --- d43 --- d44 --- d45 --- d46
+%%
+%% </code></pre>
+%%
 %% level   buckets
 %% 1:      [0]
 %% 2:      [0 1 2 3]
@@ -811,26 +942,29 @@ iterate({ok, K, V}, IS=#itr_state{itr=Itr,
     end.
 
 -spec compare(integer(), integer(), hashtree(), remote_fun(), acc_fun(X), X) -> X.
-compare(Level, Bucket, Tree, Remote, AccFun, KeyAcc) when Level == Tree#state.levels+1 ->
-    Keys = compare_segments(Bucket, Tree, Remote),
+compare(Level, Bucket, Tree, CallRemote, AccFun, KeyAcc)
+when Level == Tree#state.levels + 1 ->
+    Keys = compare_segments(Bucket, Tree, CallRemote),
     AccFun(Keys, KeyAcc);
-compare(Level, Bucket, Tree, Remote, AccFun, KeyAcc) ->
+
+compare(Level, Bucket, Tree, CallRemote, AccFun, KeyAcc) ->
     HL1 = get_bucket(Level, Bucket, Tree),
-    HL2 = Remote(get_bucket, {Level, Bucket}),
+    %% This functions calls a remote node to the bucket
+    HL2 = CallRemote(get_bucket, {Level, Bucket}),
     Union = lists:ukeysort(1, HL1 ++ HL2),
     Inter = ordsets:intersection(ordsets:from_list(HL1),
                                  ordsets:from_list(HL2)),
     Diff = ordsets:subtract(Union, Inter),
     KeyAcc3 =
         lists:foldl(fun({Bucket2, _}, KeyAcc2) ->
-                            compare(Level+1, Bucket2, Tree, Remote, AccFun, KeyAcc2)
+                            compare(Level+1, Bucket2, Tree, CallRemote, AccFun, KeyAcc2)
                     end, KeyAcc, Diff),
     KeyAcc3.
 
 -spec compare_segments(integer(), hashtree(), remote_fun()) -> [keydiff()].
-compare_segments(Segment, Tree=#state{id=Id}, Remote) ->
+compare_segments(Segment, Tree=#state{id=Id}, CallRemote) ->
     [{_, KeyHashes1}] = key_hashes(Tree, Segment),
-    KeyHashes2 = Remote(key_hashes, Segment),
+    KeyHashes2 = CallRemote(key_hashes, Segment),
     HL1 = orddict:from_list(KeyHashes1),
     HL2 = orddict:from_list(KeyHashes2),
     Delta = orddict_delta(HL1, HL2),
@@ -1012,29 +1146,79 @@ do_remote(N) ->
     B4 = update_tree(B3),
 
     %% Compare with remote tree through message passing
-    Remote = fun(get_bucket, {L, B}) ->
-                     Other ! {get_bucket, self(), L, B},
-                     receive {remote, X} -> X end;
-                (key_hashes, Segment) ->
-                     Other ! {key_hashes, self(), Segment},
-                     receive {remote, X} -> X end
-             end,
+    Remote = fun
+        (get_bucket, {L, B}) ->
+            ?LOG_WARNING(#{
+                other => Other,
+                self => self()
+            }),
+            Other ! {get_bucket, self(), L, B},
+            receive {remote, X} -> X end;
+        (key_hashes, Segment) ->
+            ?LOG_WARNING(#{
+                other => Other,
+                self => self()
+            }),
+            Other ! {key_hashes, self(), Segment},
+            receive {remote, X} -> X end
+    end,
+
     KeyDiff = compare(B4, Remote),
     ?LOG_INFO(#{key_diff => KeyDiff}),
     %% Signal spawned process to print stats and exit
     Other ! done,
     ok.
 
+
+send(To, Msg) ->
+    Ref = partisan_util:ref(make_ref()),
+
+    %% Figure out remote node.
+    {Node, ServerRef} = case Process of
+        {RemoteProcess, RemoteNode} ->
+            {RemoteNode, RemoteProcess};
+        _ ->
+            {node(), Process}
+    end,
+
+    partisan_pluggable_peer_service_manager:forward_message(
+        Node, undefined, ServerRef, Message, []
+    ),
+
+    Ref.
+
+
+wait_for_reply(Ref) ->
+    receive
+        {Ref, {remote, X}} ->
+            X;
+        Other ->
+            ?LOG_WARNING(#{
+                description => "Received unexpected response",
+                response => Other
+            }),
+            exit(timeout)
+    after Timeout ->
+        ?LOG_WARNING(#{
+            description => "Timed out at while waiting for response to message",
+            node => node(),
+            message => Request
+        }),
+        exit(timeout)
+    end.
+
 message_loop(Tree, Msgs, Bytes) ->
     receive
         {get_bucket, From, L, B} ->
             Reply = get_bucket(L, B, Tree),
+            %% TODO use partisan to reply
             From ! {remote, Reply},
             Size = byte_size(term_to_binary(Reply)),
             message_loop(Tree, Msgs+1, Bytes+Size);
         {key_hashes, From, Segment} ->
             [{_, KeyHashes2}] = key_hashes(Tree, Segment),
             Reply = KeyHashes2,
+            %% TODO use partisan to reply
             From ! {remote, Reply},
             Size = byte_size(term_to_binary(Reply)),
             message_loop(Tree, Msgs+1, Bytes+Size);

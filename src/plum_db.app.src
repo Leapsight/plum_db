@@ -4,9 +4,14 @@
     {registered, []},
     {mod, {plum_db_app, []}},
     {start_phases, [
+        {start_dependencies, []},
         {init_db_partitions, []},
         {init_db_hashtrees, []},
         {aae_exchange, []}
+    ]},
+    {included_applications, [
+        gproc,
+        partisan
     ]},
     {applications, [
         kernel,
@@ -19,11 +24,7 @@
         os_mon,
         eleveldb,
         sext,
-        gproc
-    ]},
-    {included_applications, [
-        partisan,
-        plumtree
+        app_config
     ]},
     {env, []},
     {modules, []},

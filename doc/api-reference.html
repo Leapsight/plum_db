@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.26.0">
+    <meta name="project" content="plum_db v0.3.10">
+
+    <title>API Reference — plum_db v0.3.10</title>
+    <link rel="stylesheet" href="dist/erlang-e2fc4c0a4f7951ab3ca5.css" />
+
+    <script src="dist/sidebar_items-f6fa2d8b97.js"></script>
+
+      <script src="docs_config.js"></script>
+
+    <script async src="dist/app-68b26e75fcd91b8a764c.js"></script>
+
+
+  </head>
+  <body data-type="extras">
+    <script>
+
+      try {
+        if (localStorage.getItem('night-mode') === 'true') {
+          document.body.classList.add('night-mode');
+        }
+      } catch (error) { }
+    </script>
+
+<div class="main">
+
+<button class="sidebar-button sidebar-toggle">
+  <span class="icon-menu" title="Collapse/expand sidebar"></span>
+</button>
+
+<section class="sidebar">
+  <form class="sidebar-search" action="search.html">
+    <button type="submit" class="search-button" aria-label="Submit Search">
+      <span class="icon-search" aria-hidden="true" title="Submit search"></span>
+    </button>
+    <button type="button" tabindex="-1" class="search-close-button" aria-label="Cancel Search">
+      <span class="icon-cross" aria-hidden="true" title="Cancel search"></span>
+    </button>
+    <label class="search-label">
+      <input name="q" type="text" class="search-input" placeholder="Search..." aria-label="Input your search terms" autocomplete="off" />
+    </label>
+  </form>
+
+  <div class="autocomplete">
+    <div class="autocomplete-results">
+    </div>
+  </div>
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectDetails">
+      <a href="plum_db.html" class="sidebar-projectName" translate="no">
+plum_db
+      </a>
+      <strong class="sidebar-projectVersion" translate="no">
+        v0.3.10
+      </strong>
+    </div>
+
+  </div>
+
+  <ul class="sidebar-listNav">
+    <li><a id="extras-list-link" href="#full-list">Pages</a></li>
+
+      <li><a id="modules-list-link" href="#full-list">Modules</a></li>
+
+
+  </ul>
+  <div class="gradient"></div>
+  <ul id="full-list" class="sidebar-fullList"></ul>
+</section>
+
+<section class="content">
+  <div class="content-outer">
+    <div id="content" class="content-inner">
+
+<h1 id="content">
+API Reference <small class="app-vsn">plum_db v0.3.10</small>
+
+</h1>
+
+
+  <section class="details-list">
+    <h2 id="modules" class="section-heading">
+  <a href="#modules" class="hover-link"><span class="icon-link" aria-hidden="true"></span></a>
+  Modules
+</h2>
+
+    <div class="summary">
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="hashtree.html" translate="no">hashtree</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>This module implements a persistent, on-disk hash tree that is used predominately for active anti-entropy exchange in Riak. The tree consists of two parts, a set of unbounded on-disk segments and a fixed size hash tree (that may be on-disk or in-memory) constructed over these segments.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="hashtree_tree.html" translate="no">hashtree_tree</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>This module implements a specialized hash tree that is used primarily by cluster metadata's anti-entropy exchanges and by metadata clients for determining when groups of metadata keys have changed locally. The tree can be used, generally, for determining the differences in groups of keys, or to find missing groups, between two stores.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db.html" translate="no">plum_db</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_app.html" translate="no">plum_db_app</a>
+
+  </div>
+
+    <div class="summary-synopsis"><pre><code class="makeup erlang" translate="no"><span class="w">                          </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">
+                          </span><span class="p">|</span><span class="w">                  </span><span class="p">|</span><span class="w">
+                          </span><span class="p">|</span><span class="w">   </span><span class="ss">plum_db_sup</span><span class="w">    </span><span class="p">|</span><span class="w">
+                          </span><span class="p">|</span><span class="w">                  </span><span class="p">|</span><span class="w">
+                          </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">
+                                    </span><span class="p">|</span><span class="w">
+            </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">-</span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">-</span><span class="o">+</span><span class="w">
+            </span><span class="p">|</span><span class="w">                       </span><span class="p">|</span><span class="w">                       </span><span class="p">|</span><span class="w">
+            </span><span class="ss">v</span><span class="w">                       </span><span class="ss">v</span><span class="w">                       </span><span class="ss">v</span><span class="w">
+  </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">    </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">    </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">
+  </span><span class="p">|</span><span class="w">                  </span><span class="p">|</span><span class="w">    </span><span class="p">|</span><span class="w">     </span><span class="ss">plum_db_</span><span class="w">     </span><span class="p">|</span><span class="w">    </span><span class="p">|</span><span class="w">                  </span><span class="p">|</span><span class="w">
+  </span><span class="p">|</span><span class="w">     </span><span class="ss">plum_db</span><span class="w">      </span><span class="p">|</span><span class="w">    </span><span class="p">|</span><span class="w">  </span><span class="ss">partitions_sup</span><span class="w">  </span><span class="p">|</span><span class="w">    </span><span class="p">|</span><span class="w">  </span><span class="ss">plum_db_events</span><span class="w">  </span><span class="p">|</span><span class="w">
+  </span><span class="p">|</span><span class="w">                  </span><span class="p">|</span><span class="w">    </span><span class="p">|</span><span class="w">                  </span><span class="p">|</span><span class="w">    </span><span class="p">|</span><span class="w">                  </span><span class="p">|</span><span class="w">
+  </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">    </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">    </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">
+                                    </span><span class="p">|</span><span class="w">
+                        </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">-</span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">-</span><span class="o">+</span><span class="w">
+                        </span><span class="p">|</span><span class="w">                       </span><span class="p">|</span><span class="w">
+                        </span><span class="ss">v</span><span class="w">                       </span><span class="ss">v</span><span class="w">
+              </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">    </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">
+              </span><span class="p">|</span><span class="ss">plum_db_partition_</span><span class="p">|</span><span class="w">    </span><span class="p">|</span><span class="ss">plum_db_partition_</span><span class="p">|</span><span class="w">
+              </span><span class="p">|</span><span class="w">      </span><span class="mi">1</span><span class="p">_</span><span class="ss">sup</span><span class="w">       </span><span class="p">|</span><span class="w">    </span><span class="p">|</span><span class="w">      </span><span class="ss">n_sup</span><span class="w">       </span><span class="p">|</span><span class="w">
+              </span><span class="p">|</span><span class="w">                  </span><span class="p">|</span><span class="w">    </span><span class="p">|</span><span class="w">                  </span><span class="p">|</span><span class="w">
+              </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">    </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">
+                        </span><span class="p">|</span><span class="w">
+                        </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">-</span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">
+                                    </span><span class="p">|</span><span class="w">                      </span><span class="p">|</span><span class="w">
+                                    </span><span class="ss">v</span><span class="w">                      </span><span class="ss">v</span><span class="w">
+                          </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">   </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">
+                          </span><span class="p">|</span><span class="ss">plum_db_partition_</span><span class="p">|</span><span class="w">   </span><span class="p">|</span><span class="ss">plum_db_partition_</span><span class="p">|</span><span class="w">
+                          </span><span class="p">|</span><span class="w">     </span><span class="mi">1</span><span class="p">_</span><span class="ss">server</span><span class="w">     </span><span class="p">|</span><span class="w">   </span><span class="p">|</span><span class="w">    </span><span class="mi">1</span><span class="p">_</span><span class="ss">hashtree</span><span class="w">    </span><span class="p">|</span><span class="w">
+                          </span><span class="p">|</span><span class="w">                  </span><span class="p">|</span><span class="w">   </span><span class="p">|</span><span class="w">                  </span><span class="p">|</span><span class="w">
+                          </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">   </span><span class="o">+</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">--</span><span class="o">+</span><span class="w">
+                                    </span><span class="p">|</span><span class="w">                      </span><span class="p">|</span><span class="w">
+                                    </span><span class="ss">v</span><span class="w">                      </span><span class="ss">v</span><span class="w">
+                          </span><span class="o">+</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w">    </span><span class="o">+</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w">
+                                             </span><span class="p">|</span><span class="w">                      </span><span class="p">|</span><span class="w">
+                          </span><span class="p">|</span><span class="w">     </span><span class="ss">eleveldb</span><span class="w">         </span><span class="p">|</span><span class="w">     </span><span class="ss">eleveldb</span><span class="w">
+                                             </span><span class="p">|</span><span class="w">                      </span><span class="p">|</span><span class="w">
+                          </span><span class="o">+</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w">    </span><span class="o">+</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="o">-</span></code></pre></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_config.html" translate="no">plum_db_config</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_console.html" translate="no">plum_db_console</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_dvvset.html" translate="no">plum_db_dvvset</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>An Erlang implementation of *compact* Dotted Version Vectors, which provides a container for a set of concurrent values (siblings) with causal order information.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_events.html" translate="no">plum_db_events</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_exchange_statem.html" translate="no">plum_db_exchange_statem</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_exchanges_sup.html" translate="no">plum_db_exchanges_sup</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_object.html" translate="no">plum_db_object</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_partition_hashtree.html" translate="no">plum_db_partition_hashtree</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_partition_server.html" translate="no">plum_db_partition_server</a>
+
+  </div>
+
+    <div class="summary-synopsis">A wrapper for an elevelb instance.</div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_partition_sup.html" translate="no">plum_db_partition_sup</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_partitions_sup.html" translate="no">plum_db_partitions_sup</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_peer_service.html" translate="no">plum_db_peer_service</a>
+
+  </div>
+
+    <div class="summary-synopsis">Based on: github.com/lasp-lang/lasp/...lasp_peer_service.erl</div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_pubsub.html" translate="no">plum_db_pubsub</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Gproc Publish/Subscribe patterns This module implements a few convenient functions for publish/subscribe.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_startup_coordinator.html" translate="no">plum_db_startup_coordinator</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>A transient worker that is used to listen to certain plum_db events and allow watchers to wait (blocking the caller) for certain conditions. This is used by plum_db_app during the startup process to wait for the following conditions</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_sup.html" translate="no">plum_db_sup</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="plum_db_table_owner.html" translate="no">plum_db_table_owner</a>
+
+  </div>
+
+</div>
+
+    </div>
+  </section>
+
+
+<div class="bottom-actions">
+  <div class="bottom-actions-item">
+
+  </div>
+  <div class="bottom-actions-item">
+
+      <a href="license.html" class="bottom-actions-button" rel="next">
+        <span class="subheader">
+          Next Page →
+        </span>
+        <span class="title">
+LICENSE
+        </span>
+      </a>
+
+  </div>
+</div>
+
+      <footer class="footer">
+
+        <p>
+          <span class="line">
+            Built using
+            <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.26.0) for the
+            <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>.
+          </span>
+          <span class="line">
+            Designed by
+            <a href="https://twitter.com/dignifiedquire" target="_blank" rel="noopener" title="@dignifiedquire" translate="no">Friedel Ziegelmayer</a>.
+          </span>
+        </p>
+        <p>
+
+            <a href="api-reference.html" title="API reference" class="line footer-button">API Reference</a>
+
+          <button class="line footer-button display-shortcuts-help">
+            Display keyboard shortcuts
+          </button>
+          <button class="line footer-button display-quick-switch">
+            Go to a HexDocs package
+          </button>
+          <button class="line footer-button display-settings">
+            Settings
+          </button>
+        </p>
+      </footer>
+    </div>
+  </div>
+</section>
+</div>
+
+
+  </body>
+</html>
