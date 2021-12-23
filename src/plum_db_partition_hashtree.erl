@@ -108,7 +108,10 @@ start_link(Partition) when is_integer(Partition) ->
     Name = name(Partition),
 
     partisan_gen_server:start_link(
-        {local, Name}, ?MODULE, [Partition, DataRoot], [{channel, aae}]
+        {local, Name},
+        ?MODULE,
+        [Partition, DataRoot],
+        [{channel,  ?DATA_CHANNEL}]
     ).
 
 

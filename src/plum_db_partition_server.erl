@@ -146,7 +146,10 @@
 start_link(Partition, Opts) ->
     Name = name(Partition),
     partisan_gen_server:start_link(
-        {local, Name}, ?MODULE, [Name, Partition, Opts], [{channel, aae}]
+        {local, Name},
+        ?MODULE,
+        [Name, Partition, Opts],
+        [{channel,  ?DATA_CHANNEL}]
     ).
 
 
