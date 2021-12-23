@@ -23,6 +23,12 @@ PlumDB builds on top of Plumtree but changes its architecture offering additiona
 
 You will use PlumDB as a dependency in your Erlang application.
 
+### Requirements
+
+* [Erlang](https://www.erlang.org/) 24 or later
+* [Rebar3](https://rebar3.readme.io/) 3.17.0 or later
+
+
 ### Configuration
 
 PlumDB is configured using the standard Erlang sys.config.
