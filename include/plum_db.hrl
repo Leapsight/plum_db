@@ -10,7 +10,7 @@
 -define(EOT, '$end_of_table').
 -define(TOMBSTONE, '$deleted').
 -define(ERASED, '$erased').
--define(AAE_CHANNEL, aae_messages).
+-define(DATA_CHANNEL, data).
 
 -type plum_db_prefix()          ::  {binary() | atom(), binary() | atom()}.
 -type plum_db_prefix_pattern()  ::  {

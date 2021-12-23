@@ -315,7 +315,7 @@ add_sup_callback(Function) ->
 %% @end
 %% -----------------------------------------------------------------------------
 cast_message(Name, ServerRef, Message) ->
-    do(cast_message, [Name, ?AAE_CHANNEL, ServerRef, Message]).
+    do(cast_message, [Name, ?DATA_CHANNEL, ServerRef, Message]).
 
 
 %% -----------------------------------------------------------------------------
@@ -323,7 +323,7 @@ cast_message(Name, ServerRef, Message) ->
 %% @end
 %% -----------------------------------------------------------------------------
 forward_message(Name, ServerRef, Message) ->
-    do(forward_message, [Name, ?AAE_CHANNEL, ServerRef, Message]).
+    do(forward_message, [Name, ?DATA_CHANNEL, ServerRef, Message]).
 
 
 

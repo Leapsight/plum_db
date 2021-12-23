@@ -281,7 +281,7 @@ setup_dependencies() ->
 
     PartisanOverrides = #{
         pid_encoding => false,
-        channels => [?AAE_CHANNEL | Channels],
+        channels => [?DATA_CHANNEL | Channels],
         broadcast_mods => ordsets:to_list(
             ordsets:union(
                 ordsets:from_list([plum_db, partisan_plumtree_backend]),
