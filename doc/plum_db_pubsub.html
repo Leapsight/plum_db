@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.26.0">
+    <meta name="project" content="plum_db v0.3.10">
+
+    <title>plum_db_pubsub — plum_db v0.3.10</title>
+    <link rel="stylesheet" href="dist/erlang-e2fc4c0a4f7951ab3ca5.css" />
+
+    <script src="dist/sidebar_items-f6fa2d8b97.js"></script>
+
+      <script src="docs_config.js"></script>
+
+    <script async src="dist/app-68b26e75fcd91b8a764c.js"></script>
+
+
+  </head>
+  <body data-type="modules">
+    <script>
+
+      try {
+        if (localStorage.getItem('night-mode') === 'true') {
+          document.body.classList.add('night-mode');
+        }
+      } catch (error) { }
+    </script>
+
+<div class="main">
+
+<button class="sidebar-button sidebar-toggle">
+  <span class="icon-menu" title="Collapse/expand sidebar"></span>
+</button>
+
+<section class="sidebar">
+  <form class="sidebar-search" action="search.html">
+    <button type="submit" class="search-button" aria-label="Submit Search">
+      <span class="icon-search" aria-hidden="true" title="Submit search"></span>
+    </button>
+    <button type="button" tabindex="-1" class="search-close-button" aria-label="Cancel Search">
+      <span class="icon-cross" aria-hidden="true" title="Cancel search"></span>
+    </button>
+    <label class="search-label">
+      <input name="q" type="text" class="search-input" placeholder="Search..." aria-label="Input your search terms" autocomplete="off" />
+    </label>
+  </form>
+
+  <div class="autocomplete">
+    <div class="autocomplete-results">
+    </div>
+  </div>
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectDetails">
+      <a href="plum_db.html" class="sidebar-projectName" translate="no">
+plum_db
+      </a>
+      <strong class="sidebar-projectVersion" translate="no">
+        v0.3.10
+      </strong>
+    </div>
+
+  </div>
+
+  <ul class="sidebar-listNav">
+    <li><a id="extras-list-link" href="#full-list">Pages</a></li>
+
+      <li><a id="modules-list-link" href="#full-list">Modules</a></li>
+
+
+  </ul>
+  <div class="gradient"></div>
+  <ul id="full-list" class="sidebar-fullList"></ul>
+</section>
+
+<section class="content">
+  <div class="content-outer">
+    <div id="content" class="content-inner">
+
+<h1>
+  <span translate="no">plum_db_pubsub</span> 
+  <small class="app-vsn" translate="no">(plum_db v0.3.10)</small>
+
+    <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L41" title="View Source" class="view-source" rel="help">
+      <span class="icon-code" aria-hidden="true"></span>
+      <span class="sr-only">View Source</span>
+    </a>
+
+
+</h1>
+
+
+  <section id="moduledoc">
+<p>Gproc Publish/Subscribe patterns This module implements a few convenient functions for publish/subscribe.</p><p>Publish/subscribe with Gproc relies entirely on gproc properties and counters. This makes for a very concise implementation, as the monitoring of subscribers and removal of subscriptions comes for free with Gproc.</p><p>Using this module instead of rolling your own (which is easy enough) brings the benefit of consistency, in tracing and debugging. The implementation can also serve to illustrate how to use gproc properties and counters to good effect.</p>-type scope() = l | g. -type event() = any(). -type msg() = any(). -type status() = 1 | 0.
+  </section>
+
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+      Summary
+    </h1>
+
+  <div class="summary-types summary">
+    <h2>
+      <a href="#types">Types</a>
+    </h2>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:event/0" translate="no">event/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:msg/0" translate="no">msg/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:scope/0" translate="no">scope/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:status/0" translate="no">status/0</a>
+
+        </div>
+
+      </div>
+
+  </div>
+
+  <div class="summary-functions summary">
+    <h2>
+      <a href="#functions">Functions</a>
+    </h2>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#change_cond/3" translate="no">change_cond(Scope, Event, Spec)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Change the condition specification of an existing subscription.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#create_single/2" translate="no">create_single(Scope, Event)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Creates a single-shot subscription entry for Event</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#delete_single/2" translate="no">delete_single(Scope, Event)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Deletes the single-shot subscription for Event</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#disable_single/2" translate="no">disable_single(Scope, Event)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Disables the single-shot subscription for Event</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#enable_single/2" translate="no">enable_single(Scope, Event)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Enables the single-shot subscription for Event</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#list_singles/2" translate="no">list_singles(Scope, Event)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Lists all single-shot subscribers of Event, together with their status</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#list_subs/2" translate="no">list_subs(Scope, Event)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>List the pids of all processes subscribing to <code>Event</code></p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#notify_single_if_true/4" translate="no">notify_single_if_true(Scope, Event, F, Msg)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Create/enable a single subscription for event; notify at once if F() -&gt; true</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#publish/3" translate="no">publish(Scope, Event, Msg)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Publish the message <code>Msg</code> to all subscribers of <code>Event</code></p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#publish_cond/3" translate="no">publish_cond(Scope, Event, Msg)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Publishes the message <code>Msg</code> to conditional subscribers of <code>Event</code></p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#subscribe/2" translate="no">subscribe(Scope, Event)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Subscribe to events of type <code>Event</code></p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#subscribe_cond/3" translate="no">subscribe_cond(Scope, Event, Spec)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Subscribe conditionally to events of type <code>Event</code></p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#tell_singles/3" translate="no">tell_singles(Scope, Event, Msg)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Publish <code>Msg</code> to all single-shot subscribers of <code>Event</code></p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#unsubscribe/2" translate="no">unsubscribe(Scope, Event)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Remove subscribtion created using <code>subscribe(Scope, Event)</code></p></div>
+
+      </div>
+
+  </div>
+
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#types">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+Types
+    </h1>
+    <div class="types-list">
+<section class="detail" id="t:event/0">
+
+  <div class="detail-header">
+    <a href="#t:event/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">event/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L68" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">event() :: any().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:msg/0">
+
+  <div class="detail-header">
+    <a href="#t:msg/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">msg/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L69" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">msg() :: any().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:scope/0">
+
+  <div class="detail-header">
+    <a href="#t:scope/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">scope/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L67" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">scope() :: l | g.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:status/0">
+
+  <div class="detail-header">
+    <a href="#t:status/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">status/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L70" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">status() :: 1 | 0.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+Functions
+    </h1>
+    <div class="functions-list">
+<section class="detail" id="change_cond/3">
+
+  <div class="detail-header">
+    <a href="#change_cond/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">change_cond(Scope, Event, Spec)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L136" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">change_cond(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>(), undefined | <a href="https://www.erlang.org/doc/man/ets.html#type-match_spec">ets:match_spec</a>()) -> true.</pre>
+
+      </div>
+
+<p>Change the condition specification of an existing subscription.</p><p>This function atomically changes the condition spec of an existing subscription (see <a href="#subscribe_cond/3"><code>subscribe_cond/3</code></a>). An exception is raised if the subscription doesn't already exist.</p>Note that this function can also be used to change a conditional subscription to an unconditional one (by setting <code>Spec = undefined</code>), or a 'normal' subscription to a conditional one.
+  </section>
+</section>
+<section class="detail" id="create_single/2">
+
+  <div class="detail-header">
+    <a href="#create_single/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">create_single(Scope, Event)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L216" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">create_single(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>()) -> true.</pre>
+
+      </div>
+
+<p>Creates a single-shot subscription entry for Event</p><p>Single-shot subscriptions behave similarly to the <code>{active,once}</code> property of sockets. Once a message has been published, the subscription is disabled, and no more messages will be delivered to the subscriber unless the subscription is re-enabled using <code>enable_single/2</code>.</p><p>The function creates a gproc counter entry, <code>{c,Scope,{gproc_ps_event,Event}}</code>, which will have either of the values <code>0</code> (disabled) or <code>1</code> (enabled). Initially, the value is <code>1</code>, meaning the subscription is enabled.</p>Counters are used in this case, since they can be atomically updated by both the subscriber (owner) and publisher. The publisher sets the counter value to <code>0</code> as soon as it has delivered a message.
+  </section>
+</section>
+<section class="detail" id="delete_single/2">
+
+  <div class="detail-header">
+    <a href="#delete_single/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">delete_single(Scope, Event)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L225" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">delete_single(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>()) -> true.</pre>
+
+      </div>
+
+<p>Deletes the single-shot subscription for Event</p>This function deletes the counter entry representing the single-shot description. An exception will be raised if there is no such subscription.
+  </section>
+</section>
+<section class="detail" id="disable_single/2">
+
+  <div class="detail-header">
+    <a href="#disable_single/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">disable_single(Scope, Event)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L240" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">disable_single(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>()) -> integer().</pre>
+
+      </div>
+
+<p>Disables the single-shot subscription for Event</p><p>This function changes the value of the corresponding gproc counter to <code>0</code> (disabled).</p><p>The subscription remains (e.g. for debugging purposes), but with a 'disabled' status. This function is insensitive to concurrency, using 'wrapping' ets counter update ops. This guarantees that the counter will have either the value 1 or 0, depending on which update happened last.</p>The return value indicates the previous status.
+  </section>
+</section>
+<section class="detail" id="enable_single/2">
+
+  <div class="detail-header">
+    <a href="#enable_single/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">enable_single(Scope, Event)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L257" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">enable_single(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>()) -> integer().</pre>
+
+      </div>
+
+<p>Enables the single-shot subscription for Event</p><p>This function changes the value of the corresponding gproc counter to <code>1</code> (enabled).</p><p>After enabling, the subscriber will receive the next message published for <code>Event</code>, after which the subscription is automatically disabled.</p><p>This function is insensitive to concurrency, using 'wrapping' ets counter update ops. This guarantees that the counter will have either the value 1 or 0, depending on which update happened last.</p>The return value indicates the previous status.
+  </section>
+</section>
+<section class="detail" id="list_singles/2">
+
+  <div class="detail-header">
+    <a href="#list_singles/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">list_singles(Scope, Event)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L292" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">list_singles(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>()) -> [{pid(), <a href="#t:status/0">status</a>()}].</pre>
+
+      </div>
+
+Lists all single-shot subscribers of Event, together with their status
+  </section>
+</section>
+<section class="detail" id="list_subs/2">
+
+  <div class="detail-header">
+    <a href="#list_subs/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">list_subs(Scope, Event)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L197" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">list_subs(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>()) -> [pid()].</pre>
+
+      </div>
+
+<p>List the pids of all processes subscribing to <code>Event</code></p>This function uses <code>gproc:select/2</code> to find all properties indicating a subscription.
+  </section>
+</section>
+<section class="detail" id="notify_single_if_true/4">
+
+  <div class="detail-header">
+    <a href="#notify_single_if_true/4" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">notify_single_if_true(Scope, Event, F, Msg)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L303" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">notify_single_if_true(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>(), fun(() -> boolean()), <a href="#t:msg/0">msg</a>()) -> ok.</pre>
+
+      </div>
+
+<p>Create/enable a single subscription for event; notify at once if F() -&gt; true</p>This function is a convenience function, wrapping a single-shot pub/sub around a user-provided boolean test. <code>Msg</code> should be what the publisher will send later, if the immediate test returns <code>false</code>.
+  </section>
+</section>
+<section class="detail" id="publish/3">
+
+  <div class="detail-header">
+    <a href="#publish/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">publish(Scope, Event, Msg)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L163" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">publish(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>(), <a href="#t:msg/0">msg</a>()) -> ok.</pre>
+
+      </div>
+
+<p>Publish the message <code>Msg</code> to all subscribers of <code>Event</code></p><p>The message delivered to each subscriber will be of the form:</p><p><code>{gproc_ps_event, Event, Msg}</code></p>The function uses <code>gproc:send/2</code> to send a message to all processes which have a property <code>{p,Scope,{gproc_ps_event,Event}}</code>.
+  </section>
+</section>
+<section class="detail" id="publish_cond/3">
+
+  <div class="detail-header">
+    <a href="#publish_cond/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">publish_cond(Scope, Event, Msg)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L174" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">publish_cond(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>(), <a href="#t:msg/0">msg</a>()) -> <a href="#t:msg/0">msg</a>().</pre>
+
+      </div>
+
+<p>Publishes the message <code>Msg</code> to conditional subscribers of <code>Event</code></p>The message will be delivered to each subscriber provided their respective condition tests succeed.<p><em>See also: </em><a href="#subscribe_cond/3">subscribe_cond/3</a>.</p>
+  </section>
+</section>
+<section class="detail" id="subscribe/2">
+
+  <div class="detail-header">
+    <a href="#subscribe/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">subscribe(Scope, Event)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L86" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">subscribe(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>()) -> true.</pre>
+
+      </div>
+
+<p>Subscribe to events of type <code>Event</code></p><p>Any messages published with <code>gproc_ps:publish(Scope, Event, Msg)</code> will be delivered to the current process, along with all other subscribers.</p><p>This function creates a property, <code>{p,Scope,{gproc_ps_event,Event}}</code>, which can be searched and displayed for debugging purposes.</p>Note that, as with <code>gproc:reg/1</code>, this function will raise an exception if you try to subscribe to the same event twice from the same process.
+  </section>
+</section>
+<section class="detail" id="subscribe_cond/3">
+
+  <div class="detail-header">
+    <a href="#subscribe_cond/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">subscribe_cond(Scope, Event, Spec)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L117" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">subscribe_cond(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>(), undefined | <a href="https://www.erlang.org/doc/man/ets.html#type-match_spec">ets:match_spec</a>()) -> true.</pre>
+
+      </div>
+
+<p>Subscribe conditionally to events of type <code>Event</code></p><p>This function is similar to <a href="#subscribe/2"><code>subscribe/2</code></a>, but adds a condition in the form of a match specification.</p><p>The condition is tested by the <a href="#publish_cond/3"><code>publish_cond/3</code></a> function and a message is delivered only if the condition is true. Specifically, the test is:</p><p><code>ets:match_spec_run([Msg], ets:match_spec_compile(Cond)) == [true]</code></p><p>In other words, if the match_spec returns true for a message, that message is sent to the subscriber. For any other result from the match_spec, the message is not sent. <code>Cond == undefined</code> means that all messages will be delivered (that is, <code>publish_cond/3</code> will treat 'normal' subscribers just like <a href="#publish/3"><code>publish/3</code></a> does, except that <code>publish/3</code> strictly speaking ignores the Value part of the property completely, whereas <code>publish_cond/3</code> expects it to be either undefined or a valid match spec).</p><p>This means that <code>Cond=undefined</code> and <code>Cond=[{'_',[],[true]}]</code> are equivalent.</p>Note that, as with <code>gproc:reg/1</code>, this function will raise an exception if you try to subscribe to the same event twice from the same process.
+  </section>
+</section>
+<section class="detail" id="tell_singles/3">
+
+  <div class="detail-header">
+    <a href="#tell_singles/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">tell_singles(Scope, Event, Msg)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L273" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">tell_singles(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>(), <a href="#t:msg/0">msg</a>()) -> [pid()].</pre>
+
+      </div>
+
+<p>Publish <code>Msg</code> to all single-shot subscribers of <code>Event</code></p><p>The subscriber status of each active subscriber is changed to <code>0</code> (disabled) before delivering the message. This reduces the risk that two different processes will be able to both deliver a message before disabling the subscribers. This could happen if the context switch happens just after the select operation (finding the active subscribers) and before the process is able to update the counters. In this case, it is possible that more than one can be delivered.</p>The way to prevent this from happening is to ensure that only one process publishes for <code>Event</code>.
+  </section>
+</section>
+<section class="detail" id="unsubscribe/2">
+
+  <div class="detail-header">
+    <a href="#unsubscribe/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">unsubscribe(Scope, Event)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_pubsub.erl#L150" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">unsubscribe(<a href="#t:scope/0">scope</a>(), <a href="#t:event/0">event</a>()) -> true.</pre>
+
+      </div>
+
+<p>Remove subscribtion created using <code>subscribe(Scope, Event)</code></p>This removes the property created through <code>subscribe/2</code>.
+  </section>
+</section>
+
+    </div>
+  </section>
+
+      <footer class="footer">
+
+        <p>
+          <span class="line">
+            Built using
+            <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.26.0) for the
+            <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>.
+          </span>
+          <span class="line">
+            Designed by
+            <a href="https://twitter.com/dignifiedquire" target="_blank" rel="noopener" title="@dignifiedquire" translate="no">Friedel Ziegelmayer</a>.
+          </span>
+        </p>
+        <p>
+
+            <a href="api-reference.html" title="API reference" class="line footer-button">API Reference</a>
+
+          <button class="line footer-button display-shortcuts-help">
+            Display keyboard shortcuts
+          </button>
+          <button class="line footer-button display-quick-switch">
+            Go to a HexDocs package
+          </button>
+          <button class="line footer-button display-settings">
+            Settings
+          </button>
+        </p>
+      </footer>
+    </div>
+  </div>
+</section>
+</div>
+
+
+  </body>
+</html>

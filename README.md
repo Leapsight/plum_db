@@ -23,6 +23,12 @@ PlumDB builds on top of Plumtree but changes its architecture offering additiona
 
 You will use PlumDB as a dependency in your Erlang application.
 
+### Requirements
+
+* [Erlang](https://www.erlang.org/) 24 or later
+* [Rebar3](https://rebar3.readme.io/) 3.17.0 or later
+
+
 ### Configuration
 
 PlumDB is configured using the standard Erlang sys.config.
@@ -107,13 +113,15 @@ Make node 2 and 3 join node 1
 In node #2:
 
 ```erlang
-plum_db2@127.0.0.1> plum_db_peer_service:join('plum_db1@127.0.0.1').
+> Peer = plum_db_peer_service:peer('plum_db1@127.0.0.1', {{127,0,0,1}, 18086}).
+> plum_db_peer_service:join(Peer).
 ```
 
 In node #3:
 
 ```erlang
-plum_db3@127.0.0.1> plum_db_peer_service:join('plum_db1@127.0.0.1').
+> Peer = plum_db_peer_service:peer('plum_db1@127.0.0.1', {{127,0,0,1}, 18086}).
+> plum_db_peer_service:join(Peer).
 ```
 
 Check that the other two nodes are visible in each node
@@ -121,21 +129,21 @@ Check that the other two nodes are visible in each node
 In node #1:
 
 ```erlang
-plum_db1@127.0.0.1> plum_db_peer_service:members().
+> plum_db_peer_service:members().
 {ok,['plum_db3@127.0.0.1','plum_db2@127.0.0.1']}
 ```
 
 In node #2:
 
 ```erlang
-plum_db2@127.0.0.1> plum_db_peer_service:members().
+> plum_db_peer_service:members().
 {ok,['plum_db3@127.0.0.1','plum_db1@127.0.0.1']}
 ```
 
 In node #3:
 
 ```erlang
-plum_db3@127.0.0.1> plum_db_peer_service:members().
+> plum_db_peer_service:members().
 {ok,['plum_db2@127.0.0.1','plum_db1@127.0.0.1']}
 ```
 

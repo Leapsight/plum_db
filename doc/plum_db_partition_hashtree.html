@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.26.0">
+    <meta name="project" content="plum_db v0.3.10">
+
+    <title>plum_db_partition_hashtree — plum_db v0.3.10</title>
+    <link rel="stylesheet" href="dist/erlang-e2fc4c0a4f7951ab3ca5.css" />
+
+    <script src="dist/sidebar_items-f6fa2d8b97.js"></script>
+
+      <script src="docs_config.js"></script>
+
+    <script async src="dist/app-68b26e75fcd91b8a764c.js"></script>
+
+
+  </head>
+  <body data-type="modules">
+    <script>
+
+      try {
+        if (localStorage.getItem('night-mode') === 'true') {
+          document.body.classList.add('night-mode');
+        }
+      } catch (error) { }
+    </script>
+
+<div class="main">
+
+<button class="sidebar-button sidebar-toggle">
+  <span class="icon-menu" title="Collapse/expand sidebar"></span>
+</button>
+
+<section class="sidebar">
+  <form class="sidebar-search" action="search.html">
+    <button type="submit" class="search-button" aria-label="Submit Search">
+      <span class="icon-search" aria-hidden="true" title="Submit search"></span>
+    </button>
+    <button type="button" tabindex="-1" class="search-close-button" aria-label="Cancel Search">
+      <span class="icon-cross" aria-hidden="true" title="Cancel search"></span>
+    </button>
+    <label class="search-label">
+      <input name="q" type="text" class="search-input" placeholder="Search..." aria-label="Input your search terms" autocomplete="off" />
+    </label>
+  </form>
+
+  <div class="autocomplete">
+    <div class="autocomplete-results">
+    </div>
+  </div>
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectDetails">
+      <a href="plum_db.html" class="sidebar-projectName" translate="no">
+plum_db
+      </a>
+      <strong class="sidebar-projectVersion" translate="no">
+        v0.3.10
+      </strong>
+    </div>
+
+  </div>
+
+  <ul class="sidebar-listNav">
+    <li><a id="extras-list-link" href="#full-list">Pages</a></li>
+
+      <li><a id="modules-list-link" href="#full-list">Modules</a></li>
+
+
+  </ul>
+  <div class="gradient"></div>
+  <ul id="full-list" class="sidebar-fullList"></ul>
+</section>
+
+<section class="content">
+  <div class="content-outer">
+    <div id="content" class="content-inner">
+
+<h1>
+  <span translate="no">plum_db_partition_hashtree</span> 
+  <small class="app-vsn" translate="no">(plum_db v0.3.10)</small>
+
+    <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L20" title="View Source" class="view-source" rel="help">
+      <span class="icon-code" aria-hidden="true"></span>
+      <span class="sr-only">View Source</span>
+    </a>
+
+
+</h1>
+
+
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+      Summary
+    </h1>
+
+  <div class="summary-types summary">
+    <h2>
+      <a href="#types">Types</a>
+    </h2>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_key/0" translate="no">plum_db_key/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_pkey/0" translate="no">plum_db_pkey/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_prefix/0" translate="no">plum_db_prefix/0</a>
+
+        </div>
+
+      </div>
+
+  </div>
+
+  <div class="summary-functions summary">
+    <h2>
+      <a href="#functions">Functions</a>
+    </h2>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#code_change/3" translate="no">code_change(OldVsn, State, Extra)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#compare/4" translate="no">compare(Partition, RemoteFun, HandlerFun, X)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Compare the local tree managed by this process with the remote tree also managed by a hashtree process. <code>RemoteFun</code> is used to access the buckets and segments of nodes in the remote tree and should usually call <a href="#get_bucket/5"><code>get_bucket/5</code></a> and <a href="#key_hashes/4"><code>key_hashes/4</code></a>. <code>HandlerFun</code> is used to process the differences found between the two trees. <code>HandlerAcc</code> is passed to the first invocation of <code>HandlerFun</code>. Subsequent calls are passed the return value from the previous call. This function returns the return value from the last call to <code>HandlerFun</code>. <a href="hashtree_tree.html"><code>hashtree_tree</code></a> for more details on <code>RemoteFun</code>, <code>HandlerFun</code> and <code>HandlerAcc</code>.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#delete/1" translate="no">delete(PKey)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as insert(PKey, Hash, false).</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#delete/2" translate="no">delete(Partition, PKey)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as insert(PKey, Hash, false).</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#get_bucket/5" translate="no">get_bucket(Node, Partition, Prefixes, Level, Bucket)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Return the bucket for a node in the tree managed by this process running on <code>Node</code>.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#handle_call/3" translate="no">handle_call(_, From, State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#handle_cast/2" translate="no">handle_cast(Msg, State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#handle_info/2" translate="no">handle_info(Event, State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#init/1" translate="no">init(_)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#insert/2" translate="no">insert(PKey, Hash)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as insert(PKey, Hash, false).</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#insert/3" translate="no">insert(PKey, Hash, IfMissing)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Insert a hash for a full-prefix and key into the tree managed by the process. If <code>IfMissing</code> is <code>true</code> the hash is only inserted into the tree if the key is not already present.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#insert/4" translate="no">insert(Partition, PKey, Hash, IfMissing)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#key_hashes/4" translate="no">key_hashes(Node, Partition, Prefixes, Segment)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Return the key hashes for a node in the tree managed by this process running on <code>Node</code>.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#lock/1" translate="no">lock(Partition)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Locks the tree on this node for updating on behalf of the calling process.<p><em>See also: </em><a href="#lock/3">lock/3</a>.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#lock/2" translate="no">lock(Node, Partition)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Locks the tree on <code>Node</code> for updating on behalf of the calling process.<p><em>See also: </em><a href="#lock/3">lock/3</a>.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#lock/3" translate="no">lock(Node, Partition, Pid)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Lock the tree for updating. This function must be called before updating the tree with <a href="#update/1"><code>update/1</code></a> or <a href="#update/2"><code>update/2</code></a>. If the tree is not built or already locked then the call will fail and the appropriate atom is returned. Otherwise, aqcuiring the lock succeeds and <code>ok</code> is returned.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#name/1" translate="no">name(Partition)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#prefix_hash/2" translate="no">prefix_hash(Partition, Prefix)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Return the hash for the given prefix or full-prefix</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#release_lock/1" translate="no">release_lock(Partition)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Locks the tree on this node for updating on behalf of the calling process.<p><em>See also: </em><a href="#lock/3">lock/3</a>.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#release_lock/2" translate="no">release_lock(Node, Partition)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Locks the tree on <code>Node</code> for updating on behalf of the calling process.<p><em>See also: </em><a href="#lock/3">lock/3</a>.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#release_lock/3" translate="no">release_lock(Node, Partition, Pid)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Lock the tree for updating. This function must be called before updating the tree with <a href="#update/1"><code>update/1</code></a> or <a href="#update/2"><code>update/2</code></a>. If the tree is not built or already locked then the call will fail and the appropriate atom is returned. Otherwise, aqcuiring the lock succeeds and <code>ok</code> is returned.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#reset/1" translate="no">reset(Partition)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Destroys the partition's hashtrees on the local node and rebuilds it.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#reset/2" translate="no">reset(Node, Partition)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Destroys the partition's hashtrees on node <code>Node</code> and rebuilds it.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#start_link/1" translate="no">start_link(Partition)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Starts the process using <a href="#start_link/1"><code>start_link/1</code></a>, passing in the directory where other cluster data is stored in <code>hashtrees_dir</code> as the data root.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#terminate/2" translate="no">terminate(Reason, State0)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#update/1" translate="no">update(Partition)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Updates the tree on this node.<p><em>See also: </em><a href="#update/2">update/2</a>.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#update/2" translate="no">update(Node, Partition)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Updates the tree on <code>Node</code>. The tree must be locked using one of the lock functions. If the tree is not locked or built the update will not be started and the appropriate atom is returned. Although this function should not be called without a lock, if it is and the tree is being updated by the background tick then <code>ongoing_update</code> is returned. If the tree is built and a lock has been acquired then the update is started and <code>ok</code> is returned. The update is performed asynchronously and does not block the process that manages the tree (e.g. future inserts).</div>
+
+      </div>
+
+  </div>
+
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#types">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+Types
+    </h1>
+    <div class="types-list">
+<section class="detail" id="t:plum_db_key/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_key/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_key/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L19" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_key() :: any().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_pkey/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_pkey/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_pkey/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L20" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_pkey() :: {<a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_prefix/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_prefix/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_prefix/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L15" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_prefix() :: {binary() | atom(), binary() | atom()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+Functions
+    </h1>
+    <div class="functions-list">
+<section class="detail" id="code_change/3">
+
+  <div class="detail-header">
+    <a href="#code_change/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">code_change(OldVsn, State, Extra)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L529" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="compare/4">
+
+  <div class="detail-header">
+    <a href="#compare/4" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">compare(Partition, RemoteFun, HandlerFun, X)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L383" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">compare(<a href="plum_db.html#t:partition/0">plum_db:partition</a>(), <a href="hashtree_tree.html#t:remote_fun/0">hashtree_tree:remote_fun</a>(), <a href="hashtree_tree.html#t:handler_fun/1">hashtree_tree:handler_fun</a>(X), X) -> X.</pre>
+
+      </div>
+
+Compare the local tree managed by this process with the remote tree also managed by a hashtree process. <code>RemoteFun</code> is used to access the buckets and segments of nodes in the remote tree and should usually call <a href="#get_bucket/5"><code>get_bucket/5</code></a> and <a href="#key_hashes/4"><code>key_hashes/4</code></a>. <code>HandlerFun</code> is used to process the differences found between the two trees. <code>HandlerAcc</code> is passed to the first invocation of <code>HandlerFun</code>. Subsequent calls are passed the return value from the previous call. This function returns the return value from the last call to <code>HandlerFun</code>. <a href="hashtree_tree.html"><code>hashtree_tree</code></a> for more details on <code>RemoteFun</code>, <code>HandlerFun</code> and <code>HandlerAcc</code>.
+  </section>
+</section>
+<section class="detail" id="delete/1">
+
+  <div class="detail-header">
+    <a href="#delete/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">delete(PKey)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L142" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">delete(<a href="#t:plum_db_pkey/0">plum_db_pkey</a>()) -> ok.</pre>
+
+      </div>
+
+Same as insert(PKey, Hash, false).
+  </section>
+</section>
+<section class="detail" id="delete/2">
+
+  <div class="detail-header">
+    <a href="#delete/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">delete(Partition, PKey)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L152" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">delete(pbd:partition(), <a href="#t:plum_db_pkey/0">plum_db_pkey</a>()) -> ok.</pre>
+
+      </div>
+
+Same as insert(PKey, Hash, false).
+  </section>
+</section>
+<section class="detail" id="get_bucket/5">
+
+  <div class="detail-header">
+    <a href="#get_bucket/5" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">get_bucket(Node, Partition, Prefixes, Level, Bucket)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L213" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">get_bucket(node(),
+           non_neg_integer(),
+           <a href="hashtree_tree.html#t:tree_node/0">hashtree_tree:tree_node</a>(),
+           non_neg_integer(),
+           non_neg_integer()) ->
+              <a href="https://www.erlang.org/doc/man/orddict.html#type-orddict">orddict:orddict</a>().</pre>
+
+      </div>
+
+Return the bucket for a node in the tree managed by this process running on <code>Node</code>.
+  </section>
+</section>
+<section class="detail" id="handle_call/3">
+
+  <div class="detail-header">
+    <a href="#handle_call/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">handle_call(_, From, State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L404" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="handle_cast/2">
+
+  <div class="detail-header">
+    <a href="#handle_cast/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">handle_cast(Msg, State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L449" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="handle_info/2">
+
+  <div class="detail-header">
+    <a href="#handle_info/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">handle_info(Event, State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L488" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="init/1">
+
+  <div class="detail-header">
+    <a href="#init/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">init(_)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L397" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="insert/2">
+
+  <div class="detail-header">
+    <a href="#insert/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">insert(PKey, Hash)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L162" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">insert(<a href="#t:plum_db_pkey/0">plum_db_pkey</a>(), binary()) -> ok.</pre>
+
+      </div>
+
+Same as insert(PKey, Hash, false).
+  </section>
+</section>
+<section class="detail" id="insert/3">
+
+  <div class="detail-header">
+    <a href="#insert/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">insert(PKey, Hash, IfMissing)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L173" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">insert(<a href="#t:plum_db_pkey/0">plum_db_pkey</a>(), binary(), boolean()) -> ok.</pre>
+
+      </div>
+
+Insert a hash for a full-prefix and key into the tree managed by the process. If <code>IfMissing</code> is <code>true</code> the hash is only inserted into the tree if the key is not already present.
+  </section>
+</section>
+<section class="detail" id="insert/4">
+
+  <div class="detail-header">
+    <a href="#insert/4" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">insert(Partition, PKey, Hash, IfMissing)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L179" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">insert(pbd:partition(), <a href="#t:plum_db_pkey/0">plum_db_pkey</a>(), binary(), boolean()) -> ok.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="key_hashes/4">
+
+  <div class="detail-header">
+    <a href="#key_hashes/4" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">key_hashes(Node, Partition, Prefixes, Segment)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L229" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">key_hashes(node(), non_neg_integer(), <a href="hashtree_tree.html#t:tree_node/0">hashtree_tree:tree_node</a>(), non_neg_integer()) ->
+              <a href="https://www.erlang.org/doc/man/orddict.html#type-orddict">orddict:orddict</a>().</pre>
+
+      </div>
+
+Return the key hashes for a node in the tree managed by this process running on <code>Node</code>.
+  </section>
+</section>
+<section class="detail" id="lock/1">
+
+  <div class="detail-header">
+    <a href="#lock/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">lock(Partition)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L241" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">lock(<a href="plum_db.html#t:partition/0">plum_db:partition</a>()) -> ok | not_built | locked.</pre>
+
+      </div>
+
+Locks the tree on this node for updating on behalf of the calling process.<p><em>See also: </em><a href="#lock/3">lock/3</a>.</p>
+  </section>
+</section>
+<section class="detail" id="lock/2">
+
+  <div class="detail-header">
+    <a href="#lock/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">lock(Node, Partition)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L253" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">lock(node(), <a href="plum_db.html#t:partition/0">plum_db:partition</a>()) -> ok | not_built | locked.</pre>
+
+      </div>
+
+Locks the tree on <code>Node</code> for updating on behalf of the calling process.<p><em>See also: </em><a href="#lock/3">lock/3</a>.</p>
+  </section>
+</section>
+<section class="detail" id="lock/3">
+
+  <div class="detail-header">
+    <a href="#lock/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">lock(Node, Partition, Pid)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L267" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">lock(node(), <a href="plum_db.html#t:partition/0">plum_db:partition</a>(), pid()) -> ok | not_built | locked.</pre>
+
+      </div>
+
+Lock the tree for updating. This function must be called before updating the tree with <a href="#update/1"><code>update/1</code></a> or <a href="#update/2"><code>update/2</code></a>. If the tree is not built or already locked then the call will fail and the appropriate atom is returned. Otherwise, aqcuiring the lock succeeds and <code>ok</code> is returned.
+  </section>
+</section>
+<section class="detail" id="name/1">
+
+  <div class="detail-header">
+    <a href="#name/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">name(Partition)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L119" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="prefix_hash/2">
+
+  <div class="detail-header">
+    <a href="#prefix_hash/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">prefix_hash(Partition, Prefix)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L194" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">prefix_hash(<a href="plum_db.html#t:partition/0">plum_db:partition</a>() | pid() | atom(), <a href="#t:plum_db_prefix/0">plum_db_prefix</a>() | binary() | atom()) ->
+               undefined | binary().</pre>
+
+      </div>
+
+Return the hash for the given prefix or full-prefix
+  </section>
+</section>
+<section class="detail" id="release_lock/1">
+
+  <div class="detail-header">
+    <a href="#release_lock/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">release_lock(Partition)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L280" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">release_lock(<a href="plum_db.html#t:partition/0">plum_db:partition</a>()) -> ok.</pre>
+
+      </div>
+
+Locks the tree on this node for updating on behalf of the calling process.<p><em>See also: </em><a href="#lock/3">lock/3</a>.</p>
+  </section>
+</section>
+<section class="detail" id="release_lock/2">
+
+  <div class="detail-header">
+    <a href="#release_lock/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">release_lock(Node, Partition)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L292" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">release_lock(node(), <a href="plum_db.html#t:partition/0">plum_db:partition</a>()) -> ok.</pre>
+
+      </div>
+
+Locks the tree on <code>Node</code> for updating on behalf of the calling process.<p><em>See also: </em><a href="#lock/3">lock/3</a>.</p>
+  </section>
+</section>
+<section class="detail" id="release_lock/3">
+
+  <div class="detail-header">
+    <a href="#release_lock/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">release_lock(Node, Partition, Pid)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L307" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">release_lock(node(), <a href="plum_db.html#t:partition/0">plum_db:partition</a>(), pid()) -> ok | {error, not_locked | not_allowed}.</pre>
+
+      </div>
+
+Lock the tree for updating. This function must be called before updating the tree with <a href="#update/1"><code>update/1</code></a> or <a href="#update/2"><code>update/2</code></a>. If the tree is not built or already locked then the call will fail and the appropriate atom is returned. Otherwise, aqcuiring the lock succeeds and <code>ok</code> is returned.
+  </section>
+</section>
+<section class="detail" id="reset/1">
+
+  <div class="detail-header">
+    <a href="#reset/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">reset(Partition)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L350" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">reset(<a href="plum_db.html#t:partition/0">plum_db:partition</a>()) -> ok.</pre>
+
+      </div>
+
+Destroys the partition's hashtrees on the local node and rebuilds it.
+  </section>
+</section>
+<section class="detail" id="reset/2">
+
+  <div class="detail-header">
+    <a href="#reset/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">reset(Node, Partition)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L360" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">reset(node(), <a href="plum_db.html#t:partition/0">plum_db:partition</a>()) -> ok.</pre>
+
+      </div>
+
+Destroys the partition's hashtrees on node <code>Node</code> and rebuilds it.
+  </section>
+</section>
+<section class="detail" id="start_link/1">
+
+  <div class="detail-header">
+    <a href="#start_link/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">start_link(Partition)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L105" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">start_link(non_neg_integer()) -> {ok, pid()} | ignore | {error, term()}.</pre>
+
+      </div>
+
+Starts the process using <a href="#start_link/1"><code>start_link/1</code></a>, passing in the directory where other cluster data is stored in <code>hashtrees_dir</code> as the data root.
+  </section>
+</section>
+<section class="detail" id="terminate/2">
+
+  <div class="detail-header">
+    <a href="#terminate/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">terminate(Reason, State0)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L523" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="update/1">
+
+  <div class="detail-header">
+    <a href="#update/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">update(Partition)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L321" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">update(<a href="plum_db.html#t:partition/0">plum_db:partition</a>()) -> ok | not_locked | not_built | ongoing_update.</pre>
+
+      </div>
+
+Updates the tree on this node.<p><em>See also: </em><a href="#update/2">update/2</a>.</p>
+  </section>
+</section>
+<section class="detail" id="update/2">
+
+  <div class="detail-header">
+    <a href="#update/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">update(Node, Partition)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_partition_hashtree.erl#L340" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">update(node(), <a href="plum_db.html#t:partition/0">plum_db:partition</a>()) -> ok | not_locked | not_built | ongoing_update.</pre>
+
+      </div>
+
+Updates the tree on <code>Node</code>. The tree must be locked using one of the lock functions. If the tree is not locked or built the update will not be started and the appropriate atom is returned. Although this function should not be called without a lock, if it is and the tree is being updated by the background tick then <code>ongoing_update</code> is returned. If the tree is built and a lock has been acquired then the update is started and <code>ok</code> is returned. The update is performed asynchronously and does not block the process that manages the tree (e.g. future inserts).
+  </section>
+</section>
+
+    </div>
+  </section>
+
+      <footer class="footer">
+
+        <p>
+          <span class="line">
+            Built using
+            <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.26.0) for the
+            <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>.
+          </span>
+          <span class="line">
+            Designed by
+            <a href="https://twitter.com/dignifiedquire" target="_blank" rel="noopener" title="@dignifiedquire" translate="no">Friedel Ziegelmayer</a>.
+          </span>
+        </p>
+        <p>
+
+            <a href="api-reference.html" title="API reference" class="line footer-button">API Reference</a>
+
+          <button class="line footer-button display-shortcuts-help">
+            Display keyboard shortcuts
+          </button>
+          <button class="line footer-button display-quick-switch">
+            Go to a HexDocs package
+          </button>
+          <button class="line footer-button display-settings">
+            Settings
+          </button>
+        </p>
+      </footer>
+    </div>
+  </div>
+</section>
+</div>
+
+
+  </body>
+</html>

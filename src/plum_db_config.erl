@@ -23,17 +23,23 @@
 %% @end
 %% =============================================================================
 -module(plum_db_config).
+-behaviour(app_config).
+
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
 
--define(ERROR, '$error_badarg').
+
 -define(APP, plum_db).
+-define(ERROR, '$error_badarg').
 -define(DEFAULT_RESOURCE_SIZE, erlang:system_info(schedulers)).
 
 -export([get/1]).
 -export([get/2]).
 -export([set/2]).
 -export([init/0]).
+-export([setup_dependencies/0]).
+-export([on_set/2]).
+-export([will_set/2]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -50,21 +56,108 @@
 %% @end
 %% -----------------------------------------------------------------------------
 init() ->
+    ok = setup_dependencies(),
     ok = setup_env(),
-    Config = application:get_all_env(plum_db),
+    ok = app_config:init(?APP, #{callback_mod => ?MODULE}),
+    ok = coerce_partitions(),
+    ?LOG_NOTICE(#{description => "PlumDB configuration initialised}"}),
+    ok.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec get(Key :: list() | atom() | tuple()) -> term().
+
+get(Key) ->
+    app_config:get(?APP, Key).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec get(Key :: list() | atom() | tuple(), Default :: term()) -> term().
+
+get(Key, Default) ->
+    app_config:get(?APP, Key, Default).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec set(Key :: key_value:key() | tuple(), Value :: term()) -> ok.
+
+set(Key, Value) ->
+    app_config:set(?APP, Key, Value).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec will_set(Key :: key_value:key(), Value :: any()) ->
+    ok | {ok, NewValue :: any()} | {error, Reason :: any()}.
+
+will_set(partitions, Value) ->
+    try
+        {ok, validate_partitions(Value)}
+    catch
+        _:Reason ->
+            {error, Reason}
+    end;
+
+will_set(prefixes, Values) ->
+    try
+        DefaultShardBy = get(shardy, prefix),
+        {ok, validate_prefixes(Values, DefaultShardBy)}
+    catch
+        _:Reason ->
+            {error, Reason}
+    end;
+
+will_set(_, _) ->
+    ok.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec on_set(Key :: key_value:key(), Value :: any()) -> ok.
+
+on_set(data_dir, Value) ->
+    _ = app_config:set(?APP, db_dir, db_dir(Value)),
+    Hashtrees = filename:join([Value, "hashtrees"]),
+    app_config:set(?APP, hashtrees_dir, Hashtrees);
+
+on_set(_, _) ->
+    ok.
+
+
+%% =============================================================================
+%% PRIVATE
+%% =============================================================================
+
+
+
+setup_env() ->
+    Config0 = maps:from_list(application:get_all_env(?APP)),
     DefaultWriteBufferMin = 4 * 1024 * 1024,
     DefaultWriteBufferMax = 14 * 1024 * 1024,
     Defaults = #{
         wait_for_partitions => true,
         wait_for_hashtrees => true,
         wait_for_aae_exchange => true,
-        shard_by => prefix,
         peer_service => partisan_peer_service,
         store_open_retries_delay => 2000,
         store_open_retry_Limit => 30,
+        shard_by => prefix,
+        data_dir => "data",
         data_exchange_timeout => 60000,
         hashtree_timer => 10000,
-        data_dir => "data",
         partitions => max(erlang:system_info(schedulers), 8),
         prefixes => [],
         aae_concurrency => 1,
@@ -75,185 +168,65 @@ init() ->
             {write_buffer_size_min, DefaultWriteBufferMin}, {write_buffer_size_max, DefaultWriteBufferMax}
         ]
     },
-    Map = maps:merge(Defaults, maps:from_list(Config)),
-    maps:fold(fun(K, V, ok) -> set(K, V) end, ok, Map).
-
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
--spec get(Key :: atom() | tuple() | list(atom())) -> term().
-
-get([H|T]) ->
-    case get(H) of
-        Term when is_map(Term) ->
-            case maps_utils:get_path(T, Term, ?ERROR) of
-                ?ERROR -> error(badarg);
-                Value -> Value
-            end;
-        Term when is_list(Term) ->
-            get_path(Term, T, ?ERROR);
-        _ ->
-            undefined
-    end;
-
-get(Key) when is_tuple(Key) ->
-    get(tuple_to_list(Key));
-
-get(Key) ->
-    persistent_term:get(Key).
-
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
--spec get(Key :: atom() | tuple() | list(atom()), Default :: term()) -> term().
-
-get([H|T], Default) ->
-    case get(H, Default) of
-        Term when is_map(Term) ->
-            maps_utils:get_path(T, Term, Default);
-        Term when is_list(Term) ->
-            get_path(Term, T, Default);
-        _ ->
-            Default
-    end;
-
-get(Key, Default) when is_tuple(Key) ->
-    get(tuple_to_list(Key), Default);
-
-get(Key, Default) ->
-    persistent_term:get(Key, Default).
-
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
--spec set(Key :: atom() | tuple(), Value :: term()) -> ok.
-
-set(data_dir, Value) ->
-    _ = do_set(db_dir, db_dir(Value)),
-    _ = do_set(hashtrees_dir, hashtrees_dir(Value)),
-    do_set(data_dir, Value);
-
-set(partitions, Value) ->
-    Partitions = validate_partitions(Value),
-    do_set(partitions, Partitions);
-
-set(prefixes, Values) ->
-    Prefixes = validate_prefixes(Values),
-    do_set(prefixes, Prefixes);
-
-set(Key, Value) ->
-    do_set(Key, Value).
-
-
-
-%% =============================================================================
-%% PRIVATE
-%% =============================================================================
+    Config1 = maps:merge(Defaults, Config0),
+    % Prefixes0 = maps:get(prefixes, Config1),
+    _ShardBy = validate_shard_by(maps:get(shard_by, Config1)),
+    % Prefixes1 = validate_prefixes(Prefixes0, ShardBy),
+    % Config2 = maps:put(prefixes, Prefixes1, Config1),
+    application:set_env([{?APP, maps:to_list(Config1)}]).
 
 
 
 %% @private
-setup_env() ->
-    PartisanEnv0 = maps:from_list(application:get_all_env(partisan)),
-    Channels = maps:get(channels, PartisanEnv0, []),
-    PartisanDefaults = #{
-        partisan_peer_service_manager => partisan_default_peer_service_manager
-    },
-    PartisanOverrides = #{
-        pid_encoding => false,
-        connect_disterl => false,
-        channels => [?AAE_CHANNEL | Channels]
-    },
-    PartisanEnv1 = maps:merge(
-        maps:merge(PartisanDefaults, PartisanEnv0),
-        PartisanOverrides
-    ),
-    _ = [
-        application:set_env(partisan, K, V)
-        || {K, V} <-  maps:to_list(PartisanEnv1)
-    ],
-
-    PlumtreeEnv0 = maps:from_list(application:get_all_env(plumtree)),
-    BroadcastMods = maps:get(broadcast_mods, PlumtreeEnv0, []),
-
-    PlumtreeDefaults = #{
-        peer_service => plum_db_peer_service,
-        exchange_selection => optimized,
-        lazy_tick_period => 1000,
-        exchange_tick_period => 10000,
-        broadcast_exchange_timer => 60000
-    },
-    PlumtreeOverrides = #{
-        broadcast_mods => [plum_db | BroadcastMods]
-    },
-    PlumtreeEnv1 = maps:merge(
-        maps:merge(PlumtreeDefaults, PlumtreeEnv0),
-        PlumtreeOverrides
-    ),
-    _ = [
-        application:set_env(plumtree, K, V)
-        || {K, V} <-  maps:to_list(PlumtreeEnv1)
-    ],
-    ok.
-
-
-%% @private
-do_set(Key, Value) ->
-    application:set_env(?APP, Key, Value),
-    persistent_term:put(Key, Value).
-
-
-%% @private
-get_path([H|T], Term, Default) when is_list(Term) ->
-    case lists:keyfind(H, 1, Term) of
-        false when Default == ?ERROR ->
-            error(badarg);
-        false ->
-            Default;
-        {H, Child} ->
-            get_path(T, Child, Default)
-    end;
-
-get_path([], Term, _) ->
-    Term;
-
-get_path(_, _, ?ERROR) ->
-    error(badarg);
-
-get_path(_, _, Default) ->
-    Default.
-
-
-%% @private
-validate_prefixes(undefined) ->
+validate_prefixes(undefined, _) ->
     [];
 
-validate_prefixes(L) ->
+validate_prefixes([], _) ->
+    [];
+
+validate_prefixes(L, ShardBy) ->
     Fun = fun
-        ({P, ram} = E, Acc) when is_binary(P) orelse is_atom(P) ->
-            [E | Acc];
-        ({P, ram_disk} = E, Acc) when is_binary(P) orelse is_atom(P) ->
-            [E | Acc];
-        ({P, disk} = E, Acc) when is_binary(P) orelse is_atom(P) ->
-            [E | Acc];
+        ({P, Config}, Acc)
+        when is_binary(P) orelse is_atom(P) andalso is_map(Config) ->
+            [{P, validate_prefix_config(Config, ShardBy)} | Acc];
+
+        ({P, Type}, Acc) when is_binary(P) orelse is_atom(P) ->
+            %% Support for previous form, we transform it into the new form
+            Type = validate_prefix_type(Type),
+            Config = #{type => Type, shard_by => ShardBy},
+            [{P, Config} | Acc];
+
         (Term, _) ->
-            throw({invalid_prefix_type, Term})
+            throw({invalid_prefix_config, Term})
     end,
+
     maps:from_list(lists:foldl(Fun, [], L)).
+
+
+%% @private
+validate_prefix_type(ram) -> ram;
+validate_prefix_type(ram_disk) -> ram_disk;
+validate_prefix_type(disk) -> disk;
+validate_prefix_type(Term) -> throw({invalid_prefix_type, Term}).
+
+validate_shard_by(prefix) -> prefix;
+validate_shard_by(key) -> key;
+validate_shard_by(Term) -> throw({invalid_prefix_shard_by, Term}).
+
+
+validate_prefix_config(#{type := Type, shard_by := ShardBy} = Config, _) ->
+    Type = validate_prefix_type(Type),
+    ShardBy = validate_shard_by(ShardBy),
+    Config;
+
+validate_prefix_config(#{type := Type} = Config, DefaultShardBy) ->
+    Type = validate_prefix_type(Type),
+    Config#{shard_by => DefaultShardBy}.
 
 
 %% @private
 db_dir(Value) -> filename:join([Value, "db"]).
 
-
-%% @private
-hashtrees_dir(Value) -> filename:join([Value, "hashtrees"]).
 
 
 %% @private
@@ -264,15 +237,19 @@ validate_partitions(0) ->
     validate_partitions(1);
 
 validate_partitions(N) when is_integer(N) ->
+    N.
+
+coerce_partitions() ->
+    N = get(partitions),
     DataDir = get(data_dir),
     Pattern = filename:join([db_dir(DataDir), "*"]),
     Subdirs = filelib:wildcard(Pattern),
     case length(Subdirs) of
         0 ->
             %% We have no previous data, we take the user provided config
-            N;
+            ok;
         N ->
-            N;
+            ok;
         M ->
             %% We already have data in data_dir then
             %% we should coerce this value to the actual number of partitions
@@ -282,7 +259,41 @@ validate_partitions(N) when is_integer(N) ->
                 existing => M,
                 data_dir => DataDir
             }),
-            M
+            set(partitions, M)
     end.
 
 
+
+%% @private
+setup_dependencies() ->
+    PartisanDefaults = #{
+        partisan_peer_service_manager => partisan_pluggable_peer_service_manager,
+        connect_disterl => false,
+        exchange_selection => optimized,
+        lazy_tick_period => 1000,
+        exchange_tick_period => 10000,
+        broadcast_exchange_timer => 60000
+    },
+
+    PartisanEnv0 = maps:from_list(application:get_all_env(partisan)),
+    Channels = maps:get(channels, PartisanEnv0, []),
+    BroadcastMods = maps:get(broadcast_mods, PartisanEnv0, []),
+
+    PartisanOverrides = #{
+        pid_encoding => false,
+        channels => [?DATA_CHANNEL | Channels],
+        broadcast_mods => ordsets:to_list(
+            ordsets:union(
+                ordsets:from_list([plum_db, partisan_plumtree_backend]),
+                ordsets:from_list(BroadcastMods)
+            )
+        )
+    },
+
+    PartisanEnv1 = maps:merge(
+        maps:merge(PartisanDefaults, PartisanEnv0),
+        PartisanOverrides
+    ),
+
+    ok = application:set_env([{partisan, maps:to_list(PartisanEnv1)}]),
+    ok.

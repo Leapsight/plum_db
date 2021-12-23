@@ -20,14 +20,14 @@ dialyzer: compile
 
 node1:
 	${REBAR} as node1 release
-	_build/node1/rel/plum_db/bin/plum_db console
+	ERL_DIST_PORT=37781 _build/node1/rel/plum_db/bin/plum_db console
 
 node2:
 	${REBAR} as node2 release
-	_build/node2/rel/plum_db/bin/plum_db console
+	ERL_DIST_PORT=37782 _build/node2/rel/plum_db/bin/plum_db console
 
 node3:
 	${REBAR} as node3 release
-	_build/node3/rel/plum_db/bin/plum_db console
+	ERL_DIST_PORT=37783 _build/node3/rel/plum_db/bin/plum_db console
 
 

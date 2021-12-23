@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.26.0">
+    <meta name="project" content="plum_db v0.3.10">
+
+    <title>plum_db_dvvset — plum_db v0.3.10</title>
+    <link rel="stylesheet" href="dist/erlang-e2fc4c0a4f7951ab3ca5.css" />
+
+    <script src="dist/sidebar_items-f6fa2d8b97.js"></script>
+
+      <script src="docs_config.js"></script>
+
+    <script async src="dist/app-68b26e75fcd91b8a764c.js"></script>
+
+
+  </head>
+  <body data-type="modules">
+    <script>
+
+      try {
+        if (localStorage.getItem('night-mode') === 'true') {
+          document.body.classList.add('night-mode');
+        }
+      } catch (error) { }
+    </script>
+
+<div class="main">
+
+<button class="sidebar-button sidebar-toggle">
+  <span class="icon-menu" title="Collapse/expand sidebar"></span>
+</button>
+
+<section class="sidebar">
+  <form class="sidebar-search" action="search.html">
+    <button type="submit" class="search-button" aria-label="Submit Search">
+      <span class="icon-search" aria-hidden="true" title="Submit search"></span>
+    </button>
+    <button type="button" tabindex="-1" class="search-close-button" aria-label="Cancel Search">
+      <span class="icon-cross" aria-hidden="true" title="Cancel search"></span>
+    </button>
+    <label class="search-label">
+      <input name="q" type="text" class="search-input" placeholder="Search..." aria-label="Input your search terms" autocomplete="off" />
+    </label>
+  </form>
+
+  <div class="autocomplete">
+    <div class="autocomplete-results">
+    </div>
+  </div>
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectDetails">
+      <a href="plum_db.html" class="sidebar-projectName" translate="no">
+plum_db
+      </a>
+      <strong class="sidebar-projectVersion" translate="no">
+        v0.3.10
+      </strong>
+    </div>
+
+  </div>
+
+  <ul class="sidebar-listNav">
+    <li><a id="extras-list-link" href="#full-list">Pages</a></li>
+
+      <li><a id="modules-list-link" href="#full-list">Modules</a></li>
+
+
+  </ul>
+  <div class="gradient"></div>
+  <ul id="full-list" class="sidebar-fullList"></ul>
+</section>
+
+<section class="content">
+  <div class="content-outer">
+    <div id="content" class="content-inner">
+
+<h1>
+  <span translate="no">plum_db_dvvset</span> 
+  <small class="app-vsn" translate="no">(plum_db v0.3.10)</small>
+
+    <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L42" title="View Source" class="view-source" rel="help">
+      <span class="icon-code" aria-hidden="true"></span>
+      <span class="sr-only">View Source</span>
+    </a>
+
+
+</h1>
+
+
+  <section id="moduledoc">
+<p>An Erlang implementation of *compact* Dotted Version Vectors, which provides a container for a set of concurrent values (siblings) with causal order information.</p>For further reading, visit the <a href="https://github.com/ricardobcl/Dotted-Version-Vectors/tree/ompact">github page</a>.
+  </section>
+
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+      Summary
+    </h1>
+
+  <div class="summary-types summary">
+    <h2>
+      <a href="#types">Types</a>
+    </h2>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:clock/0" translate="no">clock/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:counter/0" translate="no">counter/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:entries/0" translate="no">entries/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:id/0" translate="no">id/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:value/0" translate="no">value/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:values/0" translate="no">values/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:vector/0" translate="no">vector/0</a>
+
+        </div>
+
+      </div>
+
+  </div>
+
+  <div class="summary-functions summary">
+    <h2>
+      <a href="#functions">Functions</a>
+    </h2>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#equal/2" translate="no">equal(C1, C2)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Compares the equality of both clocks, regarding only the causal histories, thus ignoring the values.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#ids/1" translate="no">ids(_)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns all the ids used in this clock set.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#join/1" translate="no">join(_)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Return a version vector that represents the causal history.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#last/2" translate="no">last(LessOrEqual, C)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns the latest value in the clock set, according to function F(A,B), which returns *true* if A compares less than or equal to B, false otherwise.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#less/2" translate="no">less(_, _)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns True if the first clock is causally older than the second clock, thus values on the first clock are outdated. Returns False otherwise.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#lww/2" translate="no">lww(LessOrEqual, C)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Return a clock with the same causal history, but with only one value in its original position. This value is the newest value in the given clock, according to function F(A,B), which returns *true* if A compares less than or equal to B, false otherwise.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#map/2" translate="no">map(F, _)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Maps (applies) a function on all values in this clock set, returning the same clock set with the updated values.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#new/1" translate="no">new(Vs)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Constructs a new clock set without causal history, and receives a list of values that gos to the anonymous list.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#new/2" translate="no">new(VV, Vs)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Constructs a new clock set with the causal history of the given version vector / vector clock, and receives a list of values that gos to the anonymous list. The version vector SHOULD BE a direct result of join/1.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#reconcile/2" translate="no">reconcile(Winner, C)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Return a clock with the same causal history, but with only one value in the anonymous placeholder. This value is the result of the function F, which takes all values and returns a single new value.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#size/1" translate="no">size(_)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns the total number of values in this clock set.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#sync/1" translate="no">sync(L)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Synchronizes a list of clocks using sync/2. It discards (causally) outdated values, while merging all causal histories.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#update/2" translate="no">update(_, I)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Advances the causal history with the given id. The new value is the *anonymous dot* of the clock. The client clock SHOULD BE a direct result of new/2.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#update/3" translate="no">update(_, Cr, I)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Advances the causal history of the first clock with the given id, while synchronizing with the second clock, thus the new clock is causally newer than both clocks in the argument. The new value is the *anonymous dot* of the clock. The first clock SHOULD BE a direct result of new/2, which is intended to be the client clock with the new value in the *anonymous dot* while the second clock is from the local server.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#values/1" translate="no">values(_)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns all the values used in this clock set, including the anonymous values.</div>
+
+      </div>
+
+  </div>
+
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#types">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+Types
+    </h1>
+    <div class="types-list">
+<section class="detail" id="t:clock/0">
+
+  <div class="detail-header">
+    <a href="#t:clock/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">clock/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L73" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">clock() :: {<a href="#t:entries/0">entries</a>(), <a href="#t:values/0">values</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:counter/0">
+
+  <div class="detail-header">
+    <a href="#t:counter/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">counter/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L79" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">counter() :: non_neg_integer().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:entries/0">
+
+  <div class="detail-header">
+    <a href="#t:entries/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">entries/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L75" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">entries() :: [{<a href="#t:id/0">id</a>(), <a href="#t:counter/0">counter</a>(), <a href="#t:values/0">values</a>()}].</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:id/0">
+
+  <div class="detail-header">
+    <a href="#t:id/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">id/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L76" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">id() :: any().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:value/0">
+
+  <div class="detail-header">
+    <a href="#t:value/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">value/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L78" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">value() :: any().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:values/0">
+
+  <div class="detail-header">
+    <a href="#t:values/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">values/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L77" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">values() :: [<a href="#t:value/0">value</a>()].</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:vector/0">
+
+  <div class="detail-header">
+    <a href="#t:vector/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">vector/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L74" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">vector() :: [{<a href="#t:id/0">id</a>(), <a href="#t:counter/0">counter</a>()}].</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+Functions
+    </h1>
+    <div class="functions-list">
+<section class="detail" id="equal/2">
+
+  <div class="detail-header">
+    <a href="#equal/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">equal(C1, C2)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L200" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">equal(<a href="#t:clock/0">clock</a>() | <a href="#t:vector/0">vector</a>(), <a href="#t:clock/0">clock</a>() | <a href="#t:vector/0">vector</a>()) -> boolean().</pre>
+
+      </div>
+
+Compares the equality of both clocks, regarding only the causal histories, thus ignoring the values.
+  </section>
+</section>
+<section class="detail" id="ids/1">
+
+  <div class="detail-header">
+    <a href="#ids/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">ids(_)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L190" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">ids(<a href="#t:clock/0">clock</a>()) -> [<a href="#t:id/0">id</a>()].</pre>
+
+      </div>
+
+Returns all the ids used in this clock set.
+  </section>
+</section>
+<section class="detail" id="join/1">
+
+  <div class="detail-header">
+    <a href="#join/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">join(_)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L151" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">join(<a href="#t:clock/0">clock</a>()) -> <a href="#t:vector/0">vector</a>().</pre>
+
+      </div>
+
+Return a version vector that represents the causal history.
+  </section>
+</section>
+<section class="detail" id="last/2">
+
+  <div class="detail-header">
+    <a href="#last/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">last(LessOrEqual, C)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L250" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">last(LessOrEqual :: fun((<a href="#t:value/0">value</a>(), <a href="#t:value/0">value</a>()) -> boolean()), <a href="#t:clock/0">clock</a>()) -> <a href="#t:value/0">value</a>().</pre>
+
+      </div>
+
+Returns the latest value in the clock set, according to function F(A,B), which returns *true* if A compares less than or equal to B, false otherwise.
+  </section>
+</section>
+<section class="detail" id="less/2">
+
+  <div class="detail-header">
+    <a href="#less/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">less(_, _)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L215" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">less(<a href="#t:clock/0">clock</a>(), <a href="#t:clock/0">clock</a>()) -> boolean().</pre>
+
+      </div>
+
+Returns True if the first clock is causally older than the second clock, thus values on the first clock are outdated. Returns False otherwise.
+  </section>
+</section>
+<section class="detail" id="lww/2">
+
+  <div class="detail-header">
+    <a href="#lww/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">lww(LessOrEqual, C)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L259" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">lww(LessOrEqual :: fun((<a href="#t:value/0">value</a>(), <a href="#t:value/0">value</a>()) -> boolean()), <a href="#t:clock/0">clock</a>()) -> <a href="#t:clock/0">clock</a>().</pre>
+
+      </div>
+
+Return a clock with the same causal history, but with only one value in its original position. This value is the newest value in the given clock, according to function F(A,B), which returns *true* if A compares less than or equal to B, false otherwise.
+  </section>
+</section>
+<section class="detail" id="map/2">
+
+  <div class="detail-header">
+    <a href="#map/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">map(F, _)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L234" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">map(fun((<a href="#t:value/0">value</a>()) -> <a href="#t:value/0">value</a>()), <a href="#t:clock/0">clock</a>()) -> <a href="#t:clock/0">clock</a>().</pre>
+
+      </div>
+
+Maps (applies) a function on all values in this clock set, returning the same clock set with the updated values.
+  </section>
+</section>
+<section class="detail" id="new/1">
+
+  <div class="detail-header">
+    <a href="#new/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">new(Vs)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L85" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">new(<a href="#t:value/0">value</a>() | [<a href="#t:value/0">value</a>()]) -> <a href="#t:clock/0">clock</a>().</pre>
+
+      </div>
+
+Constructs a new clock set without causal history, and receives a list of values that gos to the anonymous list.
+  </section>
+</section>
+<section class="detail" id="new/2">
+
+  <div class="detail-header">
+    <a href="#new/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">new(VV, Vs)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L93" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">new(<a href="#t:vector/0">vector</a>(), <a href="#t:value/0">value</a>() | [<a href="#t:value/0">value</a>()]) -> <a href="#t:clock/0">clock</a>().</pre>
+
+      </div>
+
+Constructs a new clock set with the causal history of the given version vector / vector clock, and receives a list of values that gos to the anonymous list. The version vector SHOULD BE a direct result of join/1.
+  </section>
+</section>
+<section class="detail" id="reconcile/2">
+
+  <div class="detail-header">
+    <a href="#reconcile/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">reconcile(Winner, C)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L242" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">reconcile(Winner :: fun(([<a href="#t:value/0">value</a>()]) -> <a href="#t:value/0">value</a>()), <a href="#t:clock/0">clock</a>()) -> <a href="#t:clock/0">clock</a>().</pre>
+
+      </div>
+
+Return a clock with the same causal history, but with only one value in the anonymous placeholder. This value is the result of the function F, which takes all values and returns a single new value.
+  </section>
+</section>
+<section class="detail" id="size/1">
+
+  <div class="detail-header">
+    <a href="#size/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">size(_)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L186" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">size(<a href="#t:clock/0">clock</a>()) -> non_neg_integer().</pre>
+
+      </div>
+
+Returns the total number of values in this clock set.
+  </section>
+</section>
+<section class="detail" id="sync/1">
+
+  <div class="detail-header">
+    <a href="#sync/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">sync(L)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L102" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">sync([<a href="#t:clock/0">clock</a>()]) -> <a href="#t:clock/0">clock</a>().</pre>
+
+      </div>
+
+Synchronizes a list of clocks using sync/2. It discards (causally) outdated values, while merging all causal histories.
+  </section>
+</section>
+<section class="detail" id="update/2">
+
+  <div class="detail-header">
+    <a href="#update/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">update(_, I)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L157" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">update(<a href="#t:clock/0">clock</a>(), <a href="#t:id/0">id</a>()) -> <a href="#t:clock/0">clock</a>().</pre>
+
+      </div>
+
+Advances the causal history with the given id. The new value is the *anonymous dot* of the clock. The client clock SHOULD BE a direct result of new/2.
+  </section>
+</section>
+<section class="detail" id="update/3">
+
+  <div class="detail-header">
+    <a href="#update/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">update(_, Cr, I)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L169" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">update(<a href="#t:clock/0">clock</a>(), <a href="#t:clock/0">clock</a>(), <a href="#t:id/0">id</a>()) -> <a href="#t:clock/0">clock</a>().</pre>
+
+      </div>
+
+Advances the causal history of the first clock with the given id, while synchronizing with the second clock, thus the new clock is causally newer than both clocks in the argument. The new value is the *anonymous dot* of the clock. The first clock SHOULD BE a direct result of new/2, which is intended to be the client clock with the new value in the *anonymous dot* while the second clock is from the local server.
+  </section>
+</section>
+<section class="detail" id="values/1">
+
+  <div class="detail-header">
+    <a href="#values/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">values(_)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db_dvvset.erl#L195" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">values(<a href="#t:clock/0">clock</a>()) -> [<a href="#t:value/0">value</a>()].</pre>
+
+      </div>
+
+Returns all the values used in this clock set, including the anonymous values.
+  </section>
+</section>
+
+    </div>
+  </section>
+
+      <footer class="footer">
+
+        <p>
+          <span class="line">
+            Built using
+            <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.26.0) for the
+            <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>.
+          </span>
+          <span class="line">
+            Designed by
+            <a href="https://twitter.com/dignifiedquire" target="_blank" rel="noopener" title="@dignifiedquire" translate="no">Friedel Ziegelmayer</a>.
+          </span>
+        </p>
+        <p>
+
+            <a href="api-reference.html" title="API reference" class="line footer-button">API Reference</a>
+
+          <button class="line footer-button display-shortcuts-help">
+            Display keyboard shortcuts
+          </button>
+          <button class="line footer-button display-quick-switch">
+            Go to a HexDocs package
+          </button>
+          <button class="line footer-button display-settings">
+            Settings
+          </button>
+        </p>
+      </footer>
+    </div>
+  </div>
+</section>
+</div>
+
+
+  </body>
+</html>

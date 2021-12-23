@@ -49,6 +49,8 @@
 -export([mynode/0]).
 -export([myself/0]).
 -export([peer_service/0]).
+-export([peer/1]).
+-export([peer/2]).
 -export([stop/0]).
 -export([stop/1]).
 -export([sync_join/1]).
@@ -133,7 +135,10 @@ peer_service() ->
 %% @doc Prepare node to join a cluster.
 %% @end
 %% ----------------------------------------------------------------------------
-join(Node) ->
+join(Nodename) when is_atom(Nodename) ->
+    do(join, [Nodename, true]);
+
+join(Node) when is_map(Node) ->
     do(join, [Node, true]).
 
 
@@ -223,6 +228,29 @@ myself() ->
 
 
 %% -----------------------------------------------------------------------------
+%% @doc Returns a local peer node i.e. running on the same host, with nodename
+%% `Name' and same metadata as `myself/0'.
+%% You should only use this function for testing purposes as there is no much
+%% sense in running a plum_db cluster on the same host.
+%% @end
+%% -----------------------------------------------------------------------------
+peer(Nodename) ->
+    peer(Nodename, undefined).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Returns a peer with nodename `Name' and host 'Host' and same metadata as `myself/0'.
+%% @end
+%% -----------------------------------------------------------------------------
+peer(Nodename, Term)
+when is_atom(Nodename) ->
+    Addresses = coerce_addresses(Term),
+    %% We assume all nodes have the same parallelism and channel config
+    Map = partisan_peer_service_manager:myself(),
+    Map#{name => Nodename, listen_addrs => Addresses}.
+
+
+%% -----------------------------------------------------------------------------
 %% @doc Return myself.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -287,7 +315,7 @@ add_sup_callback(Function) ->
 %% @end
 %% -----------------------------------------------------------------------------
 cast_message(Name, ServerRef, Message) ->
-    do(cast_message, [Name, ?AAE_CHANNEL, ServerRef, Message]).
+    do(cast_message, [Name, ?DATA_CHANNEL, ServerRef, Message]).
 
 
 %% -----------------------------------------------------------------------------
@@ -295,7 +323,7 @@ cast_message(Name, ServerRef, Message) ->
 %% @end
 %% -----------------------------------------------------------------------------
 forward_message(Name, ServerRef, Message) ->
-    do(forward_message, [Name, ?AAE_CHANNEL, ServerRef, Message]).
+    do(forward_message, [Name, ?DATA_CHANNEL, ServerRef, Message]).
 
 
 
@@ -313,4 +341,17 @@ do(Function, Args) ->
     Backend = peer_service(),
     erlang:apply(Backend, Function, Args).
 
+
+%% @private
+coerce_addresses({IP, Port})  ->
+    [#{ip => IP, port => Port}];
+
+coerce_addresses([{_, _} | _] = L) ->
+    [#{ip => IP, port => Port} || {IP, Port} <- L];
+
+coerce_addresses(#{ip := _, port := _} = L)  ->
+    [L];
+
+coerce_addresses([#{ip := _, port := _} | _] = L) ->
+    L.
 
