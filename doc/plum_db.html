@@ -1,0 +1,4072 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.26.0">
+    <meta name="project" content="plum_db v0.3.10">
+
+    <title>plum_db — plum_db v0.3.10</title>
+    <link rel="stylesheet" href="dist/erlang-e2fc4c0a4f7951ab3ca5.css" />
+
+    <script src="dist/sidebar_items-f6fa2d8b97.js"></script>
+
+      <script src="docs_config.js"></script>
+
+    <script async src="dist/app-68b26e75fcd91b8a764c.js"></script>
+
+
+  </head>
+  <body data-type="modules">
+    <script>
+
+      try {
+        if (localStorage.getItem('night-mode') === 'true') {
+          document.body.classList.add('night-mode');
+        }
+      } catch (error) { }
+    </script>
+
+<div class="main">
+
+<button class="sidebar-button sidebar-toggle">
+  <span class="icon-menu" title="Collapse/expand sidebar"></span>
+</button>
+
+<section class="sidebar">
+  <form class="sidebar-search" action="search.html">
+    <button type="submit" class="search-button" aria-label="Submit Search">
+      <span class="icon-search" aria-hidden="true" title="Submit search"></span>
+    </button>
+    <button type="button" tabindex="-1" class="search-close-button" aria-label="Cancel Search">
+      <span class="icon-cross" aria-hidden="true" title="Cancel search"></span>
+    </button>
+    <label class="search-label">
+      <input name="q" type="text" class="search-input" placeholder="Search..." aria-label="Input your search terms" autocomplete="off" />
+    </label>
+  </form>
+
+  <div class="autocomplete">
+    <div class="autocomplete-results">
+    </div>
+  </div>
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectDetails">
+      <a href="Plum DB.html" class="sidebar-projectName" translate="no">
+plum_db
+      </a>
+      <strong class="sidebar-projectVersion" translate="no">
+        v0.3.10
+      </strong>
+    </div>
+
+  </div>
+
+  <ul class="sidebar-listNav">
+    <li><a id="extras-list-link" href="#full-list">Pages</a></li>
+
+      <li><a id="modules-list-link" href="#full-list">Modules</a></li>
+
+
+  </ul>
+  <div class="gradient"></div>
+  <ul id="full-list" class="sidebar-fullList"></ul>
+</section>
+
+<section class="content">
+  <div class="content-outer">
+    <div id="content" class="content-inner">
+
+<h1>
+  <span translate="no">plum_db</span> 
+  <small class="app-vsn" translate="no">(plum_db v0.3.10)</small>
+
+    <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L20" title="View Source" class="view-source" rel="help">
+      <span class="icon-code" aria-hidden="true"></span>
+      <span class="sr-only">View Source</span>
+    </a>
+
+
+</h1>
+
+
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+      Summary
+    </h1>
+
+  <div class="summary-types summary">
+    <h2>
+      <a href="#types">Types</a>
+    </h2>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:continuation/0" translate="no">continuation/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:continuation_or_eot/0" translate="no">continuation_or_eot/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:delete_opts/0" translate="no">delete_opts/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:eot/0" translate="no">eot/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:erase_opts/0" translate="no">erase_opts/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:fold_elements_fun/0" translate="no">fold_elements_fun/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:fold_fun/0" translate="no">fold_fun/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:fold_opts/0" translate="no">fold_opts/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:foreach_fun/0" translate="no">foreach_fun/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:get_opt/0" translate="no">get_opt/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:get_opt_allow_put/0" translate="no">get_opt_allow_put/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:get_opt_default_val/0" translate="no">get_opt_default_val/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:get_opt_resolver/0" translate="no">get_opt_resolver/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:get_opts/0" translate="no">get_opts/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:it_opt/0" translate="no">it_opt/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:it_opt_default/0" translate="no">it_opt_default/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:it_opt_default_fun/0" translate="no">it_opt_default_fun/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:it_opt_first/0" translate="no">it_opt_first/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:it_opt_keymatch/0" translate="no">it_opt_keymatch/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:it_opt_keys_only/0" translate="no">it_opt_keys_only/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:it_opt_partitions/0" translate="no">it_opt_partitions/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:it_opt_resolver/0" translate="no">it_opt_resolver/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:it_opts/0" translate="no">it_opts/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:iterator/0" translate="no">iterator/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:iterator_element/0" translate="no">iterator_element/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:match_opt_limit/0" translate="no">match_opt_limit/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:match_opt_remove_tombstones/0" translate="no">match_opt_remove_tombstones/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:match_opts/0" translate="no">match_opts/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:partition/0" translate="no">partition/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_broadcast/0" translate="no">plum_db_broadcast/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_context/0" translate="no">plum_db_context/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_key/0" translate="no">plum_db_key/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_modifier/0" translate="no">plum_db_modifier/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_object/0" translate="no">plum_db_object/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_pkey/0" translate="no">plum_db_pkey/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_pkey_pattern/0" translate="no">plum_db_pkey_pattern/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_prefix/0" translate="no">plum_db_prefix/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_prefix_pattern/0" translate="no">plum_db_prefix_pattern/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_resolver/0" translate="no">plum_db_resolver/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_tombstone/0" translate="no">plum_db_tombstone/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_value/0" translate="no">plum_db_value/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:plum_db_wildcard/0" translate="no">plum_db_wildcard/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:prefix_type/0" translate="no">prefix_type/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:prefixes/0" translate="no">prefixes/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:put_opts/0" translate="no">put_opts/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:remote_iterator/0" translate="no">remote_iterator/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:state/0" translate="no">state/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:value_or_values/0" translate="no">value_or_values/0</a>
+
+        </div>
+
+      </div>
+
+  </div>
+
+  <div class="summary-functions summary">
+    <h2>
+      <a href="#functions">Functions</a>
+    </h2>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#broadcast_data/1" translate="no">broadcast_data(Plum_db_broadcast)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Deconstructs a broadcast that is sent using <code>broadcast/2</code> as the handling module returning the message id and payload.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#delete/2" translate="no">delete(FullPrefix, Key)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as delete(FullPrefix, Key, [])</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#delete/3" translate="no">delete(FullPrefix, Key, Opts)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Logically deletes the value associated with the given prefix and key locally and then triggers a broradcast to notify other nodes in the cluster. Currently there are no delete options.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#erase/2" translate="no">erase(FullPrefix, Key)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as delete(FullPrefix, Key, [])</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#erase/3" translate="no">erase(PKey, Key, Opts)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Logically erases the value associated with the given prefix and key locally and then triggers a broradcast to notify other nodes in the cluster. Currently there are no erase options.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#exchange/1" translate="no">exchange(Peer)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Triggers an asynchronous exchange. Calls <a href="#exchange/2"><code>exchange/2</code></a> with an empty map as the second argument. &gt; The exchange is only triggered if the application option <code>aae_enabled</code> is set to <code>true</code>.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#exchange/2" translate="no">exchange(Peer, Opts)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Triggers an asynchronous exchange. The exchange is performed asynchronously by spawning a supervised process. Read the <a href="plum_db_exchanges_sup.html"><code>plum_db_exchanges_sup</code></a> documentation.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#fold/3" translate="no">fold(Fun, Acc0, PrefixPatternOrCont)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as fold(Fun, Acc0, FullPrefix, []).</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#fold/4" translate="no">fold(Fun, Acc0, PrefixPatternOrCont, Opts)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Fold over all keys and values stored under a given prefix/subprefix. Available options are the same as those provided to iterator/2. To return early, throw {break, Result} in your fold function.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#fold_elements/3" translate="no">fold_elements(Fun, Acc0, FullPrefix)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as fold_elements(Fun, Acc0, FullPrefix, []).</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#fold_elements/4" translate="no">fold_elements(Fun, Acc0, FullPrefix, Opts)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Fold over all elements stored under a given prefix/subprefix. Available options are the same as those provided to iterator/2. To return early, throw {break, Result} in your fold function.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#foreach/2" translate="no">foreach(Fun, FullPrefixPattern)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as fold(Fun, Acc0, FullPrefix, []).</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#foreach/3" translate="no">foreach(Fun, FullPrefixPattern, Opts)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Fold over all keys and values stored under a given prefix/subprefix. Available options are the same as those provided to iterator/2. To return early, throw {break, Result} in your fold function.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#get/2" translate="no">get(FullPrefix, Key)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as get(FullPrefix, Key, [])</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#get/3" translate="no">get(FullPrefix, Key, Opts)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Retrieves the local value stored at the given fullprefix <code>FullPrefix</code> and key <code>Key</code> using options <code>Opts</code>.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#get_object/1" translate="no">get_object(PKey)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns a Dotted Version Vector Set or undefined. When reading the value for a subsequent call to put/3 the context can be obtained using plum_db_object:context/1. Values can obtained w/ plum_db_object:values/1.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#get_object/2" translate="no">get_object(PKey, Opts)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns a Dotted Version Vector Set or undefined. When reading the value for a subsequent call to put/3 the context can be obtained using plum_db_object:context/1. Values can obtained w/ plum_db_object:values/1.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#get_object/3" translate="no">get_object(Node, PKey, Opts)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as get/1 but reads the value from <code>Node</code> This is function is used by plum_db_exchange_statem.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#graft/1" translate="no">graft(_)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Returns the object associated with the given prefixed key <code>Pkey</code> and context <code>Context</code> (message id) if the currently stored version has an equal context. Otherwise returns the atom <code>stale</code>.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#is_partition/1" translate="no">is_partition(Id)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns true if an identifier is a valid partition.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#is_stale/1" translate="no">is_stale(_)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Returns false if the update (or a causally newer update) has already been received (stored locally).</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#iterate/1" translate="no">iterate(Remote_iterator)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Advances the iterator by one key, full-prefix or sub-prefix</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#iterator/0" translate="no">iterator()</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Returns a full-prefix iterator: an iterator for all full-prefixes that have keys stored under them. When done with the iterator, iterator_close/1 must be called. This iterator works across all existing store partitions, treating the set of partitions as a single logical database. As a result, ordering is partial per partition and not global across them.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#iterator/1" translate="no">iterator(Term)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as calling <code>iterator(FullPrefix, [])</code>.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#iterator/2" translate="no">iterator(Continuation, Opts)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Return an iterator pointing to the first key stored under a prefix</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#iterator_close/1" translate="no">iterator_close(Remote_iterator)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Closes the iterator. This function must be called on all open iterators</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#iterator_default/1" translate="no">iterator_default(Iterator)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns the value returned when an iterator points to a tombstone. If the default used when creating the given iterator is a function it will be applied to the current key the iterator points at. If no default was provided the tombstone value was returned. This function should only be called after checking iterator_done/1.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#iterator_done/1" translate="no">iterator_done(Remote_iterator)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns true if there is nothing more to iterate over</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#iterator_element/1" translate="no">iterator_element(Remote_iterator)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#iterator_key/1" translate="no">iterator_key(Iterator)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Return the key pointed at by the iterator. Before calling this function, check the iterator is not complete w/ iterator_done/1. No conflict resolution will be performed as a result of calling this function.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#iterator_key_value/1" translate="no">iterator_key_value(Iterator)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Returns a single value pointed at by the iterator. If there are conflicts and a resolver was specified in the options when creating this iterator, they will be resolved. Otherwise, and error is returned. If conflicts are resolved, the resolved value is written locally and a broadcast is performed to update other nodes in the cluster if <code>allow_put</code> is <code>true</code> (the default value). If <code>allow_put</code> is <code>false</code>, values are resolved but not written or broadcast.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#iterator_key_values/1" translate="no">iterator_key_values(Iterator)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Return the key and all sibling values pointed at by the iterator. Before calling this function, check the iterator is not complete w/ iterator_done/1. If a resolver was passed to iterator/0 when creating the given iterator, siblings will be resolved using the given function or last-write-wins (if <code>lww</code> is passed as the resolver). If no resolver was used then no conflict resolution will take place. If conflicts are resolved, the resolved value is written to local store and a broadcast is submitted to update other nodes in the cluster if <code>allow_put</code> is <code>true</code>. If <code>allow_put</code> is <code>false</code> the values are resolved but are not written or broadcast. A single value is returned as the second element of the tuple in the case values are resolved. If no resolution takes place then a list of values will be returned as the second element (even if there is only a single sibling).</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#iterator_prefix/1" translate="no">iterator_prefix(Remote_iterator)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns the full-prefix being iterated by this iterator.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#match/1" translate="no">match(Cont)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#match/2" translate="no">match(Continuation, Opts)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#match/3" translate="no">match(FullPrefix0, KeyPattern, Opts0)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#merge/2" translate="no">merge(_, Obj)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Merges a remote copy of an object record sent via broadcast w/ the local view for the key contained in the message id. If the remote copy is causally older than the current data stored then <code>false</code> is returned and no updates are merged. Otherwise, the remote copy is merged (possibly generating siblings) and <code>true</code> is returned.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#merge/3" translate="no">merge(Node, _, Obj)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Same as merge/2 but merges the object on <code>Node</code></p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#partition_count/0" translate="no">partition_count()</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns the number of partitions.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#partitions/0" translate="no">partitions()</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns the list of the partition identifiers starting at 0.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#prefix_hash/2" translate="no">prefix_hash(Partition, Prefix)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Return the local hash associated with a full-prefix or prefix. The hash value is updated periodically and does not always reflect the most recent value. This function can be used to determine when keys stored under a full-prefix or prefix have changed. If the tree has not yet been updated or there are no keys stored the given (full-)prefix. <code>undefined</code> is returned.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#prefix_type/1" translate="no">prefix_type(Prefix)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#prefixes/0" translate="no">prefixes()</a>
+
+        </div>
+
+          <div class="summary-synopsis">Returns a mapping of prefixes (the first element of a plum_db_prefix() tuple) to prefix_type() only for those prefixes for which a type was declared using the application optiont <code>prefixes</code>.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#put/3" translate="no">put(FullPrefix, Key, ValueOrFun)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as put(FullPrefix, Key, Value, [])</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#put/4" translate="no">put(FullPrefix, Key, ValueOrFun, Opts)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Stores or updates the value at the given prefix and key locally and then triggers a broadcast to notify other nodes in the cluster. Currently, there are no put options.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#remote_iterator/1" translate="no">remote_iterator(Node)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Create an iterator on <code>Node</code>. This allows for remote iteration by having the worker keep track of the actual iterator (since ets continuations cannot cross node boundaries). The iterator created iterates all full-prefixes. Once created the rest of the iterator API may be used as usual. When done with the iterator, iterator_close/1 must be called</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#remote_iterator/2" translate="no">remote_iterator(Node, FullPrefix)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#start_link/0" translate="no">start_link()</a>
+
+        </div>
+
+          <div class="summary-synopsis">Start the plum_db server and link to calling process. The plum_db server is responsible for managing local and remote iterators. No API function uses the server itself.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#sync_exchange/1" translate="no">sync_exchange(Peer)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Triggers a synchronous exchange. Calls <a href="#sync_exchange/2"><code>sync_exchange/2</code></a> with an empty map as the second argument. &gt; The exchange is only triggered if the application option <code>aae_enabled</code> is set to <code>true</code>.</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#sync_exchange/2" translate="no">sync_exchange(Peer, Opts0)</a>
+
+        </div>
+
+          <div class="summary-synopsis"><p>Triggers a synchronous exchange. The exchange is performed synchronously by spawning a supervised process and waiting (blocking) till it finishes. Read the <a href="plum_db_exchanges_sup.html"><code>plum_db_exchanges_sup</code></a> documentation.</p></div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#take/2" translate="no">take(FullPrefix, Key)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#take/3" translate="no">take(FullPrefix, Key, Opts)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#to_list/1" translate="no">to_list(FullPrefix)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Same as to_list(FullPrefix, [])</div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#to_list/2" translate="no">to_list(FullPrefix, Opts)</a>
+
+        </div>
+
+          <div class="summary-synopsis">Return a list of all keys and values stored under a given prefix/subprefix. Available options are the same as those provided to iterator/2.</div>
+
+      </div>
+
+  </div>
+
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#types">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+Types
+    </h1>
+    <div class="types-list">
+<section class="detail" id="t:continuation/0">
+
+  <div class="detail-header">
+    <a href="#t:continuation/0" class="detail-link" title="Link to this opaque">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this opaque</span>
+    </a>
+    <h1 class="signature" translate="no">continuation/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L79" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+      <span class="note">(opaque)</span>
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">continuation()</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:continuation_or_eot/0">
+
+  <div class="detail-header">
+    <a href="#t:continuation_or_eot/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">continuation_or_eot/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L81" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">continuation_or_eot() :: <a href="#t:continuation/0">continuation</a>() | <a href="#t:eot/0">eot</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:delete_opts/0">
+
+  <div class="detail-header">
+    <a href="#t:delete_opts/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">delete_opts/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L137" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">delete_opts() :: [].</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:eot/0">
+
+  <div class="detail-header">
+    <a href="#t:eot/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">eot/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L80" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">eot() :: '$end_of_table'.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:erase_opts/0">
+
+  <div class="detail-header">
+    <a href="#t:erase_opts/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">erase_opts/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L141" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">erase_opts() :: [].</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:fold_elements_fun/0">
+
+  <div class="detail-header">
+    <a href="#t:fold_elements_fun/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">fold_elements_fun/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L95" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">fold_elements_fun() :: fun(({<a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:plum_db_object/0">plum_db_object</a>()}, any()) -> any()).</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:fold_fun/0">
+
+  <div class="detail-header">
+    <a href="#t:fold_fun/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">fold_fun/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L87" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">fold_fun() :: fun(({<a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:value_or_values/0">value_or_values</a>()}, any()) -> any()).</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:fold_opts/0">
+
+  <div class="detail-header">
+    <a href="#t:fold_opts/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">fold_opts/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L125" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">fold_opts() :: <a href="#t:it_opts/0">it_opts</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:foreach_fun/0">
+
+  <div class="detail-header">
+    <a href="#t:foreach_fun/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">foreach_fun/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L91" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">foreach_fun() :: fun(({<a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:value_or_values/0">value_or_values</a>()}) -> any()).</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:get_opt/0">
+
+  <div class="detail-header">
+    <a href="#t:get_opt/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">get_opt/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L102" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">get_opt() :: <a href="#t:get_opt_default_val/0">get_opt_default_val</a>() | <a href="#t:get_opt_resolver/0">get_opt_resolver</a>() | <a href="#t:get_opt_allow_put/0">get_opt_allow_put</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:get_opt_allow_put/0">
+
+  <div class="detail-header">
+    <a href="#t:get_opt_allow_put/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">get_opt_allow_put/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L101" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">get_opt_allow_put() :: {allow_put, boolean()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:get_opt_default_val/0">
+
+  <div class="detail-header">
+    <a href="#t:get_opt_default_val/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">get_opt_default_val/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L99" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">get_opt_default_val() :: {default, <a href="#t:plum_db_value/0">plum_db_value</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:get_opt_resolver/0">
+
+  <div class="detail-header">
+    <a href="#t:get_opt_resolver/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">get_opt_resolver/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L100" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">get_opt_resolver() :: {resolver, <a href="#t:plum_db_resolver/0">plum_db_resolver</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:get_opts/0">
+
+  <div class="detail-header">
+    <a href="#t:get_opts/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">get_opts/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L105" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">get_opts() :: [<a href="#t:get_opt/0">get_opt</a>()].</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:it_opt/0">
+
+  <div class="detail-header">
+    <a href="#t:it_opt/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">it_opt/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L118" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">it_opt() ::
+    <a href="#t:it_opt_resolver/0">it_opt_resolver</a>() |
+    <a href="#t:it_opt_first/0">it_opt_first</a>() |
+    <a href="#t:it_opt_default/0">it_opt_default</a>() |
+    <a href="#t:it_opt_keymatch/0">it_opt_keymatch</a>() |
+    <a href="#t:it_opt_keys_only/0">it_opt_keys_only</a>() |
+    <a href="#t:it_opt_partitions/0">it_opt_partitions</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:it_opt_default/0">
+
+  <div class="detail-header">
+    <a href="#t:it_opt_default/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">it_opt_default/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L110" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">it_opt_default() :: {default, <a href="#t:plum_db_value/0">plum_db_value</a>() | <a href="#t:it_opt_default_fun/0">it_opt_default_fun</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:it_opt_default_fun/0">
+
+  <div class="detail-header">
+    <a href="#t:it_opt_default_fun/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">it_opt_default_fun/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L109" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">it_opt_default_fun() :: fun((<a href="#t:plum_db_key/0">plum_db_key</a>()) -> <a href="#t:plum_db_value/0">plum_db_value</a>()).</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:it_opt_first/0">
+
+  <div class="detail-header">
+    <a href="#t:it_opt_first/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">it_opt_first/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L113" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">it_opt_first() :: {first, term()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:it_opt_keymatch/0">
+
+  <div class="detail-header">
+    <a href="#t:it_opt_keymatch/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">it_opt_keymatch/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L112" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">it_opt_keymatch() :: {match, term()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:it_opt_keys_only/0">
+
+  <div class="detail-header">
+    <a href="#t:it_opt_keys_only/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">it_opt_keys_only/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L114" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">it_opt_keys_only() :: {keys_only, boolean()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:it_opt_partitions/0">
+
+  <div class="detail-header">
+    <a href="#t:it_opt_partitions/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">it_opt_partitions/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L115" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">it_opt_partitions() :: {partitions, [<a href="#t:partition/0">partition</a>()]}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:it_opt_resolver/0">
+
+  <div class="detail-header">
+    <a href="#t:it_opt_resolver/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">it_opt_resolver/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L108" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">it_opt_resolver() :: {resolver, <a href="#t:plum_db_resolver/0">plum_db_resolver</a>() | lww}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:it_opts/0">
+
+  <div class="detail-header">
+    <a href="#t:it_opts/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">it_opts/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L124" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">it_opts() :: [<a href="#t:it_opt/0">it_opt</a>()].</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:iterator/0">
+
+  <div class="detail-header">
+    <a href="#t:iterator/0" class="detail-link" title="Link to this opaque">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this opaque</span>
+    </a>
+    <h1 class="signature" translate="no">iterator/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L78" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+      <span class="note">(opaque)</span>
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator()</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:iterator_element/0">
+
+  <div class="detail-header">
+    <a href="#t:iterator_element/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">iterator_element/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L84" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator_element() :: {<a href="#t:plum_db_pkey/0">plum_db_pkey</a>(), <a href="#t:plum_db_object/0">plum_db_object</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:match_opt_limit/0">
+
+  <div class="detail-header">
+    <a href="#t:match_opt_limit/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">match_opt_limit/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L116" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">match_opt_limit() :: pos_integer() | infinity.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:match_opt_remove_tombstones/0">
+
+  <div class="detail-header">
+    <a href="#t:match_opt_remove_tombstones/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">match_opt_remove_tombstones/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L117" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">match_opt_remove_tombstones() :: boolean().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:match_opts/0">
+
+  <div class="detail-header">
+    <a href="#t:match_opts/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">match_opts/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L126" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">match_opts() :: [<a href="#t:it_opt/0">it_opt</a>() | <a href="#t:match_opt_limit/0">match_opt_limit</a>() | <a href="#t:match_opt_remove_tombstones/0">match_opt_remove_tombstones</a>()].</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:partition/0">
+
+  <div class="detail-header">
+    <a href="#t:partition/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">partition/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L131" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">partition() :: non_neg_integer().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_broadcast/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_broadcast/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_broadcast/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L42" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_broadcast() :: #plum_db_broadcast{}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_context/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_context/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_context/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L36" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_context() :: <a href="plum_db_dvvset.html#t:vector/0">plum_db_dvvset:vector</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_key/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_key/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_key/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L19" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_key() :: any().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_modifier/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_modifier/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_modifier/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L33" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_modifier() ::
+    fun(([<a href="#t:plum_db_value/0">plum_db_value</a>() | <a href="#t:plum_db_tombstone/0">plum_db_tombstone</a>()] | undefined) -> <a href="#t:plum_db_value/0">plum_db_value</a>()).</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_object/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_object/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_object/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L35" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_object() :: {object, <a href="plum_db_dvvset.html#t:clock/0">plum_db_dvvset:clock</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_pkey/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_pkey/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_pkey/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L20" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_pkey() :: {<a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_pkey_pattern/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_pkey_pattern/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_pkey_pattern/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L21" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_pkey_pattern() :: {<a href="#t:plum_db_prefix_pattern/0">plum_db_prefix_pattern</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>() | <a href="#t:plum_db_wildcard/0">plum_db_wildcard</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_prefix/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_prefix/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_prefix/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L15" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_prefix() :: {binary() | atom(), binary() | atom()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_prefix_pattern/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_prefix_pattern/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_prefix_pattern/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L16" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_prefix_pattern() ::
+    {binary() | atom() | <a href="#t:plum_db_wildcard/0">plum_db_wildcard</a>(), binary() | atom() | <a href="#t:plum_db_wildcard/0">plum_db_wildcard</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_resolver/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_resolver/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_resolver/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L28" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_resolver() ::
+    fun((<a href="#t:plum_db_key/0">plum_db_key</a>() | <a href="#t:plum_db_pkey/0">plum_db_pkey</a>(), <a href="#t:plum_db_value/0">plum_db_value</a>() | <a href="#t:plum_db_tombstone/0">plum_db_tombstone</a>()) -> <a href="#t:plum_db_value/0">plum_db_value</a>()).</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_tombstone/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_tombstone/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_tombstone/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L26" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_tombstone() :: '$deleted'.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_value/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_value/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_value/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L25" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_value() :: any().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:plum_db_wildcard/0">
+
+  <div class="detail-header">
+    <a href="#t:plum_db_wildcard/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">plum_db_wildcard/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L27" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">plum_db_wildcard() :: '_'.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:prefix_type/0">
+
+  <div class="detail-header">
+    <a href="#t:prefix_type/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">prefix_type/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L73" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">prefix_type() :: ram | ram_disk | disk.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:prefixes/0">
+
+  <div class="detail-header">
+    <a href="#t:prefixes/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">prefixes/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L74" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">prefixes() :: #{binary() | atom() => <a href="#t:prefix_type/0">prefix_type</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:put_opts/0">
+
+  <div class="detail-header">
+    <a href="#t:put_opts/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">put_opts/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L134" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">put_opts() :: [].</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:remote_iterator/0">
+
+  <div class="detail-header">
+    <a href="#t:remote_iterator/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">remote_iterator/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L77" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">remote_iterator() :: #remote_iterator{}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:state/0">
+
+  <div class="detail-header">
+    <a href="#t:state/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">state/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L76" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">state() :: #state{}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:value_or_values/0">
+
+  <div class="detail-header">
+    <a href="#t:value_or_values/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">value_or_values/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L85" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">value_or_values() ::
+    [<a href="#t:plum_db_value/0">plum_db_value</a>() | <a href="#t:plum_db_tombstone/0">plum_db_tombstone</a>()] | <a href="#t:plum_db_value/0">plum_db_value</a>() | <a href="#t:plum_db_tombstone/0">plum_db_tombstone</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+Functions
+    </h1>
+    <div class="functions-list">
+<section class="detail" id="broadcast_data/1">
+
+  <div class="detail-header">
+    <a href="#broadcast_data/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">broadcast_data(Plum_db_broadcast)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1380" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">broadcast_data(<a href="#t:plum_db_broadcast/0">plum_db_broadcast</a>()) -> {{<a href="#t:plum_db_pkey/0">plum_db_pkey</a>(), <a href="#t:plum_db_context/0">plum_db_context</a>()}, <a href="#t:plum_db_object/0">plum_db_object</a>()}.</pre>
+
+      </div>
+
+<p>Deconstructs a broadcast that is sent using <code>broadcast/2</code> as the handling module returning the message id and payload.</p>&gt; This function is part of the implementation of the partisan_plumtree_broadcast_handler behaviour. &gt; You should never call it directly.
+  </section>
+</section>
+<section class="detail" id="delete/2">
+
+  <div class="detail-header">
+    <a href="#delete/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">delete(FullPrefix, Key)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1164" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">delete(<a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>()) -> ok.</pre>
+
+      </div>
+
+Same as delete(FullPrefix, Key, [])
+  </section>
+</section>
+<section class="detail" id="delete/3">
+
+  <div class="detail-header">
+    <a href="#delete/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">delete(FullPrefix, Key, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1178" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">delete(<a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:delete_opts/0">delete_opts</a>()) -> ok.</pre>
+
+      </div>
+
+<p>Logically deletes the value associated with the given prefix and key locally and then triggers a broradcast to notify other nodes in the cluster. Currently there are no delete options.</p>NOTE: currently deletion is logical and no GC is performed.
+  </section>
+</section>
+<section class="detail" id="erase/2">
+
+  <div class="detail-header">
+    <a href="#erase/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">erase(FullPrefix, Key)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1188" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">erase(<a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>()) -> ok.</pre>
+
+      </div>
+
+Same as delete(FullPrefix, Key, [])
+  </section>
+</section>
+<section class="detail" id="erase/3">
+
+  <div class="detail-header">
+    <a href="#erase/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">erase(PKey, Key, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1202" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">erase(<a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:erase_opts/0">erase_opts</a>()) -> ok.</pre>
+
+      </div>
+
+<p>Logically erases the value associated with the given prefix and key locally and then triggers a broradcast to notify other nodes in the cluster. Currently there are no erase options.</p>NOTE: currently deletion is logical and no GC is performed.
+  </section>
+</section>
+<section class="detail" id="exchange/1">
+
+  <div class="detail-header">
+    <a href="#exchange/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">exchange(Peer)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1509" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">exchange(node()) -> {ok, pid()} | {error, term()}.</pre>
+
+      </div>
+
+Triggers an asynchronous exchange. Calls <a href="#exchange/2"><code>exchange/2</code></a> with an empty map as the second argument. &gt; The exchange is only triggered if the application option <code>aae_enabled</code> is set to <code>true</code>.
+  </section>
+</section>
+<section class="detail" id="exchange/2">
+
+  <div class="detail-header">
+    <a href="#exchange/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">exchange(Peer, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1527" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">exchange(node(), map()) -> {ok, pid()} | {error, term()}.</pre>
+
+      </div>
+
+<p>Triggers an asynchronous exchange. The exchange is performed asynchronously by spawning a supervised process. Read the <a href="plum_db_exchanges_sup.html"><code>plum_db_exchanges_sup</code></a> documentation.</p><p><code>Opts</code> is a map accepting the following options:</p><p>* <code>timeout</code> (milliseconds) –– timeout for the AAE exchange to conclude.</p>&gt; The exchange is only triggered if the application option <code>aae_enabled</code> is set to <code>true</code>.
+  </section>
+</section>
+<section class="detail" id="fold/3">
+
+  <div class="detail-header">
+    <a href="#fold/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">fold(Fun, Acc0, PrefixPatternOrCont)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L454" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">fold(Fun :: <a href="#t:fold_fun/0">fold_fun</a>(),
+     Acc0 :: any(),
+     PrefixPatternOrCont :: <a href="#t:plum_db_prefix_pattern/0">plum_db_prefix_pattern</a>() | <a href="#t:continuation_or_eot/0">continuation_or_eot</a>()) ->
+        any() | {any(), <a href="#t:continuation_or_eot/0">continuation_or_eot</a>()}.</pre>
+
+      </div>
+
+Same as fold(Fun, Acc0, FullPrefix, []).
+  </section>
+</section>
+<section class="detail" id="fold/4">
+
+  <div class="detail-header">
+    <a href="#fold/4" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">fold(Fun, Acc0, PrefixPatternOrCont, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L472" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">fold(Fun :: <a href="#t:fold_fun/0">fold_fun</a>(),
+     Acc0 :: any(),
+     PrefixPatternOrCont :: <a href="#t:plum_db_prefix_pattern/0">plum_db_prefix_pattern</a>() | <a href="#t:continuation_or_eot/0">continuation_or_eot</a>(),
+     Opts :: <a href="#t:fold_opts/0">fold_opts</a>()) ->
+        any() | {any(), <a href="#t:continuation_or_eot/0">continuation_or_eot</a>()}.</pre>
+
+      </div>
+
+Fold over all keys and values stored under a given prefix/subprefix. Available options are the same as those provided to iterator/2. To return early, throw {break, Result} in your fold function.
+  </section>
+</section>
+<section class="detail" id="fold_elements/3">
+
+  <div class="detail-header">
+    <a href="#fold_elements/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">fold_elements(Fun, Acc0, FullPrefix)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L602" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">fold_elements(<a href="#t:fold_elements_fun/0">fold_elements_fun</a>(), any(), <a href="#t:plum_db_prefix/0">plum_db_prefix</a>()) -> any().</pre>
+
+      </div>
+
+Same as fold_elements(Fun, Acc0, FullPrefix, []).
+  </section>
+</section>
+<section class="detail" id="fold_elements/4">
+
+  <div class="detail-header">
+    <a href="#fold_elements/4" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">fold_elements(Fun, Acc0, FullPrefix, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L616" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">fold_elements(<a href="#t:fold_elements_fun/0">fold_elements_fun</a>(), any(), <a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:fold_opts/0">fold_opts</a>()) -> any().</pre>
+
+      </div>
+
+Fold over all elements stored under a given prefix/subprefix. Available options are the same as those provided to iterator/2. To return early, throw {break, Result} in your fold function.
+  </section>
+</section>
+<section class="detail" id="foreach/2">
+
+  <div class="detail-header">
+    <a href="#foreach/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">foreach(Fun, FullPrefixPattern)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L564" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">foreach(<a href="#t:foreach_fun/0">foreach_fun</a>(), <a href="#t:plum_db_prefix_pattern/0">plum_db_prefix_pattern</a>()) -> any().</pre>
+
+      </div>
+
+Same as fold(Fun, Acc0, FullPrefix, []).
+  </section>
+</section>
+<section class="detail" id="foreach/3">
+
+  <div class="detail-header">
+    <a href="#foreach/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">foreach(Fun, FullPrefixPattern, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L576" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">foreach(<a href="#t:foreach_fun/0">foreach_fun</a>(), <a href="#t:plum_db_prefix_pattern/0">plum_db_prefix_pattern</a>(), <a href="#t:fold_opts/0">fold_opts</a>()) -> any().</pre>
+
+      </div>
+
+Fold over all keys and values stored under a given prefix/subprefix. Available options are the same as those provided to iterator/2. To return early, throw {break, Result} in your fold function.
+  </section>
+</section>
+<section class="detail" id="get/2">
+
+  <div class="detail-header">
+    <a href="#get/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">get(FullPrefix, Key)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L327" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">get(<a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>()) -> <a href="#t:plum_db_value/0">plum_db_value</a>() | undefined.</pre>
+
+      </div>
+
+Same as get(FullPrefix, Key, [])
+  </section>
+</section>
+<section class="detail" id="get/3">
+
+  <div class="detail-header">
+    <a href="#get/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">get(FullPrefix, Key, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L375" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">get(<a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:get_opts/0">get_opts</a>()) -> <a href="#t:plum_db_value/0">plum_db_value</a>() | undefined.</pre>
+
+      </div>
+
+<p>Retrieves the local value stored at the given fullprefix <code>FullPrefix</code> and key <code>Key</code> using options <code>Opts</code>.</p><p>Returns the stored value if found. If no value is found and <code>Opts</code> contains a value for the key <code>default</code>, this value is returned. Otherwise returns the atom <code>undefined</code>.</p><p><code>Opts</code> is a property list that can take the following options:</p><p>* <code>default</code> – value to return if no value is found, Defaults to <code>undefined</code>. * <code>resolver</code> – The atom <code>lww</code> or a <code>plum_db_resolver()</code> that resolves conflicts if they are encountered. Defaults to <code>lww</code> (last-write-wins). * <code>allow_put</code> – whether or not to write and broadcast a resolved value. Defaults to <code>true</code>.</p><p>Example: Simple get</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db</span><span class="p">:</span><span class="nf">get</span><span class="p" data-group-id="1168985116-1">(</span><span class="p" data-group-id="1168985116-2">{</span><span class="ss">foo</span><span class="p">,</span><span class="w"> </span><span class="ss">a</span><span class="p" data-group-id="1168985116-2">}</span><span class="p">,</span><span class="w"> </span><span class="ss">x</span><span class="p" data-group-id="1168985116-1">)</span><span class="p">.</span><span class="w">
+  </span><span class="ss">undefined</span><span class="p">.</span><span class="w">
+  </span><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db</span><span class="p">:</span><span class="nf">get</span><span class="p" data-group-id="1168985116-3">(</span><span class="p" data-group-id="1168985116-4">{</span><span class="ss">foo</span><span class="p">,</span><span class="w"> </span><span class="ss">a</span><span class="p" data-group-id="1168985116-4">}</span><span class="p">,</span><span class="w"> </span><span class="ss">x</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="1168985116-5">[</span><span class="p" data-group-id="1168985116-6">{</span><span class="ss">default</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p" data-group-id="1168985116-6">}</span><span class="p" data-group-id="1168985116-5">]</span><span class="p" data-group-id="1168985116-3">)</span><span class="p">.</span><span class="w">
+  </span><span class="mi">1</span><span class="p">.</span><span class="w">
+  </span><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db</span><span class="p">:</span><span class="nf">put</span><span class="p" data-group-id="1168985116-7">(</span><span class="p" data-group-id="1168985116-8">{</span><span class="ss">foo</span><span class="p">,</span><span class="w"> </span><span class="ss">a</span><span class="p" data-group-id="1168985116-8">}</span><span class="p">,</span><span class="w"> </span><span class="ss">x</span><span class="p">,</span><span class="w"> </span><span class="mi">100</span><span class="p" data-group-id="1168985116-7">)</span><span class="p">.</span><span class="w">
+  </span><span class="ss">ok</span><span class="w">
+  </span><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db</span><span class="p">:</span><span class="nf">get</span><span class="p" data-group-id="1168985116-9">(</span><span class="p" data-group-id="1168985116-10">{</span><span class="ss">foo</span><span class="p">,</span><span class="w"> </span><span class="ss">a</span><span class="p" data-group-id="1168985116-10">}</span><span class="p">,</span><span class="w"> </span><span class="ss">x</span><span class="p" data-group-id="1168985116-9">)</span><span class="p">.</span><span class="w">
+  </span><span class="mi">100</span><span class="p">.</span></code></pre><p>Example: Resolving with a custom function</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="n">Fun</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">fun</span><span class="p" data-group-id="1187127768-1">(</span><span class="n">A</span><span class="p">,</span><span class="w"> </span><span class="n">B</span><span class="p" data-group-id="1187127768-1">)</span><span class="w"> </span><span class="k">when</span><span class="w"> </span><span class="n">A</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">B</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="n">A</span><span class="p">;</span><span class="w"> </span><span class="p">_</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="n">B</span><span class="w"> </span><span class="k">end</span><span class="p">,</span><span class="w">
+  </span><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db</span><span class="p">:</span><span class="nf">get</span><span class="p" data-group-id="1187127768-2">(</span><span class="p" data-group-id="1187127768-3">{</span><span class="ss">foo</span><span class="p">,</span><span class="w"> </span><span class="ss">a</span><span class="p" data-group-id="1187127768-3">}</span><span class="p">,</span><span class="w"> </span><span class="ss">x</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="1187127768-4">[</span><span class="p" data-group-id="1187127768-5">{</span><span class="ss">resolver</span><span class="p">,</span><span class="w"> </span><span class="n">Fun</span><span class="p" data-group-id="1187127768-5">}</span><span class="p" data-group-id="1187127768-4">]</span><span class="p" data-group-id="1187127768-2">)</span><span class="p">.</span></code></pre>&gt; NOTE: an update will be broadcasted if conflicts are resolved and <code>allow_put</code> is <code>true</code>. However, any further conflicts generated by concurrent writes during resolution are not resolved.
+  </section>
+</section>
+<section class="detail" id="get_object/1">
+
+  <div class="detail-header">
+    <a href="#get_object/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">get_object(PKey)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L396" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+Returns a Dotted Version Vector Set or undefined. When reading the value for a subsequent call to put/3 the context can be obtained using plum_db_object:context/1. Values can obtained w/ plum_db_object:values/1.
+  </section>
+</section>
+<section class="detail" id="get_object/2">
+
+  <div class="detail-header">
+    <a href="#get_object/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">get_object(PKey, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L407" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+Returns a Dotted Version Vector Set or undefined. When reading the value for a subsequent call to put/3 the context can be obtained using plum_db_object:context/1. Values can obtained w/ plum_db_object:values/1.
+  </section>
+</section>
+<section class="detail" id="get_object/3">
+
+  <div class="detail-header">
+    <a href="#get_object/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">get_object(Node, PKey, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L428" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">get_object(node(), <a href="#t:plum_db_pkey/0">plum_db_pkey</a>(), <a href="#t:get_opts/0">get_opts</a>()) -> <a href="#t:plum_db_object/0">plum_db_object</a>() | undefined.</pre>
+
+      </div>
+
+Same as get/1 but reads the value from <code>Node</code> This is function is used by plum_db_exchange_statem.
+  </section>
+</section>
+<section class="detail" id="graft/1">
+
+  <div class="detail-header">
+    <a href="#graft/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">graft(_)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1471" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">graft({<a href="#t:plum_db_pkey/0">plum_db_pkey</a>(), <a href="#t:plum_db_context/0">plum_db_context</a>()}) -> stale | {ok, <a href="#t:plum_db_object/0">plum_db_object</a>()} | {error, term()}.</pre>
+
+      </div>
+
+<p>Returns the object associated with the given prefixed key <code>Pkey</code> and context <code>Context</code> (message id) if the currently stored version has an equal context. Otherwise returns the atom <code>stale</code>.</p><p>Because it assumes that a grafted context can only be causally older than the local view, a <code>stale</code> response means there is another message that subsumes the grafted one.</p>&gt; This function is part of the implementation of the partisan_plumtree_broadcast_handler behaviour. &gt; You should never call it directly.
+  </section>
+</section>
+<section class="detail" id="is_partition/1">
+
+  <div class="detail-header">
+    <a href="#is_partition/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">is_partition(Id)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L316" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">is_partition(<a href="#t:partition/0">partition</a>()) -> boolean().</pre>
+
+      </div>
+
+Returns true if an identifier is a valid partition.
+  </section>
+</section>
+<section class="detail" id="is_stale/1">
+
+  <div class="detail-header">
+    <a href="#is_stale/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">is_stale(_)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1446" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">is_stale({<a href="#t:plum_db_pkey/0">plum_db_pkey</a>(), <a href="#t:plum_db_context/0">plum_db_context</a>()}) -> boolean().</pre>
+
+      </div>
+
+<p>Returns false if the update (or a causally newer update) has already been received (stored locally).</p>&gt; This function is part of the implementation of the partisan_plumtree_broadcast_handler behaviour. &gt; You should never call it directly.
+  </section>
+</section>
+<section class="detail" id="iterate/1">
+
+  <div class="detail-header">
+    <a href="#iterate/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">iterate(Remote_iterator)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L828" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterate(<a href="#t:iterator/0">iterator</a>() | <a href="#t:remote_iterator/0">remote_iterator</a>()) -> <a href="#t:iterator/0">iterator</a>() | <a href="#t:remote_iterator/0">remote_iterator</a>().</pre>
+
+      </div>
+
+Advances the iterator by one key, full-prefix or sub-prefix
+  </section>
+</section>
+<section class="detail" id="iterator/0">
+
+  <div class="detail-header">
+    <a href="#iterator/0" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">iterator()</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L719" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator() -> <a href="#t:iterator/0">iterator</a>().</pre>
+
+      </div>
+
+<p>Returns a full-prefix iterator: an iterator for all full-prefixes that have keys stored under them. When done with the iterator, iterator_close/1 must be called. This iterator works across all existing store partitions, treating the set of partitions as a single logical database. As a result, ordering is partial per partition and not global across them.</p>Same as calling <code>iterator({undefined, undefined})</code>.
+  </section>
+</section>
+<section class="detail" id="iterator/1">
+
+  <div class="detail-header">
+    <a href="#iterator/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">iterator(Term)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L729" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator(<a href="#t:plum_db_prefix/0">plum_db_prefix</a>() | <a href="#t:continuation/0">continuation</a>()) -> <a href="#t:iterator/0">iterator</a>().</pre>
+
+      </div>
+
+Same as calling <code>iterator(FullPrefix, [])</code>.
+  </section>
+</section>
+<section class="detail" id="iterator/2">
+
+  <div class="detail-header">
+    <a href="#iterator/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">iterator(Continuation, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L768" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator(<a href="#t:plum_db_prefix_pattern/0">plum_db_prefix_pattern</a>() | <a href="#t:continuation/0">continuation</a>(), <a href="#t:it_opts/0">it_opts</a>()) -> <a href="#t:iterator/0">iterator</a>().</pre>
+
+      </div>
+
+<p>Return an iterator pointing to the first key stored under a prefix</p><p>This function can take the following options:</p>* <code>resolver</code>: either the atom <code>lww</code> or a function that resolves conflicts if they are encounted (see get/3 for more details). Conflict resolution is performed when values are retrieved (see iterator_key_value/1 and iterator_key_values/1). If no resolver is provided no resolution is performed. The default is to not provide a resolver. * <code>allow_put</code>: whether or not to write and broadcast a resolved value. defaults to <code>true</code>. * <code>default</code>: Used when the value an iterator points to is a tombstone. default is either an arity-1 function or a value. If a function, the key the iterator points to is passed as the argument and the result is returned in place of the tombstone. If default is a value, the value is returned in place of the tombstone. This applies when using functions such as iterator_key_values/1 and iterator_key_values/1. * <code>first</code> - the key this iterator should start at, equivalent to calling iterator_move/2 passing the key as the second argument. * <code>match</code>: If match is undefined then all keys will may be visted by the iterator, match can be: * an erlang term - which will be matched exactly against a key * '_' - the wildcard term which matches anything * an erlang tuple containing terms and '_' - if tuples are used as keys this can be used to iterate over some subset of keys * <code>partitions</code>: The list of partitions this iterator should cover. If undefined it will cover all partitions (<code>pdb:partitions/0</code>) * <code>keys_only</code>: wether to iterate only on keys (default: false)
+  </section>
+</section>
+<section class="detail" id="iterator_close/1">
+
+  <div class="detail-header">
+    <a href="#iterator_close/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">iterator_close(Remote_iterator)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L902" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator_close(<a href="#t:iterator/0">iterator</a>() | <a href="#t:iterator/0">iterator</a>() | <a href="#t:remote_iterator/0">remote_iterator</a>()) -> ok.</pre>
+
+      </div>
+
+Closes the iterator. This function must be called on all open iterators
+  </section>
+</section>
+<section class="detail" id="iterator_default/1">
+
+  <div class="detail-header">
+    <a href="#iterator_default/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">iterator_default(Iterator)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1066" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator_default(<a href="#t:iterator/0">iterator</a>() | <a href="#t:iterator/0">iterator</a>()) ->
+                    <a href="#t:plum_db_tombstone/0">plum_db_tombstone</a>() | <a href="#t:plum_db_value/0">plum_db_value</a>() | <a href="#t:it_opt_default_fun/0">it_opt_default_fun</a>().</pre>
+
+      </div>
+
+Returns the value returned when an iterator points to a tombstone. If the default used when creating the given iterator is a function it will be applied to the current key the iterator points at. If no default was provided the tombstone value was returned. This function should only be called after checking iterator_done/1.
+  </section>
+</section>
+<section class="detail" id="iterator_done/1">
+
+  <div class="detail-header">
+    <a href="#iterator_done/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">iterator_done(Remote_iterator)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L919" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator_done(<a href="#t:iterator/0">iterator</a>() | <a href="#t:iterator/0">iterator</a>() | <a href="#t:remote_iterator/0">remote_iterator</a>()) -> boolean().</pre>
+
+      </div>
+
+Returns true if there is nothing more to iterate over
+  </section>
+</section>
+<section class="detail" id="iterator_element/1">
+
+  <div class="detail-header">
+    <a href="#iterator_element/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">iterator_element(Remote_iterator)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1048" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator_element(<a href="#t:iterator/0">iterator</a>() | <a href="#t:iterator/0">iterator</a>() | <a href="#t:remote_iterator/0">remote_iterator</a>()) -> <a href="#t:iterator_element/0">iterator_element</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="iterator_key/1">
+
+  <div class="detail-header">
+    <a href="#iterator_key/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">iterator_key(Iterator)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L955" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator_key(<a href="#t:iterator/0">iterator</a>()) -> <a href="#t:plum_db_key/0">plum_db_key</a>() | undefined.</pre>
+
+      </div>
+
+Return the key pointed at by the iterator. Before calling this function, check the iterator is not complete w/ iterator_done/1. No conflict resolution will be performed as a result of calling this function.
+  </section>
+</section>
+<section class="detail" id="iterator_key_value/1">
+
+  <div class="detail-header">
+    <a href="#iterator_key_value/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">iterator_key_value(Iterator)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L977" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator_key_value(<a href="#t:iterator/0">iterator</a>() | <a href="#t:remote_iterator/0">remote_iterator</a>() | <a href="#t:iterator/0">iterator</a>()) ->
+                      {<a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:plum_db_value/0">plum_db_value</a>()} | {error, conflict}.</pre>
+
+      </div>
+
+<p>Returns a single value pointed at by the iterator. If there are conflicts and a resolver was specified in the options when creating this iterator, they will be resolved. Otherwise, and error is returned. If conflicts are resolved, the resolved value is written locally and a broadcast is performed to update other nodes in the cluster if <code>allow_put</code> is <code>true</code> (the default value). If <code>allow_put</code> is <code>false</code>, values are resolved but not written or broadcast.</p>NOTE: if resolution may be performed this function must be called at most once before calling iterate/1 on the iterator (at which point the function can be called once more).
+  </section>
+</section>
+<section class="detail" id="iterator_key_values/1">
+
+  <div class="detail-header">
+    <a href="#iterator_key_values/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">iterator_key_values(Iterator)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1025" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator_key_values(<a href="#t:iterator/0">iterator</a>()) -> {<a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:value_or_values/0">value_or_values</a>()}.</pre>
+
+      </div>
+
+<p>Return the key and all sibling values pointed at by the iterator. Before calling this function, check the iterator is not complete w/ iterator_done/1. If a resolver was passed to iterator/0 when creating the given iterator, siblings will be resolved using the given function or last-write-wins (if <code>lww</code> is passed as the resolver). If no resolver was used then no conflict resolution will take place. If conflicts are resolved, the resolved value is written to local store and a broadcast is submitted to update other nodes in the cluster if <code>allow_put</code> is <code>true</code>. If <code>allow_put</code> is <code>false</code> the values are resolved but are not written or broadcast. A single value is returned as the second element of the tuple in the case values are resolved. If no resolution takes place then a list of values will be returned as the second element (even if there is only a single sibling).</p>NOTE: if resolution may be performed this function must be called at most once before calling iterate/1 on the iterator (at which point the function can be called once more).
+  </section>
+</section>
+<section class="detail" id="iterator_prefix/1">
+
+  <div class="detail-header">
+    <a href="#iterator_prefix/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">iterator_prefix(Remote_iterator)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L938" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">iterator_prefix(<a href="#t:iterator/0">iterator</a>() | <a href="#t:remote_iterator/0">remote_iterator</a>()) -> <a href="#t:plum_db_prefix/0">plum_db_prefix</a>().</pre>
+
+      </div>
+
+Returns the full-prefix being iterated by this iterator.
+  </section>
+</section>
+<section class="detail" id="match/1">
+
+  <div class="detail-header">
+    <a href="#match/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">match(Cont)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L645" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">match(<a href="#t:continuation_or_eot/0">continuation_or_eot</a>()) ->
+         {[{<a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:value_or_values/0">value_or_values</a>()}], <a href="#t:continuation_or_eot/0">continuation_or_eot</a>()} | '$end_of_table'.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="match/2">
+
+  <div class="detail-header">
+    <a href="#match/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">match(Continuation, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L656" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">match(<a href="#t:continuation_or_eot/0">continuation_or_eot</a>(), <a href="#t:match_opts/0">match_opts</a>()) ->
+         {[{<a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:value_or_values/0">value_or_values</a>()}], <a href="#t:continuation/0">continuation</a>()} | '$end_of_table'.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="match/3">
+
+  <div class="detail-header">
+    <a href="#match/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">match(FullPrefix0, KeyPattern, Opts0)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L673" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">match(<a href="#t:plum_db_prefix_pattern/0">plum_db_prefix_pattern</a>(), <a href="#t:plum_db_pkey_pattern/0">plum_db_pkey_pattern</a>(), <a href="#t:match_opts/0">match_opts</a>()) ->
+         [{<a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:value_or_values/0">value_or_values</a>()}] |
+         {[{<a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:value_or_values/0">value_or_values</a>()}], <a href="#t:continuation/0">continuation</a>()} |
+         '$end_of_table'.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="merge/2">
+
+  <div class="detail-header">
+    <a href="#merge/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">merge(_, Obj)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1401" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">merge({<a href="#t:plum_db_pkey/0">plum_db_pkey</a>(), undefined | <a href="#t:plum_db_context/0">plum_db_context</a>()}, undefined | <a href="#t:plum_db_object/0">plum_db_object</a>()) -> boolean().</pre>
+
+      </div>
+
+<p>Merges a remote copy of an object record sent via broadcast w/ the local view for the key contained in the message id. If the remote copy is causally older than the current data stored then <code>false</code> is returned and no updates are merged. Otherwise, the remote copy is merged (possibly generating siblings) and <code>true</code> is returned.</p>&gt; This function is part of the implementation of the partisan_plumtree_broadcast_handler behaviour. &gt; You should never call it directly.
+  </section>
+</section>
+<section class="detail" id="merge/3">
+
+  <div class="detail-header">
+    <a href="#merge/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">merge(Node, _, Obj)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1424" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">merge(node(), {<a href="#t:plum_db_pkey/0">plum_db_pkey</a>(), undefined | <a href="#t:plum_db_context/0">plum_db_context</a>()}, <a href="#t:plum_db_object/0">plum_db_object</a>()) -> boolean().</pre>
+
+      </div>
+
+<p>Same as merge/2 but merges the object on <code>Node</code></p>&gt; This function is part of the implementation of the partisan_plumtree_broadcast_handler behaviour. &gt; You should never call it directly.
+  </section>
+</section>
+<section class="detail" id="partition_count/0">
+
+  <div class="detail-header">
+    <a href="#partition_count/0" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">partition_count()</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L306" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">partition_count() -> non_neg_integer().</pre>
+
+      </div>
+
+Returns the number of partitions.
+  </section>
+</section>
+<section class="detail" id="partitions/0">
+
+  <div class="detail-header">
+    <a href="#partitions/0" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">partitions()</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L296" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">partitions() -> [<a href="#t:partition/0">partition</a>()].</pre>
+
+      </div>
+
+Returns the list of the partition identifiers starting at 0.
+  </section>
+</section>
+<section class="detail" id="prefix_hash/2">
+
+  <div class="detail-header">
+    <a href="#prefix_hash/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">prefix_hash(Partition, Prefix)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1088" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">prefix_hash(<a href="#t:partition/0">partition</a>(), <a href="#t:plum_db_prefix/0">plum_db_prefix</a>()) -> binary() | undefined.</pre>
+
+      </div>
+
+Return the local hash associated with a full-prefix or prefix. The hash value is updated periodically and does not always reflect the most recent value. This function can be used to determine when keys stored under a full-prefix or prefix have changed. If the tree has not yet been updated or there are no keys stored the given (full-)prefix. <code>undefined</code> is returned.
+  </section>
+</section>
+<section class="detail" id="prefix_type/1">
+
+  <div class="detail-header">
+    <a href="#prefix_type/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">prefix_type(Prefix)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1110" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">prefix_type(term()) -> <a href="#t:prefix_type/0">prefix_type</a>() | undefined.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="prefixes/0">
+
+  <div class="detail-header">
+    <a href="#prefixes/0" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">prefixes()</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1100" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">prefixes() -> <a href="#t:prefixes/0">prefixes</a>().</pre>
+
+      </div>
+
+Returns a mapping of prefixes (the first element of a plum_db_prefix() tuple) to prefix_type() only for those prefixes for which a type was declared using the application optiont <code>prefixes</code>.
+  </section>
+</section>
+<section class="detail" id="put/3">
+
+  <div class="detail-header">
+    <a href="#put/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">put(FullPrefix, Key, ValueOrFun)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1121" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">put(<a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:plum_db_value/0">plum_db_value</a>() | <a href="#t:plum_db_modifier/0">plum_db_modifier</a>()) -> ok.</pre>
+
+      </div>
+
+Same as put(FullPrefix, Key, Value, [])
+  </section>
+</section>
+<section class="detail" id="put/4">
+
+  <div class="detail-header">
+    <a href="#put/4" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">put(FullPrefix, Key, ValueOrFun, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1142" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">put(<a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:plum_db_value/0">plum_db_value</a>() | <a href="#t:plum_db_modifier/0">plum_db_modifier</a>(), <a href="#t:put_opts/0">put_opts</a>()) -> ok.</pre>
+
+      </div>
+
+<p>Stores or updates the value at the given prefix and key locally and then triggers a broadcast to notify other nodes in the cluster. Currently, there are no put options.</p>NOTE: because the third argument to this function can be a plum_db_modifier(), used to resolve conflicts on write, values cannot be functions. To store functions wrap them in another type like a tuple.
+  </section>
+</section>
+<section class="detail" id="remote_iterator/1">
+
+  <div class="detail-header">
+    <a href="#remote_iterator/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">remote_iterator(Node)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L788" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">remote_iterator(node()) -> <a href="#t:remote_iterator/0">remote_iterator</a>().</pre>
+
+      </div>
+
+Create an iterator on <code>Node</code>. This allows for remote iteration by having the worker keep track of the actual iterator (since ets continuations cannot cross node boundaries). The iterator created iterates all full-prefixes. Once created the rest of the iterator API may be used as usual. When done with the iterator, iterator_close/1 must be called
+  </section>
+</section>
+<section class="detail" id="remote_iterator/2">
+
+  <div class="detail-header">
+    <a href="#remote_iterator/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">remote_iterator(Node, FullPrefix)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L793" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">remote_iterator(node(), <a href="#t:plum_db_prefix/0">plum_db_prefix</a>()) -> <a href="#t:remote_iterator/0">remote_iterator</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="start_link/0">
+
+  <div class="detail-header">
+    <a href="#start_link/0" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">start_link()</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L234" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">start_link() -> {ok, pid()} | ignore | {error, term()}.</pre>
+
+      </div>
+
+Start the plum_db server and link to calling process. The plum_db server is responsible for managing local and remote iterators. No API function uses the server itself.
+  </section>
+</section>
+<section class="detail" id="sync_exchange/1">
+
+  <div class="detail-header">
+    <a href="#sync_exchange/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">sync_exchange(Peer)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1553" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">sync_exchange(node()) -> ok | {error, term()}.</pre>
+
+      </div>
+
+Triggers a synchronous exchange. Calls <a href="#sync_exchange/2"><code>sync_exchange/2</code></a> with an empty map as the second argument. &gt; The exchange is only triggered if the application option <code>aae_enabled</code> is set to <code>true</code>.
+  </section>
+</section>
+<section class="detail" id="sync_exchange/2">
+
+  <div class="detail-header">
+    <a href="#sync_exchange/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">sync_exchange(Peer, Opts0)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1573" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">sync_exchange(node(), map()) -> ok | {error, term()}.</pre>
+
+      </div>
+
+<p>Triggers a synchronous exchange. The exchange is performed synchronously by spawning a supervised process and waiting (blocking) till it finishes. Read the <a href="plum_db_exchanges_sup.html"><code>plum_db_exchanges_sup</code></a> documentation.</p><p><code>Opts</code> is a map accepting the following options:</p><p>* <code>timeout</code> (milliseconds) –– timeout for the AAE exchange to conclude.</p>&gt; The exchange is only triggered if the application option <code>aae_enabled</code> is set to <code>true</code>.
+  </section>
+</section>
+<section class="detail" id="take/2">
+
+  <div class="detail-header">
+    <a href="#take/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">take(FullPrefix, Key)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1226" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">take(<a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>()) -> <a href="#t:plum_db_value/0">plum_db_value</a>() | undefined.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="take/3">
+
+  <div class="detail-header">
+    <a href="#take/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">take(FullPrefix, Key, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L1237" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">take(<a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), <a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:get_opts/0">get_opts</a>()) -> <a href="#t:plum_db_value/0">plum_db_value</a>() | undefined.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="to_list/1">
+
+  <div class="detail-header">
+    <a href="#to_list/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">to_list(FullPrefix)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L687" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">to_list(<a href="#t:plum_db_prefix/0">plum_db_prefix</a>()) -> [{<a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:value_or_values/0">value_or_values</a>()}].</pre>
+
+      </div>
+
+Same as to_list(FullPrefix, [])
+  </section>
+</section>
+<section class="detail" id="to_list/2">
+
+  <div class="detail-header">
+    <a href="#to_list/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">to_list(FullPrefix, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/plum_db.erl#L700" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">to_list(FullPrefix :: <a href="#t:plum_db_prefix/0">plum_db_prefix</a>(), Opts :: <a href="#t:fold_opts/0">fold_opts</a>()) ->
+           [{<a href="#t:plum_db_key/0">plum_db_key</a>(), <a href="#t:value_or_values/0">value_or_values</a>()}].</pre>
+
+      </div>
+
+Return a list of all keys and values stored under a given prefix/subprefix. Available options are the same as those provided to iterator/2.
+  </section>
+</section>
+
+    </div>
+  </section>
+
+      <footer class="footer">
+
+        <p>
+          <span class="line">
+            Built using
+            <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.26.0) for the
+            <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>.
+          </span>
+          <span class="line">
+            Designed by
+            <a href="https://twitter.com/dignifiedquire" target="_blank" rel="noopener" title="@dignifiedquire" translate="no">Friedel Ziegelmayer</a>.
+          </span>
+        </p>
+        <p>
+
+            <a href="api-reference.html" title="API reference" class="line footer-button">API Reference</a>
+
+          <button class="line footer-button display-shortcuts-help">
+            Display keyboard shortcuts
+          </button>
+          <button class="line footer-button display-quick-switch">
+            Go to a HexDocs package
+          </button>
+          <button class="line footer-button display-settings">
+            Settings
+          </button>
+        </p>
+      </footer>
+    </div>
+  </div>
+</section>
+</div>
+
+
+  </body>
+</html>

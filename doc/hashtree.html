@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.26.0">
+    <meta name="project" content="plum_db v0.3.10">
+
+    <title>hashtree — plum_db v0.3.10</title>
+    <link rel="stylesheet" href="dist/erlang-e2fc4c0a4f7951ab3ca5.css" />
+
+    <script src="dist/sidebar_items-f6fa2d8b97.js"></script>
+
+      <script src="docs_config.js"></script>
+
+    <script async src="dist/app-68b26e75fcd91b8a764c.js"></script>
+
+
+  </head>
+  <body data-type="modules">
+    <script>
+
+      try {
+        if (localStorage.getItem('night-mode') === 'true') {
+          document.body.classList.add('night-mode');
+        }
+      } catch (error) { }
+    </script>
+
+<div class="main">
+
+<button class="sidebar-button sidebar-toggle">
+  <span class="icon-menu" title="Collapse/expand sidebar"></span>
+</button>
+
+<section class="sidebar">
+  <form class="sidebar-search" action="search.html">
+    <button type="submit" class="search-button" aria-label="Submit Search">
+      <span class="icon-search" aria-hidden="true" title="Submit search"></span>
+    </button>
+    <button type="button" tabindex="-1" class="search-close-button" aria-label="Cancel Search">
+      <span class="icon-cross" aria-hidden="true" title="Cancel search"></span>
+    </button>
+    <label class="search-label">
+      <input name="q" type="text" class="search-input" placeholder="Search..." aria-label="Input your search terms" autocomplete="off" />
+    </label>
+  </form>
+
+  <div class="autocomplete">
+    <div class="autocomplete-results">
+    </div>
+  </div>
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectDetails">
+      <a href="Plum DB.html" class="sidebar-projectName" translate="no">
+plum_db
+      </a>
+      <strong class="sidebar-projectVersion" translate="no">
+        v0.3.10
+      </strong>
+    </div>
+
+  </div>
+
+  <ul class="sidebar-listNav">
+    <li><a id="extras-list-link" href="#full-list">Pages</a></li>
+
+      <li><a id="modules-list-link" href="#full-list">Modules</a></li>
+
+
+  </ul>
+  <div class="gradient"></div>
+  <ul id="full-list" class="sidebar-fullList"></ul>
+</section>
+
+<section class="content">
+  <div class="content-outer">
+    <div id="content" class="content-inner">
+
+<h1>
+  <span translate="no">hashtree</span> 
+  <small class="app-vsn" translate="no">(plum_db v0.3.10)</small>
+
+    <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L102" title="View Source" class="view-source" rel="help">
+      <span class="icon-code" aria-hidden="true"></span>
+      <span class="sr-only">View Source</span>
+    </a>
+
+
+</h1>
+
+
+  <section id="moduledoc">
+<p>This module implements a persistent, on-disk hash tree that is used predominately for active anti-entropy exchange in Riak. The tree consists of two parts, a set of unbounded on-disk segments and a fixed size hash tree (that may be on-disk or in-memory) constructed over these segments.</p><p>A graphical description of this design can be found in: docs/hashtree.md</p><p>Each segment logically represents an on-disk list of (key, hash) pairs. Whereas the hash tree is represented as a set of levels and buckets, with a fixed width (or fan-out) between levels that determines how many buckets of a child level are grouped together and hashed to represent a bucket at the parent level. Each leaf in the tree corresponds to a hash of one of the on-disk segments. For example, a tree with a width of 4 and 16 segments would look like the following:</p><p>level buckets 1: [0] 2: [0 1 2 3] 3: [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15]</p><p>With each bucket entry of the form <code>{bucket-id, hash}</code>, eg. <code>{0, binary()}</code>. The hash for each of the entries at level 3 would come from one of the 16 segments, while the hashes for entries at level 1 and 2 are derived from the lower levels.</p><p>Specifically, the bucket entries in level 2 would come from level 3: 0: hash([ 0 1 2 3]) 1: hash([ 4 5 6 7]) 2: hash([ 8 9 10 11]) 3: hash([12 13 14 15])</p><p>And the bucket entries in level 1 would come from level 2: 1: hash([hash([ 0 1 2 3]) hash([ 4 5 6 7]) hash([ 8 9 10 11]) hash([12 13 14 15])])</p><p>When a (key, hash) pair is added to the tree, the key is hashed to determine which segment it belongs to and inserted/upserted into the segment. Rather than update the hash tree on every insert, a dirty bit is set to note that a given segment has changed. The hashes are then updated in bulk before performing a tree exchange</p><p>To update the hash tree, the code iterates over each dirty segment, building a list of (key, hash) pairs. A hash is computed over this list, and the leaf node in the hash tree corresponding to the given segment is updated. After iterating over all dirty segments, and thus updating all leaf nodes, the update then continues to update the tree bottom-up, updating only paths that have changed. As designed, the update requires a single sparse scan over the on-disk segments and a minimal traversal up the hash tree.</p><p>The heavy-lifting of this module is provided by LevelDB. What is logically viewed as sorted on-disk segments is in reality a range of on-disk (segment, key, hash) values written to LevelDB. Each insert of a (key, hash) pair therefore corresponds to a single LevelDB write (no read necessary). Likewise, the update operation is performed using LevelDB iterators.</p><p>When used for active anti-entropy in Riak, the hash tree is built once and then updated in real-time as writes occur. A key design goal is to ensure that adding (key, hash) pairs to the tree is non-blocking, even during a tree update or a tree exchange. This is accomplished using LevelDB snapshots. Inserts into the tree always write directly to the active LevelDB instance, however updates and exchanges operate over a snapshot of the tree.</p><p>In order to improve performance, writes are buffered in memory and sent to LevelDB using a single batch write. Writes are flushed whenever the buffer becomes full, as well as before updating the hashtree.</p>Tree exchange is provided by the <code>compare/4</code> function. The behavior of this function is determined through a provided function that implements logic to get buckets and segments for a given remote tree, as well as a callback invoked as key differences are determined. This generic interface allows for tree exchange to be implemented in a variety of ways, including directly against to local hash tree instances, over distributed Erlang, or over a custom protocol over a TCP socket. See <code>local_compare/2</code> and <code>do_remote/1</code> for examples (-ifdef(TEST) only).
+  </section>
+
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+      Summary
+    </h1>
+
+  <div class="summary-types summary">
+    <h2>
+      <a href="#types">Types</a>
+    </h2>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:acc_fun/1" translate="no">acc_fun/1</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:bucket_bin/0" translate="no">bucket_bin/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:hashtree/0" translate="no">hashtree/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:index/0" translate="no">index/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:keydiff/0" translate="no">keydiff/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:meta_bin/0" translate="no">meta_bin/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:orddict/0" translate="no">orddict/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:proplist/0" translate="no">proplist/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:remote_fun/0" translate="no">remote_fun/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:segment_bin/0" translate="no">segment_bin/0</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:select_fun/1" translate="no">select_fun/1</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#t:tree_id_bin/0" translate="no">tree_id_bin/0</a>
+
+        </div>
+
+      </div>
+
+  </div>
+
+  <div class="summary-functions summary">
+    <h2>
+      <a href="#functions">Functions</a>
+    </h2>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#close/1" translate="no">close(State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#compare/4" translate="no">compare(Tree, Remote, AccFun, Acc)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#delete/2" translate="no">delete(Key, State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#destroy/1" translate="no">destroy(Path)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#flush_buffer/1" translate="no">flush_buffer(State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#get_bucket/3" translate="no">get_bucket(Level, Bucket, State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#insert/3" translate="no">insert(Key, ObjHash, State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#insert/4" translate="no">insert(Key, ObjHash, State, Opts)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#key_hashes/2" translate="no">key_hashes(State, Segment)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#levels/1" translate="no">levels(State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#mem_levels/1" translate="no">mem_levels(State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#new/0" translate="no">new()</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#new/2" translate="no">new(TreeId, Options)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#new/3" translate="no">new(_, LinkedStore, Options)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#read_meta/2" translate="no">read_meta(Key, State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#rehash_tree/1" translate="no">rehash_tree(State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#segments/1" translate="no">segments(State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#top_hash/1" translate="no">top_hash(State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#update_perform/1" translate="no">update_perform(State2)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#update_snapshot/1" translate="no">update_snapshot(State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#update_tree/1" translate="no">update_tree(State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#width/1" translate="no">width(State)</a>
+
+        </div>
+
+      </div>
+
+      <div class="summary-row">
+        <div class="summary-signature">
+          <a href="#write_meta/3" translate="no">write_meta(Key, Value, State)</a>
+
+        </div>
+
+      </div>
+
+  </div>
+
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#types">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+Types
+    </h1>
+    <div class="types-list">
+<section class="detail" id="t:acc_fun/1">
+
+  <div class="detail-header">
+    <a href="#t:acc_fun/1" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">acc_fun/1</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L168" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">acc_fun(Acc) :: fun(([<a href="#t:keydiff/0">keydiff</a>()], Acc) -> Acc).</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:bucket_bin/0">
+
+  <div class="detail-header">
+    <a href="#t:bucket_bin/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">bucket_bin/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L156" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">bucket_bin() :: <<_:320>>.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:hashtree/0">
+
+  <div class="detail-header">
+    <a href="#t:hashtree/0" class="detail-link" title="Link to this opaque">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this opaque</span>
+    </a>
+    <h1 class="signature" translate="no">hashtree/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L199" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+      <span class="note">(opaque)</span>
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">hashtree()</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:index/0">
+
+  <div class="detail-header">
+    <a href="#t:index/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">index/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L161" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">index() :: non_neg_integer().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:keydiff/0">
+
+  <div class="detail-header">
+    <a href="#t:keydiff/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">keydiff/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L163" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">keydiff() :: {missing | remote_missing | different, binary()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:meta_bin/0">
+
+  <div class="detail-header">
+    <a href="#t:meta_bin/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">meta_bin/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L157" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">meta_bin() :: <<_:8, _:_*8>>.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:orddict/0">
+
+  <div class="detail-header">
+    <a href="#t:orddict/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">orddict/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L160" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">orddict() :: <a href="https://www.erlang.org/doc/man/orddict.html#type-orddict">orddict:orddict</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:proplist/0">
+
+  <div class="detail-header">
+    <a href="#t:proplist/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">proplist/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L159" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">proplist() :: <a href="https://www.erlang.org/doc/man/proplists.html#type-proplist">proplists:proplist</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:remote_fun/0">
+
+  <div class="detail-header">
+    <a href="#t:remote_fun/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">remote_fun/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L165" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">remote_fun() ::
+    fun((get_bucket | key_hashes | init | final, {integer(), integer()} | integer() | term()) ->
+            any()).</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:segment_bin/0">
+
+  <div class="detail-header">
+    <a href="#t:segment_bin/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">segment_bin/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L155" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">segment_bin() :: <<_:256, _:_*8>>.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:select_fun/1">
+
+  <div class="detail-header">
+    <a href="#t:select_fun/1" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">select_fun/1</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L170" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">select_fun(T) :: fun((<a href="#t:orddict/0">orddict</a>()) -> T).</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:tree_id_bin/0">
+
+  <div class="detail-header">
+    <a href="#t:tree_id_bin/0" class="detail-link" title="Link to this type">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this type</span>
+    </a>
+    <h1 class="signature" translate="no">tree_id_bin/0</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L154" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">tree_id_bin() :: <<_:176>>.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <span class="icon-link" aria-hidden="true"></span>
+        <span class="sr-only">Link to this section</span>
+      </a>
+Functions
+    </h1>
+    <div class="functions-list">
+<section class="detail" id="close/1">
+
+  <div class="detail-header">
+    <a href="#close/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">close(State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L253" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">close(<a href="#t:hashtree/0">hashtree</a>()) -> <a href="#t:hashtree/0">hashtree</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="compare/4">
+
+  <div class="detail-header">
+    <a href="#compare/4" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">compare(Tree, Remote, AccFun, Acc)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L398" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="delete/2">
+
+  <div class="detail-header">
+    <a href="#delete/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">delete(Key, State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L319" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">delete(binary(), <a href="#t:hashtree/0">hashtree</a>()) -> <a href="#t:hashtree/0">hashtree</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="destroy/1">
+
+  <div class="detail-header">
+    <a href="#destroy/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">destroy(Path)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L267" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">destroy(string() | <a href="#t:hashtree/0">hashtree</a>()) -> ok | <a href="#t:hashtree/0">hashtree</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="flush_buffer/1">
+
+  <div class="detail-header">
+    <a href="#flush_buffer/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">flush_buffer(State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L311" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="get_bucket/3">
+
+  <div class="detail-header">
+    <a href="#get_bucket/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">get_bucket(Level, Bucket, State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L441" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">get_bucket(integer(), integer(), <a href="#t:hashtree/0">hashtree</a>()) -> <a href="#t:orddict/0">orddict</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="insert/3">
+
+  <div class="detail-header">
+    <a href="#insert/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">insert(Key, ObjHash, State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L276" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">insert(binary(), binary(), <a href="#t:hashtree/0">hashtree</a>()) -> <a href="#t:hashtree/0">hashtree</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="insert/4">
+
+  <div class="detail-header">
+    <a href="#insert/4" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">insert(Key, ObjHash, State, Opts)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L280" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">insert(binary(), binary(), <a href="#t:hashtree/0">hashtree</a>(), <a href="#t:proplist/0">proplist</a>()) -> <a href="#t:hashtree/0">hashtree</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="key_hashes/2">
+
+  <div class="detail-header">
+    <a href="#key_hashes/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">key_hashes(State, Segment)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L437" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">key_hashes(<a href="#t:hashtree/0">hashtree</a>(), integer()) -> [{integer(), <a href="#t:orddict/0">orddict</a>()}].</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="levels/1">
+
+  <div class="detail-header">
+    <a href="#levels/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">levels(State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L402" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">levels(<a href="#t:hashtree/0">hashtree</a>()) -> pos_integer().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="mem_levels/1">
+
+  <div class="detail-header">
+    <a href="#mem_levels/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">mem_levels(State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L414" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">mem_levels(<a href="#t:hashtree/0">hashtree</a>()) -> integer().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="new/0">
+
+  <div class="detail-header">
+    <a href="#new/0" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">new()</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L211" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">new() -> <a href="#t:hashtree/0">hashtree</a>() | no_return().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="new/2">
+
+  <div class="detail-header">
+    <a href="#new/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">new(TreeId, Options)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L224" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">new({<a href="#t:index/0">index</a>(), <a href="#t:tree_id_bin/0">tree_id_bin</a>() | non_neg_integer()}, <a href="#t:proplist/0">proplist</a>()) -> <a href="#t:hashtree/0">hashtree</a>() | no_return();
+   ({<a href="#t:index/0">index</a>(), <a href="#t:tree_id_bin/0">tree_id_bin</a>() | non_neg_integer()}, <a href="#t:hashtree/0">hashtree</a>()) -> <a href="#t:hashtree/0">hashtree</a>() | no_return().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="new/3">
+
+  <div class="detail-header">
+    <a href="#new/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">new(_, LinkedStore, Options)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L233" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">new({<a href="#t:index/0">index</a>(), <a href="#t:tree_id_bin/0">tree_id_bin</a>() | non_neg_integer()}, <a href="#t:hashtree/0">hashtree</a>(), <a href="#t:proplist/0">proplist</a>()) ->
+       <a href="#t:hashtree/0">hashtree</a>() | no_return().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="read_meta/2">
+
+  <div class="detail-header">
+    <a href="#read_meta/2" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">read_meta(Key, State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L427" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">read_meta(binary(), <a href="#t:hashtree/0">hashtree</a>()) -> {ok, binary()} | undefined.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="rehash_tree/1">
+
+  <div class="detail-header">
+    <a href="#rehash_tree/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">rehash_tree(State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L377" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">rehash_tree(<a href="#t:hashtree/0">hashtree</a>()) -> <a href="#t:hashtree/0">hashtree</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="segments/1">
+
+  <div class="detail-header">
+    <a href="#segments/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">segments(State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L406" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">segments(<a href="#t:hashtree/0">hashtree</a>()) -> pos_integer().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="top_hash/1">
+
+  <div class="detail-header">
+    <a href="#top_hash/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">top_hash(State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L395" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">top_hash(<a href="#t:hashtree/0">hashtree</a>()) -> [] | [{0, binary()}].</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="update_perform/1">
+
+  <div class="detail-header">
+    <a href="#update_perform/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">update_perform(State2)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L359" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">update_perform(<a href="#t:hashtree/0">hashtree</a>()) -> <a href="#t:hashtree/0">hashtree</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="update_snapshot/1">
+
+  <div class="detail-header">
+    <a href="#update_snapshot/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">update_snapshot(State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L346" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">update_snapshot(<a href="#t:hashtree/0">hashtree</a>()) -> {<a href="#t:hashtree/0">hashtree</a>(), <a href="#t:hashtree/0">hashtree</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="update_tree/1">
+
+  <div class="detail-header">
+    <a href="#update_tree/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">update_tree(State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L353" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">update_tree(<a href="#t:hashtree/0">hashtree</a>()) -> <a href="#t:hashtree/0">hashtree</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="width/1">
+
+  <div class="detail-header">
+    <a href="#width/1" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">width(State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L410" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">width(<a href="#t:hashtree/0">hashtree</a>()) -> pos_integer().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="write_meta/3">
+
+  <div class="detail-header">
+    <a href="#write_meta/3" class="detail-link" title="Link to this function">
+      <span class="icon-link" aria-hidden="true"></span>
+      <span class="sr-only">Link to this function</span>
+    </a>
+    <h1 class="signature" translate="no">write_meta(Key, Value, State)</h1>
+
+      <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/src/hashtree.erl#L421" class="view-source" rel="help" title="View Source">
+       <span class="icon-code" aria-hidden="true"></span>
+       <span class="sr-only">View Source</span>
+     </a>
+
+
+  </div>
+
+  <section class="docstring">
+
+      <h2>Specs</h2>
+      <div class="specs">
+
+          <pre translate="no">write_meta(binary(), binary(), <a href="#t:hashtree/0">hashtree</a>()) -> <a href="#t:hashtree/0">hashtree</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+      <footer class="footer">
+
+        <p>
+          <span class="line">
+            Built using
+            <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.26.0) for the
+            <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>.
+          </span>
+          <span class="line">
+            Designed by
+            <a href="https://twitter.com/dignifiedquire" target="_blank" rel="noopener" title="@dignifiedquire" translate="no">Friedel Ziegelmayer</a>.
+          </span>
+        </p>
+        <p>
+
+            <a href="api-reference.html" title="API reference" class="line footer-button">API Reference</a>
+
+          <button class="line footer-button display-shortcuts-help">
+            Display keyboard shortcuts
+          </button>
+          <button class="line footer-button display-quick-switch">
+            Go to a HexDocs package
+          </button>
+          <button class="line footer-button display-settings">
+            Settings
+          </button>
+        </p>
+      </footer>
+    </div>
+  </div>
+</section>
+</div>
+
+
+  </body>
+</html>

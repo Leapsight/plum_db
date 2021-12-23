@@ -28,10 +28,10 @@
 %% The implementation can also serve to illustrate how to use gproc properties and
 %% counters to good effect.
 %%
-%% @type scope()  = l | g.
-%% @type event()  = any().
-%% @type msg()    = any().
-%% @type status() = 1 | 0.
+%% -type scope()  = l | g.
+%% -type event()  = any().
+%% -type msg()    = any().
+%% -type status() = 1 | 0.
 %% @end
 
 %% -module(gproc_ps).  This is a temp hack to override the ETag macro. The

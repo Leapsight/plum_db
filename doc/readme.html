@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.26.0">
+    <meta name="project" content="plum_db v0.3.10">
+
+    <title>PlumDB — plum_db v0.3.10</title>
+    <link rel="stylesheet" href="dist/erlang-e2fc4c0a4f7951ab3ca5.css" />
+
+    <script src="dist/sidebar_items-f6fa2d8b97.js"></script>
+
+      <script src="docs_config.js"></script>
+
+    <script async src="dist/app-68b26e75fcd91b8a764c.js"></script>
+
+
+  </head>
+  <body data-type="extras">
+    <script>
+
+      try {
+        if (localStorage.getItem('night-mode') === 'true') {
+          document.body.classList.add('night-mode');
+        }
+      } catch (error) { }
+    </script>
+
+<div class="main">
+
+<button class="sidebar-button sidebar-toggle">
+  <span class="icon-menu" title="Collapse/expand sidebar"></span>
+</button>
+
+<section class="sidebar">
+  <form class="sidebar-search" action="search.html">
+    <button type="submit" class="search-button" aria-label="Submit Search">
+      <span class="icon-search" aria-hidden="true" title="Submit search"></span>
+    </button>
+    <button type="button" tabindex="-1" class="search-close-button" aria-label="Cancel Search">
+      <span class="icon-cross" aria-hidden="true" title="Cancel search"></span>
+    </button>
+    <label class="search-label">
+      <input name="q" type="text" class="search-input" placeholder="Search..." aria-label="Input your search terms" autocomplete="off" />
+    </label>
+  </form>
+
+  <div class="autocomplete">
+    <div class="autocomplete-results">
+    </div>
+  </div>
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectDetails">
+      <a href="Plum DB.html" class="sidebar-projectName" translate="no">
+plum_db
+      </a>
+      <strong class="sidebar-projectVersion" translate="no">
+        v0.3.10
+      </strong>
+    </div>
+
+  </div>
+
+  <ul class="sidebar-listNav">
+    <li><a id="extras-list-link" href="#full-list">Pages</a></li>
+
+      <li><a id="modules-list-link" href="#full-list">Modules</a></li>
+
+
+  </ul>
+  <div class="gradient"></div>
+  <ul id="full-list" class="sidebar-fullList"></ul>
+</section>
+
+<section class="content">
+  <div class="content-outer">
+    <div id="content" class="content-inner">
+
+<h1 id="content">
+PlumDB
+
+    <a href="https://gitlab.com/leapsight/plum_db/blob/v0.3.10/README.md#L1" title="View Source" class="view-source" rel="help">
+      <span class="icon-code" aria-hidden="true"></span>
+      <span class="sr-only">View Source</span>
+    </a>
+
+</h1>
+
+<p>[[<em>TOC</em>]]</p><p>PlumDB is a globally replicated database using eventual consistency. It uses <a href="https://www.gsd.inesc-id.pt/~ler/reports/srds07.pdf">Epidemic Broadcast Trees</a> and lasp-lang’s <a href="https://github.com/lasp-lang/partisan">Partisan</a>, an alternative runtime system for improved scalability and reduced latency in distributed Erlang applications.</p><p>It is an offspring of <a href="https://github.com/helium/plumtree">Helium's Plumtree</a> – a descendant of <a href="https://github.com/basho/riak_core">Riak Core</a>'s Metadata Store – and Partisan.</p><p>The original Plumtree project was the result of extracting the Metadata Store from Riak Core and replacing the cluster membership state by an ORSWOT CRDT.</p><p>PlumDB builds on top of Plumtree but changes its architecture offering additional features.</p><table><thead><tr><th style="text-align: left;">Feature</th><th style="text-align: left;">PlumDB</th><th style="text-align: left;">Plumtree</th></tr></thead><tbody><tr><td style="text-align: left;">Cluster membership state</td><td style="text-align: left;">Partisan's membership state which uses an AWSET</td><td style="text-align: left;">ORSWOT (riak_dt)</td></tr><tr><td style="text-align: left;">Data model</td><td style="text-align: left;">Riak Core Metadata (dvvset)</td><td style="text-align: left;">Riak Core Metadata (dvvset)</td></tr><tr><td style="text-align: left;">Persistence</td><td style="text-align: left;">leveldb. A key is sharded across <code class="inline">N</code> instances of a store. Stores can be in-memory (<code class="inline">ets</code>), on disk (Basho's Eleveldb i.e. Leveldb) or both. <code class="inline">N</code> is configurable at deployment time.</td><td style="text-align: left;">Each prefix has its own ets and dets table.</td></tr><tr><td style="text-align: left;">API</td><td style="text-align: left;">A simplification of the Riak Core Metadata API. A single function to iterate over the whole database i.e. across one or all shards and across a single or many prefixes.</td><td style="text-align: left;">Riak Core Metadata API (<code class="inline">plumtree_metadata_manager</code>) is used to iterate over prefixes whereas <code class="inline">plumtree_metadata</code> is used to iterate over keys within each prefix. The API is confusing and is the result of having a store (ets + dets) per prefix.</td></tr><tr><td style="text-align: left;">Active anti-entropy</td><td style="text-align: left;">Based on Riak Core Metadata AAE, uses a separate instance of leveldb to store a merkle tree on disk. Updated to use the new API and gen_statem</td><td style="text-align: left;">Based on Riak Core Metadata AAE, uses a separate instance of leveldb to store a merkle tree on disk.</td></tr><tr><td style="text-align: left;">Pubsub</td><td style="text-align: left;">Based on a combination of gen_event and <a href="https://github.com/uwiger/gproc">gproc</a>, allowing to register a Callback module or function to be executed when an event is generated. gproc dependency allows to pattern match events using a match spec</td><td style="text-align: left;">Based on gen_event, allowing to register a Callback module or function to be executed when an event is generated</td></tr></tbody></table><h2 id="installation" class="section-heading">
+  <a href="#installation" class="hover-link"><span class="icon-link" aria-hidden="true"></span></a>
+  Installation
+</h2>
+<p>You will use PlumDB as a dependency in your Erlang application.</p><h3 id="configuration" class="section-heading">
+  <a href="#configuration" class="hover-link"><span class="icon-link" aria-hidden="true"></span></a>
+  Configuration
+</h3>
+<p>PlumDB is configured using the standard Erlang sys.config.</p><p>The following is an example configuration:</p><pre><code class="makeup erlang" translate="no"><span class="p" data-group-id="8228663622-1">{</span><span class="ss">plum_db</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="8228663622-2">[</span><span class="w">
+    </span><span class="p" data-group-id="8228663622-3">{</span><span class="ss">aae_enabled</span><span class="p">,</span><span class="w"> </span><span class="ss">true</span><span class="p" data-group-id="8228663622-3">}</span><span class="p">,</span><span class="w">
+    </span><span class="p" data-group-id="8228663622-4">{</span><span class="ss">store_open_retries_delay</span><span class="p">,</span><span class="w"> </span><span class="mi">2000</span><span class="p" data-group-id="8228663622-4">}</span><span class="p">,</span><span class="w">
+    </span><span class="p" data-group-id="8228663622-5">{</span><span class="ss">store_open_retry_Limit</span><span class="p">,</span><span class="w"> </span><span class="mi">30</span><span class="p" data-group-id="8228663622-5">}</span><span class="p">,</span><span class="w">
+    </span><span class="p" data-group-id="8228663622-6">{</span><span class="ss">data_exchange_timeout</span><span class="p">,</span><span class="w"> </span><span class="mi">60000</span><span class="p" data-group-id="8228663622-6">}</span><span class="p">,</span><span class="w">
+    </span><span class="p" data-group-id="8228663622-7">{</span><span class="ss">hashtree_timer</span><span class="p">,</span><span class="w"> </span><span class="mi">10000</span><span class="p" data-group-id="8228663622-7">}</span><span class="p">,</span><span class="w">
+    </span><span class="p" data-group-id="8228663622-8">{</span><span class="ss">data_dir</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;data&quot;</span><span class="p" data-group-id="8228663622-8">}</span><span class="p">,</span><span class="w">
+    </span><span class="p" data-group-id="8228663622-9">{</span><span class="ss">partitions</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p" data-group-id="8228663622-9">}</span><span class="p">,</span><span class="w">
+    </span><span class="p" data-group-id="8228663622-10">{</span><span class="ss">prefixes</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="8228663622-11">[</span><span class="w">
+        </span><span class="p" data-group-id="8228663622-12">{</span><span class="ss">foo</span><span class="p">,</span><span class="w"> </span><span class="ss">ram</span><span class="p" data-group-id="8228663622-12">}</span><span class="p">,</span><span class="w">
+        </span><span class="p" data-group-id="8228663622-13">{</span><span class="ss">bar</span><span class="p">,</span><span class="w"> </span><span class="ss">ram_disk</span><span class="p" data-group-id="8228663622-13">}</span><span class="p">,</span><span class="w">
+        </span><span class="p" data-group-id="8228663622-14">{</span><span class="p">&lt;&lt;</span><span class="s">&quot;baz&quot;</span><span class="p">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="ss">disk</span><span class="p" data-group-id="8228663622-14">}</span><span class="w">
+    </span><span class="p" data-group-id="8228663622-11">]</span><span class="p" data-group-id="8228663622-10">}</span><span class="w">
+</span><span class="p" data-group-id="8228663622-2">]</span><span class="p" data-group-id="8228663622-1">}</span></code></pre><ul><li><code class="inline">partitions</code> (integer) – the number of shards.</li><li><code class="inline">prefixes</code> – a list of <code class="inline">{Prefix, prefix_type()}</code><ul><li>Prefix is a user defined atom or binary</li><li><code class="inline">prefix_type()</code> is one of <code class="inline">ram</code>, <code class="inline">ram_disk</code> and <code class="inline">disk</code>.</li></ul></li><li><code class="inline">aae_enabled</code> (boolean) – whether the Active Anti-Entropy mechanism is enabled.</li><li><code class="inline">store_open_retries_delay</code> (milliseconds) – controls thre underlying disk store (leveldb) delay between open retries.</li><li><code class="inline">store_open_retry_Limit</code> (integer) – controls thre underlying disk store (leveldb) open retry limit</li><li><code class="inline">data_exchange_timeout</code> (milliseconds) – the timeout for the AAE workers</li><li><code class="inline">hashtree_timer</code> (seconds) –</li></ul><p>At the moment additional configuration is required for Partisan and Plumtree
+dependencies:</p><pre><code class="makeup erlang" translate="no"><span class="p" data-group-id="3567334034-1">{</span><span class="ss">partisan</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="3567334034-2">[</span><span class="w">
+    </span><span class="p" data-group-id="3567334034-3">{</span><span class="ss">peer_port</span><span class="p">,</span><span class="w"> </span><span class="mi">18086</span><span class="p" data-group-id="3567334034-3">}</span><span class="p">,</span><span class="w"> </span><span class="c1">% port for inter-node communication</span><span class="w">
+    </span><span class="p" data-group-id="3567334034-4">{</span><span class="ss">parallelism</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p" data-group-id="3567334034-4">}</span><span class="w"> </span><span class="c1">% number of tcp connections</span><span class="w">
+</span><span class="p" data-group-id="3567334034-2">]</span><span class="p" data-group-id="3567334034-1">}</span></code></pre><pre><code class="makeup erlang" translate="no"><span class="p" data-group-id="7382632641-1">{</span><span class="ss">plumtree</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="7382632641-2">[</span><span class="w">
+    </span><span class="p" data-group-id="7382632641-3">{</span><span class="ss">broadcast_exchange_timer</span><span class="p">,</span><span class="w"> </span><span class="mi">60000</span><span class="p" data-group-id="7382632641-3">}</span><span class="w"> </span><span class="c1">% Perform AAE exchange every 1 min.</span><span class="w">
+</span><span class="p" data-group-id="7382632641-2">]</span><span class="p" data-group-id="7382632641-1">}</span></code></pre><h2 id="usage" class="section-heading">
+  <a href="#usage" class="hover-link"><span class="icon-link" aria-hidden="true"></span></a>
+  Usage
+</h2>
+<p>Learn more by reading the source code <a href="https://gitlab.com/leapsight/plum_db/-/blob/master/DOCS.md">Documentation</a>.</p><h2 id="standalone-testing" class="section-heading">
+  <a href="#standalone-testing" class="hover-link"><span class="icon-link" aria-hidden="true"></span></a>
+  Standalone testing
+</h2>
+<p>We have three rebar3 release profiles that you can use for testing PlumDB itself.</p><h3 id="running-a-3-node-cluster" class="section-heading">
+  <a href="#running-a-3-node-cluster" class="hover-link"><span class="icon-link" aria-hidden="true"></span></a>
+  Running a 3-node cluster
+</h3>
+<p>To run a three node cluster do the following in three separate shells.</p><p>In shell #1:</p><pre><code class="makeup bash" translate="no"><span class="gp unselectable">$ </span><span class="">rebar3 as dev1 run
+</span></code></pre><p>In shell #2:</p><pre><code class="makeup bash" translate="no"><span class="gp unselectable">$ </span><span class="">rebar3 as dev2 run
+</span></code></pre><p>In shell #3:</p><pre><code class="makeup bash" translate="no"><span class="gp unselectable">$ </span><span class="">rebar3 as dev3 run
+</span></code></pre><p>Make node 2 and 3 join node 1</p><p>In node #2:</p><pre><code class="makeup erlang" translate="no"><span class="o">&gt;</span><span class="w"> </span><span class="n">Peer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">plum_db_peer_service</span><span class="p">:</span><span class="nf">peer</span><span class="p" data-group-id="3387626840-1">(</span><span class="ss">&#39;plum_db1@127.0.0.1&#39;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="3387626840-2">{</span><span class="p" data-group-id="3387626840-3">{</span><span class="mi">127</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p" data-group-id="3387626840-3">}</span><span class="p">,</span><span class="w"> </span><span class="mi">18086</span><span class="p" data-group-id="3387626840-2">}</span><span class="p" data-group-id="3387626840-1">)</span><span class="p">.</span><span class="w">
+</span><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db_peer_service</span><span class="p">:</span><span class="nf">join</span><span class="p" data-group-id="3387626840-4">(</span><span class="n">Peer</span><span class="p" data-group-id="3387626840-4">)</span><span class="p">.</span></code></pre><p>In node #3:</p><pre><code class="makeup erlang" translate="no"><span class="o">&gt;</span><span class="w"> </span><span class="n">Peer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">plum_db_peer_service</span><span class="p">:</span><span class="nf">peer</span><span class="p" data-group-id="2242928229-1">(</span><span class="ss">&#39;plum_db1@127.0.0.1&#39;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="2242928229-2">{</span><span class="p" data-group-id="2242928229-3">{</span><span class="mi">127</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p" data-group-id="2242928229-3">}</span><span class="p">,</span><span class="w"> </span><span class="mi">18086</span><span class="p" data-group-id="2242928229-2">}</span><span class="p" data-group-id="2242928229-1">)</span><span class="p">.</span><span class="w">
+</span><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db_peer_service</span><span class="p">:</span><span class="nf">join</span><span class="p" data-group-id="2242928229-4">(</span><span class="n">Peer</span><span class="p" data-group-id="2242928229-4">)</span><span class="p">.</span></code></pre><p>Check that the other two nodes are visible in each node</p><p>In node #1:</p><pre><code class="makeup erlang" translate="no"><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db_peer_service</span><span class="p">:</span><span class="nf">members</span><span class="p" data-group-id="9560776388-1">(</span><span class="p" data-group-id="9560776388-1">)</span><span class="p">.</span><span class="w">
+</span><span class="p" data-group-id="9560776388-2">{</span><span class="ss">ok</span><span class="p">,</span><span class="p" data-group-id="9560776388-3">[</span><span class="ss">&#39;plum_db3@127.0.0.1&#39;</span><span class="p">,</span><span class="ss">&#39;plum_db2@127.0.0.1&#39;</span><span class="p" data-group-id="9560776388-3">]</span><span class="p" data-group-id="9560776388-2">}</span></code></pre><p>In node #2:</p><pre><code class="makeup erlang" translate="no"><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db_peer_service</span><span class="p">:</span><span class="nf">members</span><span class="p" data-group-id="6605739225-1">(</span><span class="p" data-group-id="6605739225-1">)</span><span class="p">.</span><span class="w">
+</span><span class="p" data-group-id="6605739225-2">{</span><span class="ss">ok</span><span class="p">,</span><span class="p" data-group-id="6605739225-3">[</span><span class="ss">&#39;plum_db3@127.0.0.1&#39;</span><span class="p">,</span><span class="ss">&#39;plum_db1@127.0.0.1&#39;</span><span class="p" data-group-id="6605739225-3">]</span><span class="p" data-group-id="6605739225-2">}</span></code></pre><p>In node #3:</p><pre><code class="makeup erlang" translate="no"><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db_peer_service</span><span class="p">:</span><span class="nf">members</span><span class="p" data-group-id="1361422328-1">(</span><span class="p" data-group-id="1361422328-1">)</span><span class="p">.</span><span class="w">
+</span><span class="p" data-group-id="1361422328-2">{</span><span class="ss">ok</span><span class="p">,</span><span class="p" data-group-id="1361422328-3">[</span><span class="ss">&#39;plum_db2@127.0.0.1&#39;</span><span class="p">,</span><span class="ss">&#39;plum_db1@127.0.0.1&#39;</span><span class="p" data-group-id="1361422328-3">]</span><span class="p" data-group-id="1361422328-2">}</span></code></pre><p>In node #1:</p><pre><code class="makeup erlang" translate="no"><span class="o">&gt;</span><span class="w"> </span><span class="p" data-group-id="3948399387-1">[</span><span class="nc">plum_db</span><span class="p">:</span><span class="nf">put</span><span class="p" data-group-id="3948399387-2">(</span><span class="p" data-group-id="3948399387-3">{</span><span class="ss">foo</span><span class="p">,</span><span class="w"> </span><span class="ss">a</span><span class="p" data-group-id="3948399387-3">}</span><span class="p">,</span><span class="w"> </span><span class="ss">x</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p" data-group-id="3948399387-2">)</span><span class="p">.</span><span class="w">
+</span><span class="ss">ok</span></code></pre><p>In node #2:</p><pre><code class="makeup erlang" translate="no"><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db</span><span class="p">:</span><span class="nf">put</span><span class="p" data-group-id="6127348910-1">(</span><span class="p" data-group-id="6127348910-2">{</span><span class="ss">foo</span><span class="p">,</span><span class="w"> </span><span class="ss">a</span><span class="p" data-group-id="6127348910-2">}</span><span class="p">,</span><span class="w"> </span><span class="ss">y</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p" data-group-id="6127348910-1">)</span><span class="p">.</span><span class="w">
+</span><span class="ss">ok</span></code></pre><p>In node #3:</p><pre><code class="makeup erlang" translate="no"><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db</span><span class="p">:</span><span class="nf">put</span><span class="p" data-group-id="3227448021-1">(</span><span class="p" data-group-id="3227448021-2">{</span><span class="ss">foo</span><span class="p">,</span><span class="w"> </span><span class="ss">a</span><span class="p" data-group-id="3227448021-2">}</span><span class="p">,</span><span class="w"> </span><span class="ss">z</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p" data-group-id="3227448021-1">)</span><span class="p">.</span><span class="w">
+</span><span class="ss">ok</span></code></pre><p>Do the following on each node to check they now all have the three elements:</p><pre><code class="makeup erlang" translate="no"><span class="o">&gt;</span><span class="w"> </span><span class="nc">plum_db</span><span class="p">:</span><span class="nf">fold</span><span class="p" data-group-id="8714375099-1">(</span><span class="nf">fun</span><span class="p" data-group-id="8714375099-2">(</span><span class="n">Tuple</span><span class="p">,</span><span class="w"> </span><span class="n">Acc</span><span class="p" data-group-id="8714375099-2">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="p" data-group-id="8714375099-3">[</span><span class="n">Tuple</span><span class="p">|</span><span class="n">Acc</span><span class="p" data-group-id="8714375099-3">]</span><span class="w"> </span><span class="k">end</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="8714375099-4">[</span><span class="p" data-group-id="8714375099-4">]</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="8714375099-5">{</span><span class="ss">&#39;_&#39;</span><span class="p">,</span><span class="w"> </span><span class="ss">&#39;_&#39;</span><span class="p" data-group-id="8714375099-5">}</span><span class="p" data-group-id="8714375099-1">)</span><span class="p">.</span><span class="w">
+</span><span class="p" data-group-id="8714375099-6">[</span><span class="p" data-group-id="8714375099-7">{</span><span class="ss">x</span><span class="p">,</span><span class="mi">1</span><span class="p" data-group-id="8714375099-7">}</span><span class="p">,</span><span class="p" data-group-id="8714375099-8">{</span><span class="ss">y</span><span class="p">,</span><span class="mi">2</span><span class="p" data-group-id="8714375099-8">}</span><span class="p">,</span><span class="p" data-group-id="8714375099-9">{</span><span class="ss">z</span><span class="p">,</span><span class="mi">3</span><span class="p" data-group-id="8714375099-9">}</span><span class="p" data-group-id="8714375099-6">]</span></code></pre><p>We are folding over the whole database (all shards) using the full prefix wildcard <code class="inline">{'_', '_'}</code>.</p><p>The following are examples of prefix wildcards:</p><ul><li><code class="inline">{'_', '_'}</code> - matches all full prefixes</li><li><code class="inline">{foo, '_'}</code> - matches all subprefixes of Prefix <code class="inline">foo</code></li><li><code class="inline">{foo, x}</code> - matches the subprefix <code class="inline">x</code> of prefix <code class="inline">foo</code></li></ul><blockquote><p>Notice that the pattern <code class="inline">{'_', bar}</code> is NOT allowed.</p></blockquote>
+<div class="bottom-actions">
+  <div class="bottom-actions-item">
+
+      <a href="license.html" class="bottom-actions-button" rel="prev">
+        <span class="subheader">
+          ← Previous Page
+        </span>
+        <span class="title">
+LICENSE
+        </span>
+      </a>
+
+  </div>
+  <div class="bottom-actions-item">
+
+  </div>
+</div>
+
+      <footer class="footer">
+
+        <p>
+          <span class="line">
+            Built using
+            <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.26.0) for the
+            <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>.
+          </span>
+          <span class="line">
+            Designed by
+            <a href="https://twitter.com/dignifiedquire" target="_blank" rel="noopener" title="@dignifiedquire" translate="no">Friedel Ziegelmayer</a>.
+          </span>
+        </p>
+        <p>
+
+            <a href="api-reference.html" title="API reference" class="line footer-button">API Reference</a>
+
+          <button class="line footer-button display-shortcuts-help">
+            Display keyboard shortcuts
+          </button>
+          <button class="line footer-button display-quick-switch">
+            Go to a HexDocs package
+          </button>
+          <button class="line footer-button display-settings">
+            Settings
+          </button>
+        </p>
+      </footer>
+    </div>
+  </div>
+</section>
+</div>
+
+
+  </body>
+</html>
