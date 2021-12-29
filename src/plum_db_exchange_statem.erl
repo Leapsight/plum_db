@@ -26,6 +26,7 @@
     peer                            ::  node(),
     %% the remaining partitions to cover
     partitions                      ::  [plum_db:partition()],
+    summary = #{}                   ::  summary(),
     %% count of trees that have been buit
     local_tree_updated = false      ::  boolean(),
     remote_tree_updated = false     ::  boolean(),
@@ -43,6 +44,7 @@
     keys    :: non_neg_integer()
 }).
 
+-type summary() :: #{success | error | skipped => [plum_db:partition()]}.
 
 %% API
 -export([start/2]).
@@ -104,19 +106,30 @@ start_link(Peer, Opts) when is_map(Opts) ->
 
 
 init([Peer, Opts]) ->
+    %% We monitor the remote peer so
+    %% that we can cleanup locks in case we
+    %% disconnect. If we do we will get {nodedown, Peer} that we will hanlde in
+    %% handle_info.
+    _ = partisan_monitor:monitor_node(Peer),
+
+    Partitions = maps:get(partitions, Opts, plum_db:partitions()),
     State = #state{
         peer = Peer,
-        partitions = maps:get(partitions, Opts, plum_db:partitions()),
+        partitions = Partitions,
+        summary = #{},
         timeout = maps:get(timeout, Opts, 60000)
     },
 
     %% We notify subscribers
     _ = plum_db_events:notify(exchange_started, {self(), Peer}),
 
-    %% erlang:send(self(), start),
-    %% In OTP20.3.2 emergency release
+    ?LOG_NOTICE(#{
+        description => "AAE exchange starting",
+        partitions => Partitions,
+        peer => State#state.peer
+    }),
+
     {ok, acquiring_locks, State, [{next_event, internal, next}]}.
-    %% {ok, acquiring_locks, State, 0}.
 
 
 callback_mode() ->
@@ -124,9 +137,16 @@ callback_mode() ->
 
 
 
-terminate(Reason, _StateName, _State) ->
+terminate(Reason, _StateName, State) ->
     %% We notify subscribers
     _ = plum_db_events:notify(exchange_finished, {self(), Reason}),
+
+    ?LOG_NOTICE(#{
+        description => "AAE exchange finished",
+        peer => State#state.peer,
+        summary => State#state.summary
+    }),
+
     ok.
 
 
@@ -146,13 +166,12 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% @end
 %% -----------------------------------------------------------------------------
 
-
 acquiring_locks(internal, next, #state{partitions = []} = State) ->
     %% We finished trying all partitions
     {stop, normal, State};
 
-acquiring_locks(internal, next, #state{partitions = [H|T]} = State) ->
-    NewState = reset_state(State),
+acquiring_locks(internal, next, #state{partitions = [H|T]} = State0) ->
+    State1 = reset_state(State0),
     case plum_db_partition_hashtree:lock(H) of
         ok ->
             ?LOG_DEBUG(#{
@@ -160,9 +179,9 @@ acquiring_locks(internal, next, #state{partitions = [H|T]} = State) ->
                 partition => H
             }),
             %% get corresponding remote lock
-            ok = async_acquire_remote_lock(NewState#state.peer, H),
+            ok = async_acquire_remote_lock(State1#state.peer, H),
             %% We wait for a remote lock event
-            {next_state, acquiring_locks, NewState, NewState#state.timeout};
+            {next_state, acquiring_locks, State1, State1#state.timeout};
         Reason ->
             ?LOG_INFO(#{
                 description => "Failed to acquire local lock, skipping partition",
@@ -170,25 +189,26 @@ acquiring_locks(internal, next, #state{partitions = [H|T]} = State) ->
                 partition => H
             }),
             %% We continue with the next partition
-            acquiring_locks(internal, next, NewState#state{partitions = T})
+            State = add_summary(H, skipped, State1#state{partitions = T}),
+            acquiring_locks(internal, next, State)
     end;
 
 acquiring_locks(timeout, _, #state{partitions = []} = State) ->
     %% We finished trying all partitions
     {stop, normal, State};
 
-acquiring_locks(timeout, _, #state{partitions = [H|T]} = State) ->
+acquiring_locks(timeout, _, #state{partitions = [H|T]} = State0) ->
     %% We timed out waiting for a remote lock for partition H
     ok = release_local_lock(H),
     ?LOG_INFO(#{
         description => "Failed to acquire remote lock, skipping partition",
         reason => timeout,
         partition => H,
-        peer => State#state.peer
+        peer => State0#state.peer
     }),
     %% We try with the remaining partitions
-    NewState = State#state{partitions = T},
-    {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
+    State = add_summary(H, skipped, State0#state{partitions = T}),
+    {next_state, acquiring_locks, State, [{next_event, internal, next}]};
 
 acquiring_locks(
     cast, {remote_lock_acquired, P}, #state{partitions = [P|_]} = State) ->
@@ -199,22 +219,21 @@ acquiring_locks(
     }),
     {next_state, updating_hashtrees, State, [{timeout, 0, start}]};
 
-acquiring_locks(cast, {remote_lock_error, Reason}, State) ->
-    [H|T] = State#state.partitions,
+acquiring_locks(cast, {remote_lock_error, Reason}, State0) ->
+    [H|T] = State0#state.partitions,
     ok = release_local_lock(H),
     ?LOG_INFO(#{
         description => "Failed to acquire remote lock, skipping partition",
         reason => Reason,
         partition => H,
-        peer => State#state.peer
+        peer => State0#state.peer
     }),
     %% We try again with the remaining partitions
-    NewState = State#state{partitions = T},
-    {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
+    State = add_summary(H, skipped, State0#state{partitions = T}),
+    {next_state, acquiring_locks, State, [{next_event, internal, next}]};
 
 acquiring_locks(Type, Content, State) ->
-    _ = handle_unexpected_event(acquiring_locks, Type, Content, State),
-    {next_state, acquiring_locks, State#state.timeout}.
+    handle_other_event(acquiring_locks, Type, Content, State).
 
 
 %% -----------------------------------------------------------------------------
@@ -230,7 +249,7 @@ updating_hashtrees(timeout, start, State) ->
     {next_state, updating_hashtrees, State, State#state.timeout};
 
 updating_hashtrees(
-    timeout, _, #state{peer = Peer, partitions = [H|T]} = State) ->
+    timeout, _, #state{peer = Peer, partitions = [H|T]} = State0) ->
     ?LOG_INFO(#{
         description => "Exchange timed out updating trees",
         reason => timeout,
@@ -239,8 +258,8 @@ updating_hashtrees(
     }),
     ok = release_locks(H, Peer),
     %% We try again with the remaining partitions
-    NewState = State#state{partitions = T},
-    {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
+    State = add_summary(H, skipped, State0#state{partitions = T}),
+    {next_state, acquiring_locks, State, [{next_event, internal, next}]};
 
 updating_hashtrees(cast, local_tree_updated, State0) ->
     State1 = State0#state{local_tree_updated = true},
@@ -263,7 +282,7 @@ updating_hashtrees(cast, remote_tree_updated, State0) ->
 updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
     [H|T] = State#state.partitions,
     ok = release_locks(H, State#state.peer),
-    ?LOG_INFO(#{
+    ?LOG_ERROR(#{
         description => "Error while updating hashtree",
         hashtree => LocOrRemote,
         reason => Reason,
@@ -271,11 +290,11 @@ updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
         peer => State#state.peer
     }),
     %% We carry on with the remaining partitions
-    NewState = State#state{partitions = T},
+    NewState = add_summary(H, error, State#state{partitions = T}),
     {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
 
 updating_hashtrees(Type, Content, State) ->
-    _ = handle_unexpected_event(updating_hashtrees, Type, Content, State),
+    _ = handle_other_event(updating_hashtrees, Type, Content, State),
     {next_state, updating_hashtrees, State}.
 
 
@@ -329,7 +348,7 @@ exchanging_data(timeout, _, State) ->
                 peer => Peer
             });
         false ->
-            ?LOG_INFO(#{
+            ?LOG_DEBUG(#{
                 description => "Completed data exchange (no changes)",
                 partition => Partition,
                 peer => Peer
@@ -337,15 +356,16 @@ exchanging_data(timeout, _, State) ->
     end,
 
     [H|T] = State#state.partitions,
+    NewState = add_summary(H, success, State#state{partitions = T}),
+
     ok = release_locks(H, Peer),
 
     case T of
         [] ->
             %% H was the last partition, so we stop
-            {stop, normal, State};
+            {stop, normal, NewState};
         _ ->
             %% We carry on with the remaining partitions
-            NewState = State#state{partitions = T},
             {
                 next_state, acquiring_locks, NewState,
                 [{next_event, internal, next}]
@@ -353,7 +373,7 @@ exchanging_data(timeout, _, State) ->
     end;
 
 exchanging_data(Type, Content, State) ->
-    _ = handle_unexpected_event(exchanging_data, Type, Content, State),
+    _ = handle_other_event(exchanging_data, Type, Content, State),
     {next_state, exchanging_data, State}.
 
 
@@ -372,19 +392,32 @@ reset_state(State) ->
     }.
 
 
-handle_unexpected_event(_, cast, {remote_lock_acquired, Partition}, State) ->
+handle_other_event(_, cast, {remote_lock_acquired, Partition}, State) ->
     %% We received a late response to an async_acquire_remote_lock
     %% Unlock it.
-    release_remote_lock(Partition, State#state.peer);
+    ok = release_remote_lock(Partition, State#state.peer),
+    {keep_state, State};
 
-handle_unexpected_event(StateLabel, Type, Event, _State) ->
+handle_other_event(_, info, {nodedown, Peer}, #state{peer = Peer} = State0) ->
+    [H|T] = State0#state.partitions,
+    ok = release_local_lock(H),
+    ?LOG_INFO(#{
+        description => "Failed to finish exchange, peer node down",
+        reason => nodedown,
+        peer => State0#state.peer
+    }),
+    %% We try with the remaining partitions
+    State = add_summary(H, skipped, State0#state{partitions = T}),
+    {stop, State};
+
+handle_other_event(StateLabel, Type, Event, State) ->
     ?LOG_INFO(#{
         reason => unsupported_event,
         state_name => StateLabel,
         event => Event,
         type => Type
     }),
-    ok.
+    {keep_state, State}.
 
 
 %% @private
@@ -544,3 +577,8 @@ track_repair(
 track_repair({key_diffs, _, Diffs}, #exchange{keys = Keys} = Acc) ->
     Acc#exchange{keys = Keys + length(Diffs)}.
 
+
+add_summary(Partition, Status, State)
+when Status == success; Status == error; Status == skipped ->
+    Summary = State#state.summary,
+    State#state{summary = maps_utils:append(Status, Partition, Summary)}.

@@ -840,6 +840,9 @@ handle_info({'DOWN', Ref, process, _, _}, State0) ->
     State1 = close_iterator(Ref, State0),
     {noreply, State1};
 
+handle_info({'ETS-TRANSFER', _, _, []}, State) ->
+    {noreply, State};
+
 handle_info(Event, State) ->
     ?LOG_INFO(#{
         description => "Unhandled event",
