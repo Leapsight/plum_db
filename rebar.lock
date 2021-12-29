@@ -34,7 +34,7 @@
  {<<"types">>,{pkg,<<"types">>,<<"0.1.8">>},1},
  {<<"utils">>,
   {git,"https://gitlab.com/leapsight/utils.git",
-       {ref,"d6c9164e2cc937929bc97469981ac5633f1eed28"}},
+       {ref,"c08ee267c3e138dea59c128362da09b71079e51b"}},
   0},
  {<<"uuid">>,{pkg,<<"uuid_erl">>,<<"2.0.2">>},1}]}.
 [
