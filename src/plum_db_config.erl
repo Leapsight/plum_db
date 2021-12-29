@@ -271,8 +271,7 @@ setup_dependencies() ->
         connect_disterl => false,
         exchange_selection => optimized,
         lazy_tick_period => 1000,
-        exchange_tick_period => 10000,
-        broadcast_exchange_timer => 60000
+        exchange_tick_period => 60000
     },
 
     PartisanEnv0 = maps:from_list(application:get_all_env(partisan)),
