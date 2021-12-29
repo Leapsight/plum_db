@@ -20,12 +20,37 @@
 -module(plum_db_partition_hashtree).
 -behaviour(partisan_gen_server).
 -include_lib("kernel/include/logger.hrl").
+-include_lib("partisan/include/partisan.hrl").
 -include("plum_db.hrl").
 
 %% default value for aae_hashtree_ttl config option
 %% Time in milliseconds after which the hashtree will be reset
 %% i.e. destroyed and rebuilt
 -define(DEFAULT_TTL, 7 * 24 * 60 * 60). %% 1 week
+
+
+-record(state, {
+    id              ::  atom(),
+    data_root       ::  file:filename(),
+    %% the plum_db partition this hashtree represents
+    partition       ::  non_neg_integer(),
+    %% the tree managed by this process
+    tree            ::  hashtree_tree:tree() | undefined,
+    %% whether or not the tree has been built or a monitor ref
+    %% if the tree is being built
+    built           ::  boolean() | reference() | undefined,
+    %% a monitor reference for a process that currently holds a
+    %% lock on the tree
+    lock            ::  {internal | external, reference(), remote_process_ref()}
+                        | undefined,
+    %% Timestamp when the tree was build. To be used together with ttl_secs
+    %% to calculate if the hashtree has expired
+    build_ts_secs   ::  non_neg_integer() | undefined,
+    %% Time in milliseconds after which the hashtree will be reset
+    ttl_secs        ::  non_neg_integer() | undefined,
+    reset = false   ::  boolean(),
+    timer           ::  reference() | undefined
+}).
 
 
 %% API
@@ -59,30 +84,6 @@
 -export([terminate/2]).
 -export([code_change/3]).
 
-
-
-
--record(state, {
-    id              ::  atom(),
-    data_root       ::  file:filename(),
-    %% the plum_db partition this hashtree represents
-    partition       ::  non_neg_integer(),
-    %% the tree managed by this process
-    tree            ::  hashtree_tree:tree() | undefined,
-    %% whether or not the tree has been built or a monitor ref
-    %% if the tree is being built
-    built           ::  boolean() | reference() | undefined,
-    %% a monitor reference for a process that currently holds a
-    %% lock on the tree
-    lock            ::  {internal | external, reference(), pid()} | undefined,
-    %% Timestamp when the tree was build. To be used together with ttl_secs
-    %% to calculate if the hashtree has expired
-    build_ts_secs   ::  non_neg_integer() | undefined,
-    %% Time in milliseconds after which the hashtree will be reset
-    ttl_secs        ::  non_neg_integer() | undefined,
-    reset = false   ::  boolean(),
-    timer           ::  reference() | undefined
-}).
 
 
 
@@ -507,6 +508,17 @@ handle_info(
     {_, State1} = do_release_lock(Type, Pid, State),
     {noreply, State1};
 
+handle_info({nodedown, Node}, #state{lock = {Type, _, PidRef}} = State0) ->
+    {partisan_remote_reference, LockNode, _} = PidRef,
+
+    case Node =:= LockNode of
+        true ->
+            {_, State1} = do_release_lock(Type, PidRef, State0),
+            {noreply, State1};
+        false ->
+            {noreply, State0}
+    end;
+
 handle_info({timeout, Ref, tick}, #state{timer = Ref} = State) ->
     State1 = maybe_reset(State),
     %% Reset should happen before scheduling tick
@@ -764,12 +776,18 @@ maybe_external_lock(_, From, State) ->
 
 %% @private
 do_lock(PidRef, Type, State) ->
+    %% This works for PidRef :: pid() and also for Partisan ref
+    Node = partisan_util:node(PidRef),
+    _ = partisan_monitor:monitor_node(Node),
     LockRef = partisan_monitor:monitor(PidRef),
     State#state{lock = {Type, LockRef, PidRef}}.
 
 
 %% @private
 do_release_lock(Type, PidRef, #state{lock = {Type, LockRef, PidRef}} = State) ->
+    %% This works for PidRef :: pid() and also for Partisan ref
+    Node = partisan_util:node(PidRef),
+    true = partisan_monitor:demonitor_node(Node),
     true = partisan_monitor:demonitor(LockRef),
     {ok, State#state{lock = undefined}};
 

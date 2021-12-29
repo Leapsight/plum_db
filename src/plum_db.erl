@@ -1663,6 +1663,8 @@ get_option(Key, Opts, Default) ->
 
 %% @private
 new_remote_iterator(PidRef, FullPrefix, Opts, #state{iterators = Iterators}) ->
+    Node = partisan_util:node(PidRef),
+    _ = partisan_monitor:monitor_node(Node),
     Ref = partisan_monitor:monitor(PidRef),
     Iterator = new_iterator(FullPrefix, Opts),
     ets:insert(Iterators, [{Ref, Iterator}]),
