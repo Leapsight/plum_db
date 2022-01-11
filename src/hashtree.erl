@@ -1170,15 +1170,15 @@ do_remote(N) ->
     ok.
 
 
-send(To, Msg) ->
+send(To, Message) ->
     Ref = partisan_util:ref(make_ref()),
 
     %% Figure out remote node.
-    {Node, ServerRef} = case Process of
+    {Node, ServerRef} = case To of
         {RemoteProcess, RemoteNode} ->
             {RemoteNode, RemoteProcess};
         _ ->
-            {node(), Process}
+            {node(), To}
     end,
 
     partisan_pluggable_peer_service_manager:forward_message(
@@ -1188,24 +1188,6 @@ send(To, Msg) ->
     Ref.
 
 
-wait_for_reply(Ref) ->
-    receive
-        {Ref, {remote, X}} ->
-            X;
-        Other ->
-            ?LOG_WARNING(#{
-                description => "Received unexpected response",
-                response => Other
-            }),
-            exit(timeout)
-    after Timeout ->
-        ?LOG_WARNING(#{
-            description => "Timed out at while waiting for response to message",
-            node => node(),
-            message => Request
-        }),
-        exit(timeout)
-    end.
 
 message_loop(Tree, Msgs, Bytes) ->
     receive
