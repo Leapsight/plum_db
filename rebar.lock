@@ -10,7 +10,7 @@
   2},
  {<<"eleveldb">>,
   {git,"https://github.com/Leapsight/eleveldb.git",
-       {ref,"002e6baa58923f02a98a362650a336ea9e18e06f"}},
+       {ref,"2927b63ebacf290e6e0203640c01379180c2c7f4"}},
   0},
  {<<"gproc">>,{pkg,<<"gproc">>,<<"0.9.0">>},0},
  {<<"key_value">>,

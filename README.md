@@ -27,6 +27,7 @@ You will use PlumDB as a dependency in your Erlang application.
 
 * [Erlang](https://www.erlang.org/) 24 or later
 * [Rebar3](https://rebar3.readme.io/) 3.17.0 or later
+* Snappy
 
 
 ### Configuration
