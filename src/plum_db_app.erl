@@ -84,9 +84,6 @@
 %% @end
 %% -----------------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
-    % _ = application:ensure_all_started(partisan, permanent),
-    % _ = application:ensure_all_started(gproc, permanent),
-
     case plum_db_sup:start_link() of
         {ok, Pid} ->
             {ok, Pid};
