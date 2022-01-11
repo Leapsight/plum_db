@@ -12,10 +12,6 @@
   {git,"https://github.com/Leapsight/eleveldb.git",
        {ref,"002e6baa58923f02a98a362650a336ea9e18e06f"}},
   0},
- {<<"eunit_formatters">>,
-  {git,"git://github.com/seancribbs/eunit_formatters",
-       {ref,"473e0cd89bf5608e97886a3bdf9047a16edc88f0"}},
-  1},
  {<<"gproc">>,{pkg,<<"gproc">>,<<"0.9.0">>},0},
  {<<"key_value">>,
   {git,"https://gitlab.com/leapsight/key_value.git",
@@ -34,7 +30,7 @@
  {<<"types">>,{pkg,<<"types">>,<<"0.1.8">>},1},
  {<<"utils">>,
   {git,"https://gitlab.com/leapsight/utils.git",
-       {ref,"c08ee267c3e138dea59c128362da09b71079e51b"}},
+       {ref,"c0c6a61994e757e85f8037eb85dbf5fd27243842"}},
   0},
  {<<"uuid">>,{pkg,<<"uuid_erl">>,<<"2.0.2">>},1}]}.
 [
