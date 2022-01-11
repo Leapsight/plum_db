@@ -294,7 +294,7 @@ stop() ->
 %% @end
 %% -----------------------------------------------------------------------------
 stop(Reason) ->
-    lager:notice("Stopping; reason=~p", [Reason]),
+    _ = lager:notice("Stopping; reason=~p", [Reason]),
     do(stop, [Reason]).
 
 

@@ -832,7 +832,7 @@ init_state(Name, Partition, DataRoot, Config) ->
 
     case BS /= false andalso SSTBS == false of
         true ->
-            lager:warning(
+            _ = lager:warning(
                 "eleveldb block_size has been renamed sst_block_size "
                 "and the current setting of ~p is being ignored.  "
                 "Changing sst_block_size is strongly cautioned "
