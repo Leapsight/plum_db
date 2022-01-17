@@ -139,8 +139,8 @@
 %% fadvise(WILLNEED) instead.  WILLNEED can reduce disk activity on
 %% systems where physical memory exceeds the database size.
 {mapping, "db.fadvise_willneed", "eleveldb.fadvise_willneed", [
-  {default, false},
-  {datatype, {enum, [true, false]}},
+  {default, off},
+  {datatype, flag},
   hidden
 ]}.
 
@@ -247,8 +247,8 @@
 %% the cache.  This typically eliminates heavy latencies associated
 %% with .sst files opening for early user requests.
 {mapping, "db.cache_object_warming", "eleveldb.cache_object_warming", [
-  {default, true},
-  {datatype, {enum, [true, false]}},
+  {default, off},
+  {datatype, flag},
   hidden
 ]}.
 
