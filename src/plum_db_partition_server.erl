@@ -1070,7 +1070,9 @@ init_ram_disk_prefixes_fun(State) ->
 
         try
             Fun = fun
-                ({Prefix, ram_disk}, ok) ->
+                F({Prefix, #{type := Type}}, Acc) ->
+                    F({Prefix, Type}, Acc);
+                F({Prefix, ram_disk}, ok) ->
                     ?LOG_INFO(#{
                         description => "Loading data from disk to ram",
                         partition => State#state.partition,
@@ -1080,8 +1082,9 @@ init_ram_disk_prefixes_fun(State) ->
                     First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
                     Next = eleveldb:iterator_move(DbIter, First),
                     init_prefix_iterate(
-                        Next, DbIter, First, erlang:byte_size(First), Tab);
-                (_, ok) ->
+                        Next, DbIter, First, erlang:byte_size(First), Tab
+                    );
+                F(_, ok) ->
                     ok
             end,
             ok = lists:foldl(Fun, ok, PrefixList),
