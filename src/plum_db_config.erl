@@ -151,7 +151,6 @@ setup_env() ->
         wait_for_partitions => true,
         wait_for_hashtrees => true,
         wait_for_aae_exchange => true,
-        peer_service => partisan_peer_service,
         store_open_retries_delay => 2000,
         store_open_retry_Limit => 30,
         shard_by => prefix,
