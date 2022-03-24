@@ -159,9 +159,9 @@ setup_env() ->
         hashtree_timer => 10000,
         partitions => max(erlang:system_info(schedulers), 8),
         prefixes => [],
+        aae_enabled => true,
         aae_concurrency => 1,
         aae_hashtree_ttl => 7 * 24 * 60 * 60, %% 1 week
-        aae_enabled => true,
         aae_sha_chunk => 4096,
         aae_leveldb_opts => [
             {write_buffer_size_min, DefaultWriteBufferMin}, {write_buffer_size_max, DefaultWriteBufferMax}
