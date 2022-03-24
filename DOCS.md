@@ -24,7 +24,7 @@
 <tr><td><a href="https://gitlab.com/leapsight/plum_db/blob/master/doc/plum_db_partition_sup.md" class="module">plum_db_partition_sup</a></td></tr>
 <tr><td><a href="https://gitlab.com/leapsight/plum_db/blob/master/doc/plum_db_partition_worker.md" class="module">plum_db_partition_worker</a></td></tr>
 <tr><td><a href="https://gitlab.com/leapsight/plum_db/blob/master/doc/plum_db_partitions_sup.md" class="module">plum_db_partitions_sup</a></td></tr>
-<tr><td><a href="https://gitlab.com/leapsight/plum_db/blob/master/doc/plum_db_peer_service.md" class="module">plum_db_peer_service</a></td></tr>
+<tr><td><a href="https://gitlab.com/leapsight/plum_db/blob/master/doc/partisan_peer_service.md" class="module">partisan_peer_service</a></td></tr>
 <tr><td><a href="https://gitlab.com/leapsight/plum_db/blob/master/doc/plum_db_pubsub.md" class="module">plum_db_pubsub</a></td></tr>
 <tr><td><a href="https://gitlab.com/leapsight/plum_db/blob/master/doc/plum_db_startup_coordinator.md" class="module">plum_db_startup_coordinator</a></td></tr>
 <tr><td><a href="https://gitlab.com/leapsight/plum_db/blob/master/doc/plum_db_sup.md" class="module">plum_db_sup</a></td></tr>
