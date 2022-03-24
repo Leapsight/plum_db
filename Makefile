@@ -9,7 +9,7 @@ compile-no-deps:
 docs: compile
 	${REBAR} as docs edoc
 
-test: compile
+test: xref compile
 	${REBAR} ct
 
 xref: compile
