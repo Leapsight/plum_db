@@ -151,7 +151,6 @@ setup_env() ->
         wait_for_partitions => true,
         wait_for_hashtrees => true,
         wait_for_aae_exchange => true,
-        peer_service => partisan_peer_service,
         store_open_retries_delay => 2000,
         store_open_retry_Limit => 30,
         shard_by => prefix,
@@ -160,9 +159,9 @@ setup_env() ->
         hashtree_timer => 10000,
         partitions => max(erlang:system_info(schedulers), 8),
         prefixes => [],
+        aae_enabled => true,
         aae_concurrency => 1,
         aae_hashtree_ttl => 7 * 24 * 60 * 60, %% 1 week
-        aae_enabled => true,
         aae_sha_chunk => 4096,
         aae_leveldb_opts => [
             {write_buffer_size_min, DefaultWriteBufferMin}, {write_buffer_size_max, DefaultWriteBufferMax}

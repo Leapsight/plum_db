@@ -24,7 +24,7 @@
  {<<"observer_cli">>,{pkg,<<"observer_cli">>,<<"1.7.1">>},0},
  {<<"partisan">>,
   {git,"http://github.com/aramallo/partisan.git",
-       {ref,"6270ec5d47fdda77fd8bcfaf151660c8eaf9fc3e"}},
+       {ref,"57b3346697de564b8b2b00011107cbd12f175d66"}},
   0},
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"2.0.4">>},2},
  {<<"recon">>,{pkg,<<"recon">>,<<"2.5.2">>},0},
@@ -32,7 +32,7 @@
  {<<"types">>,{pkg,<<"types">>,<<"0.1.8">>},1},
  {<<"utils">>,
   {git,"https://gitlab.com/leapsight/utils.git",
-       {ref,"c0c6a61994e757e85f8037eb85dbf5fd27243842"}},
+       {ref,"881e59760358bf22979d6ef1fcd96fc476c8b3ca"}},
   0},
  {<<"uuid">>,{pkg,<<"uuid_erl">>,<<"2.0.2">>},1}]}.
 [
