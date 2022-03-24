@@ -19,6 +19,7 @@
         sext,
         app_config,
         gproc,
+        utils,
         partisan
     ]},
     {env, []},
