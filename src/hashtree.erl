@@ -1181,7 +1181,7 @@ send(To, Message) ->
             {node(), To}
     end,
 
-    partisan_pluggable_peer_service_manager:forward_message(
+    partisan_peer_service:forward_message(
         Node, undefined, ServerRef, Message, []
     ),
 

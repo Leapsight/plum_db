@@ -11,6 +11,14 @@ all() ->
 
 init_per_suite(Config) ->
     %% Pid = spawn(fun loop/0),
+    {ok, Hostname} = inet:gethostname(),
+    Nodename = [list_to_atom("runner@" ++ Hostname), shortnames],
+    case net_kernel:start(Nodename) of
+        {ok, _} ->
+            ok;
+        {error, {already_started, _}} ->
+            ok
+    end,
     application:ensure_all_started(plum_db),
     N = 15000,
     {N, Time} = insert(0, N),

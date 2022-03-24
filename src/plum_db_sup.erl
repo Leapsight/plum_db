@@ -128,8 +128,8 @@ init([]) ->
 %     %% join the cluster before this phase and perform a first aae exchange
 %     case wait_for_aae_exchange() of
 %         true ->
-%             MyNode = plum_db_peer_service:mynode(),
-%             Members = partisan_plumtree_broadcast:broadcast_members(),
+%             MyNode = partisan_peer_service:mynode(),
+%             Members = partisan_peer_service:broadcast_members(),
 
 %             case lists:delete(MyNode, Members) of
 %                 [] ->

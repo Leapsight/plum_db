@@ -32,7 +32,7 @@
 
 
 members([]) ->
-    {ok, Members} = plum_db_peer_service:members(),
+    {ok, Members} = partisan_peer_service:members(),
     print_members(Members).
 
 
