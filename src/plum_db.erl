@@ -662,7 +662,10 @@ match(#continuation{} = Cont, Opts) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc Notice that is you used a resolver option, you will need to call
+%% {@link match/2} with any continuation as first arg, and the same options as
+%% second arg. This is becuase a resolver can be a function and does it might
+%% not be safe to serialize to an external client.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec match(plum_db_prefix_pattern(), plum_db_pkey_pattern(), match_opts()) ->
