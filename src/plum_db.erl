@@ -662,7 +662,10 @@ match(#continuation{} = Cont, Opts) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc Notice that is you used a resolver option, you will need to call
+%% {@link match/2} with any continuation as first arg, and the same options as
+%% second arg. This is becuase a resolver can be a function and does it might
+%% not be safe to serialize to an external client.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec match(plum_db_prefix_pattern(), plum_db_pkey_pattern(), match_opts()) ->
@@ -1272,7 +1275,8 @@ init([]) ->
             named_table,
             {keypos, 1},
             {read_concurrency, true},
-            {write_concurrency, true}
+            {write_concurrency, true},
+            {decentralized_counters, true}
         ]
     ),
     State = #state{iterators = ?MODULE},
@@ -1663,34 +1667,47 @@ get_option(Key, Opts, Default) ->
 
 %% @private
 new_remote_iterator(PidRef, FullPrefix, Opts, #state{iterators = Iterators}) ->
-    Node = partisan_util:node(PidRef),
-    _ = partisan_monitor:monitor_node(Node),
-    Ref = partisan_monitor:monitor(PidRef),
+    Node = partisan:node(PidRef),
+    true = partisan:monitor_node(Node, true),
+    Ref = partisan:monitor(PidRef),
     Iterator = new_iterator(FullPrefix, Opts),
-    ets:insert(Iterators, [{Ref, Iterator}]),
+    ets:insert(Iterators, [{Ref, Node, Iterator}]),
     Ref.
-
-
-%% @private
-from_remote_iterator(Fun, Ref, State) ->
-    case ets:lookup(State#state.iterators, Ref) of
-        [] ->
-            undefined;
-        [{Ref, It}] ->
-            case Fun(It) of
-                #iterator{} = It1 ->
-                    true = ets:insert(State#state.iterators, [{Ref, It1}]),
-                    It1;
-                Other ->
-                    Other
-            end
-    end.
-
 
 %% @private
 close_remote_iterator(Ref, #state{iterators = Iterators} = State) ->
     from_remote_iterator(fun iterator_close/1, Ref, State),
-    ets:delete(Iterators, Ref).
+
+    Ref = partisan:demonitor(Ref, [flush]),
+
+    case ets:delete(Iterators, Ref) of
+        [] ->
+            ok;
+        [{Ref, Node, _}] ->
+            true = partisan:monitor_node(Node, false),
+            ok
+    end.
+
+
+
+%% @private
+from_remote_iterator(Fun, Ref, State) ->
+    Tab = State#state.iterators,
+
+    try ets:lookup_element(Tab, Ref, 3) of
+        It0 ->
+            case Fun(It0) of
+                #iterator{} = It1 ->
+                    true = ets:update_element(Tab, Ref, {3, It1}),
+                    It1;
+                Other ->
+                    Other
+            end
+    catch
+        error:badarg ->
+            undefined
+    end.
+
 
 
 %% @private
