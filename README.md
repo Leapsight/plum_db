@@ -114,14 +114,14 @@ Make node 2 and 3 join node 1
 In node #2:
 
 ```erlang
-> {ok, Peer} = partisan_peer_service:node_spec('plum_db1@127.0.0.1', {{127,0,0,1}, 18086}).
+> {ok, Peer} = partisan:node_spec('plum_db1@127.0.0.1', {{127,0,0,1}, 18086}).
 > partisan_peer_service:join(Peer).
 ```
 
 In node #3:
 
 ```erlang
-> {ok, Peer} = partisan_peer_service:node_spec('plum_db1@127.0.0.1', {{127,0,0,1}, 18086}).
+> {ok, Peer} = partisan:node_spec('plum_db1@127.0.0.1', {{127,0,0,1}, 18086}).
 > partisan_peer_service:join(Peer).
 ```
 

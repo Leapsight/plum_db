@@ -777,18 +777,18 @@ maybe_external_lock(_, From, State) ->
 %% @private
 do_lock(PidRef, Type, State) ->
     %% This works for PidRef :: pid() and also for Partisan ref
-    Node = partisan_util:node(PidRef),
-    _ = partisan_monitor:monitor_node(Node),
-    LockRef = partisan_monitor:monitor(PidRef),
+    Node = partisan:node(PidRef),
+    _ = partisan:monitor_node(Node, true),
+    LockRef = partisan:monitor(PidRef),
     State#state{lock = {Type, LockRef, PidRef}}.
 
 
 %% @private
 do_release_lock(Type, PidRef, #state{lock = {Type, LockRef, PidRef}} = State) ->
     %% This works for PidRef :: pid() and also for Partisan ref
-    Node = partisan_util:node(PidRef),
-    true = partisan_monitor:demonitor_node(Node),
-    true = partisan_monitor:demonitor(LockRef),
+    Node = partisan:node(PidRef),
+    true = partisan:monitor_node(Node, false),
+    true = partisan:demonitor(LockRef),
     {ok, State#state{lock = undefined}};
 
 do_release_lock(_, _, #state{lock = undefined} = State) ->

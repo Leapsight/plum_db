@@ -106,11 +106,9 @@ start_link(Peer, Opts) when is_map(Opts) ->
 
 
 init([Peer, Opts]) ->
-    %% We monitor the remote peer so
-    %% that we can cleanup locks in case we
-    %% disconnect. If we do we will get {nodedown, Peer} that we will hanlde in
-    %% handle_info.
-    _ = partisan_monitor:monitor_node(Peer),
+    %% We monitor the remote peer so that we can cleanup locks in case we
+    %% disconnect. If we do we will get {nodedown, Peer} info event.
+    true = partisan:monitor_node(Peer, true),
 
     Partitions = maps:get(partitions, Opts, plum_db:partitions()),
     State = #state{
@@ -138,12 +136,15 @@ callback_mode() ->
 
 
 terminate(Reason, _StateName, State) ->
+    Peer = State#state.peer,
+    true = partisan:monitor_node(Peer, false),
+
     %% We notify subscribers
     _ = plum_db_events:notify(exchange_finished, {self(), Reason}),
 
     ?LOG_NOTICE(#{
         description => "AAE exchange finished",
-        peer => State#state.peer,
+        peer => Peer,
         summary => State#state.summary
     }),
 
@@ -294,8 +295,7 @@ updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
     {next_state, acquiring_locks, NewState, [{next_event, internal, next}]};
 
 updating_hashtrees(Type, Content, State) ->
-    _ = handle_other_event(updating_hashtrees, Type, Content, State),
-    {next_state, updating_hashtrees, State}.
+    handle_other_event(updating_hashtrees, Type, Content, State).
 
 
 %% -----------------------------------------------------------------------------
@@ -373,8 +373,7 @@ exchanging_data(timeout, _, State) ->
     end;
 
 exchanging_data(Type, Content, State) ->
-    _ = handle_other_event(exchanging_data, Type, Content, State),
-    {next_state, exchanging_data, State}.
+    handle_other_event(exchanging_data, Type, Content, State).
 
 
 
