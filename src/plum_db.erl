@@ -1680,14 +1680,13 @@ close_remote_iterator(Ref, #state{iterators = Iterators} = State) ->
 
     true = partisan:demonitor(Ref, [flush]),
 
-    case ets:delete(Iterators, Ref) of
+    case ets:take(Iterators, Ref) of
         [] ->
             ok;
         [{Ref, Node, _}] ->
             true = partisan:monitor_node(Node, false),
             ok
     end.
-
 
 
 %% @private
