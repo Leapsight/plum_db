@@ -1678,7 +1678,7 @@ new_remote_iterator(PidRef, FullPrefix, Opts, #state{iterators = Iterators}) ->
 close_remote_iterator(Ref, #state{iterators = Iterators} = State) ->
     from_remote_iterator(fun iterator_close/1, Ref, State),
 
-    Ref = partisan:demonitor(Ref, [flush]),
+    true = partisan:demonitor(Ref, [flush]),
 
     case ets:delete(Iterators, Ref) of
         [] ->
