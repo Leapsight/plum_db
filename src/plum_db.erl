@@ -370,19 +370,22 @@ get(FullPrefix, Key) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec get(plum_db_prefix(), plum_db_key(), get_opts()) ->
-    plum_db_value() | undefined.
+    plum_db_value() | plum_db_tombstone() | undefined.
 
 get({Prefix, SubPrefix} = FullPrefix, Key, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     PKey = prefixed_key(FullPrefix, Key),
     Default = get_option(default, Opts, undefined),
+    RemoveTomb = get_option(remove_tombstones, Opts, true),
 
     case get_object(PKey, Opts) of
         undefined ->
             Default;
-        Existing ->
-            maybe_tombstone(plum_db_object:value(Existing), Default)
+        Existing when RemoveTomb == true ->
+            maybe_tombstone(plum_db_object:value(Existing), Default);
+        Existing when RemoveTomb == false ->
+            plum_db_object:value(Existing)
     end.
 
 
@@ -994,7 +997,9 @@ iterator_key_value(#iterator{opts = Opts} = I) ->
             end;
         Resolver ->
             Value = maybe_tombstone(
-                maybe_resolve(PKey, Obj, Resolver, AllowPut), Default),
+                maybe_resolve(PKey, Obj, Resolver, AllowPut),
+                Default
+            ),
             {Key, Value}
     end;
 
@@ -1036,7 +1041,9 @@ iterator_key_values(#iterator{opts = Opts} = I) ->
         Resolver ->
             Prefix = I#iterator.prefix,
             Value = maybe_tombstone(
-                maybe_resolve({Prefix, Key}, Obj, Resolver, AllowPut), Default),
+                maybe_resolve({Prefix, Key}, Obj, Resolver, AllowPut),
+                Default
+            ),
             {Key, Value}
     end.
 
