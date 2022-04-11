@@ -1190,7 +1190,8 @@ delete(FullPrefix, Key, _Opts) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Same as delete(FullPrefix, Key, [])
+%% @doc Same as delete(FullPrefix, Key, []).
+%% EXPERIMENTAL DRAFT - DO NOT USE IT
 %% @end
 %% -----------------------------------------------------------------------------
 -spec erase(plum_db_prefix(), plum_db_key()) -> ok.
@@ -1204,7 +1205,9 @@ erase(FullPrefix, Key) ->
 %% and key locally and then triggers a broradcast to notify other nodes in the
 %% cluster. Currently there are no erase options.
 %%
+%% EXPERIMENTAL DRAFT - DO NOT USE IT
 %% NOTE: currently deletion is logical and no GC is performed.
+%%
 %% @end
 %% -----------------------------------------------------------------------------
 -spec erase(plum_db_prefix(), plum_db_key(), erase_opts()) -> ok.
@@ -1455,11 +1458,7 @@ merge(Node, {PKey, _Context}, Obj) ->
 -spec is_stale({plum_db_pkey(), plum_db_context()}) -> boolean().
 
 is_stale({PKey, Context}) ->
-    Existing = case ?MODULE:get_object(PKey) of
-        {error, not_found} -> undefined;
-        Obj -> Obj
-    end,
-    plum_db_object:is_stale(Context, Existing).
+    plum_db_object:is_stale(Context, ?MODULE:get_object(PKey)).
 
 
 %% -----------------------------------------------------------------------------
@@ -1481,30 +1480,23 @@ is_stale({PKey, Context}) ->
 
 graft({PKey, Context}) ->
     case ?MODULE:get_object(PKey) of
-        {error, not_found} ->
+        undefined ->
             %% There would have to be a serious error in implementation to hit
             %% this case.
-            %% Catch if here b/c it would be much harder to detect
-            ?LOG_ERROR(#{
-                description => "Object not found during graft",
-                key => PKey
-            }),
+            %% Catch it here b/c it would be much harder to detect
             {error, {not_found, PKey}};
          Obj ->
-            graft(Context, Obj)
-    end.
-
-graft(Context, Obj) ->
-    case plum_db_object:equal_context(Context, Obj) of
-        false ->
-            %% when grafting the context will never be causally newer
-            %% than what we have locally. Since its not equal, it must be
-            %% an ancestor. Thus we've sent another, newer update that contains
-            %% this context's information in addition to its own.  This graft
-            %% is deemed stale
-            stale;
-        true ->
-            {ok, Obj}
+            case plum_db_object:equal_context(Context, Obj) of
+                false ->
+                    %% when grafting the context will never be causally newer
+                    %% than what we have locally. Since its not equal,
+                    %% it must be an ancestor. Thus we've sent another, newer
+                    %% update that contains this context's information in
+                    %% addition to its own.  This graft is deemed stale
+                    stale;
+                true ->
+                    {ok, Obj}
+            end
     end.
 
 
