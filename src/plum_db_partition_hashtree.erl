@@ -527,6 +527,10 @@ handle_info({timeout, Ref, tick}, #state{timer = Ref} = State) ->
     State4 = maybe_update_async(State3),
     {noreply, State4};
 
+handle_info({timeout, _, tick}, #state{timer = undefined} = State) ->
+    %% We have already cancelled the timer
+    {noreply, State};
+
 handle_info(Event, State) ->
     ?LOG_INFO(#{
         reason => unsupported_event,
@@ -822,19 +826,21 @@ schedule_reset(State) ->
 
 
 %% @private
-schedule_tick(State) ->
-    ok = cancel_timer(State#state.timer),
-    Ms = case State#state.reset of
+schedule_tick(State0) ->
+    State1 = cancel_timer(State0),
+    Ms = case State1#state.reset of
         true -> 1000;
         false -> plum_db_config:get(hashtree_timer)
     end,
-    Ref = erlang:start_timer(Ms, State#state.id, tick),
-    State#state{timer = Ref}.
+    State1#state{
+        timer = erlang:start_timer(Ms, State1#state.id, tick)
+    }.
 
 
 %% @private
-cancel_timer(undefined) ->
-    ok;
-cancel_timer(Ref) ->
+cancel_timer(#state{timer = undefined} = State) ->
+    State;
+
+cancel_timer(#state{timer = Ref} = State) ->
     _ = erlang:cancel_timer(Ref),
-    ok.
+    State#state{timer = undefined}.
