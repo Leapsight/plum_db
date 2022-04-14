@@ -163,7 +163,8 @@ start_link() ->
 init([]) ->
 	?MODULE = ets:new(
         ?MODULE,
-        [named_table, {read_concurrency, true}, {write_concurrency, true}]),
+        [named_table, {read_concurrency, true}, {write_concurrency, true}]
+	),
   	{ok, #state{}}.
 
 handle_call(stop, _From, St) ->
@@ -208,12 +209,11 @@ handle_call({add_or_claim, Name, Opts0}, {From, _Tag}, St) ->
   end;
 
 handle_call({delete, Name}, {_From, _Tag}, St) ->
-	Reg = ?MODULE,
-	case ets:lookup(Reg, Name) of
+	case ets:lookup(?MODULE, Name) of
 		[] ->
 			{reply, false, St};
 		[{Name, _} = Obj] ->
-			true = ets:delete_object(Reg, Obj),
+			true = ets:delete_object(?MODULE, Obj),
 			{reply, true, St}
 	end;
 
