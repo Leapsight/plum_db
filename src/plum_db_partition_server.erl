@@ -154,7 +154,8 @@ start_link(Partition, Opts) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc Fails with `badarg' exception if `Partition' is an invalid partition
+%% number.
 %% @end
 %% -----------------------------------------------------------------------------
 %% @private
@@ -164,7 +165,7 @@ name(Partition) ->
     case persistent_term:get(Key, undefined) of
         undefined ->
             plum_db:is_partition(Partition)
-                orelse error(invalid_partition_id),
+                orelse error(badarg),
 
             Name = list_to_atom(
                 "plum_db_partition_" ++ integer_to_list(Partition) ++
