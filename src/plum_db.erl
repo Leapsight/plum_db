@@ -160,12 +160,15 @@
 -export([fold_elements/4]).
 -export([get/2]).
 -export([get/3]).
+-export([get/4]).
 -export([match/1]).
 -export([match/2]).
 -export([match/3]).
 -export([get_object/1]).
 -export([get_object/2]).
 -export([get_object/3]).
+-export([get_remote_object/3]).
+-export([get_remote_object/4]).
 -export([get_partition/1]).
 -export([is_partition/1]).
 -export([iterate/1]).
@@ -328,6 +331,13 @@ get(FullPrefix, Key) ->
     get(FullPrefix, Key, []).
 
 
+-spec get(plum_db_prefix(), plum_db_key(), get_opts()) ->
+    plum_db_value() | plum_db_tombstone() | undefined.
+
+get(FullPrefix, Key, Opts) ->
+    get(FullPrefix, Key, Opts, infinity).
+
+
 %% -----------------------------------------------------------------------------
 %% @doc Retrieves the local value stored at the given fullprefix `FullPrefix'
 %%  and key `Key' using options `Opts'.
@@ -369,23 +379,25 @@ get(FullPrefix, Key) ->
 %% concurrent writes during resolution are not resolved.
 %% @end
 %% -----------------------------------------------------------------------------
--spec get(plum_db_prefix(), plum_db_key(), get_opts()) ->
-    plum_db_value() | plum_db_tombstone() | undefined.
+-spec get(plum_db_prefix(), plum_db_key(), get_opts(), timeout()) ->
+    plum_db_value() | plum_db_tombstone() | undefined | {error, timeout}.
 
-get({Prefix, SubPrefix} = FullPrefix, Key, Opts)
+get({Prefix, SubPrefix} = FullPrefix, Key, Opts, Timeout)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     PKey = prefixed_key(FullPrefix, Key),
     Default = get_option(default, Opts, undefined),
     RemoveTomb = get_option(remove_tombstones, Opts, true),
 
-    case get_object(PKey, Opts) of
-        undefined ->
-            Default;
-        Existing when RemoveTomb == true ->
+    case get_object(PKey, Opts, Timeout) of
+        {object, _} = Existing when RemoveTomb == true ->
             maybe_tombstone(plum_db_object:value(Existing), Default);
-        Existing when RemoveTomb == false ->
-            plum_db_object:value(Existing)
+        {object, _} = Existing when RemoveTomb == false ->
+            plum_db_object:value(Existing);
+        {error, _} = Error ->
+            Error;
+        undefined ->
+            Default
     end.
 
 
@@ -400,6 +412,11 @@ get_object(PKey) ->
     get_object(PKey, []).
 
 
+
+get_object(PKey, Opts) ->
+    get_object(PKey, Opts, infinity).
+
+
 %% -----------------------------------------------------------------------------
 %% @doc Returns a Dotted Version Vector Set or undefined.
 %% When reading the value for a subsequent call to put/3 the
@@ -407,17 +424,27 @@ get_object(PKey) ->
 %% obtained w/ plum_db_object:values/1.
 %% @end
 %% -----------------------------------------------------------------------------
-get_object({{Prefix, SubPrefix}, _Key} = PKey, Opts)
+get_object({{Prefix, SubPrefix}, _Key} = PKey, Opts, Timeout)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     Name = plum_db_partition_server:name(get_partition(PKey)),
 
-    case plum_db_partition_server:get(Name, PKey, Opts) of
+    case plum_db_partition_server:get(Name, PKey, Opts, Timeout) of
         {ok, Obj} ->
             Obj;
         {error, not_found} ->
-            undefined
+            undefined;
+        {error, _} = Error ->
+            Error
     end.
+
+
+
+-spec get_remote_object(node(), plum_db_pkey(), get_opts()) ->
+    plum_db_object() | undefined | {error, not_found | any()}.
+
+get_remote_object(Node, PKey, Opts) ->
+    get_remote_object(Node, PKey, Opts, infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -425,23 +452,30 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% This is function is used by plum_db_exchange_statem.
 %% @end
 %% -----------------------------------------------------------------------------
--spec get_object(node(), plum_db_pkey(), get_opts()) ->
-    plum_db_object() | undefined.
+-spec get_remote_object(node(), plum_db_pkey(), get_opts(), timeout()) ->
+    plum_db_object() | undefined | {error, not_found | timeout | any()}.
 
-get_object(Node, PKey, Opts) when node() =:= Node ->
-    get_object(PKey, Opts);
+get_remote_object(Node, {{Prefix, SubPrefix}, _Key} = PKey, Opts, Timeout)
+when is_atom(Node) andalso
+(is_binary(Prefix) orelse is_atom(Prefix)) andalso
+(is_binary(SubPrefix) orelse is_atom(SubPrefix))  ->
+    case partisan:node() of
+        Node ->
+            get_object(PKey, Opts, Timeout);
+        _ ->
+            %% This assumes all nodes have the same number of plum_db
+            %% partitions.
+            Name = plum_db_partition_server:name(get_partition(PKey)),
+            ServerRef = {Name, Node},
 
-get_object(Node, {{Prefix, SubPrefix}, _Key} = PKey, Opts)
-when (is_binary(Prefix) orelse is_atom(Prefix))
-andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
-    %% This assumes all nodes have the same number of plum_db partitions.
-    Name = plum_db_partition_server:name(get_partition(PKey)),
-
-    case plum_db_partition_server:get({Name, Node}, PKey, Opts) of
-        {ok, Existing} ->
-            Existing;
-        {error, not_found} ->
-            undefined
+            case plum_db_partition_server:get(ServerRef, PKey, Opts, Timeout) of
+                {ok, Existing} ->
+                    Existing;
+                {error, not_found} ->
+                    undefined;
+                {error, _} = Error ->
+                    Error
+            end
     end.
 
 %% -----------------------------------------------------------------------------
