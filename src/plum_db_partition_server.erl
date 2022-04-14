@@ -1099,6 +1099,7 @@ init_ram_disk_prefixes_fun(State) ->
                 partition_init_finished, {ok, State#state.partition}
             ),
             ok
+
         catch
             Class:Reason:Stacktrace ->
                 ?LOG_ERROR(#{
@@ -1114,8 +1115,11 @@ init_ram_disk_prefixes_fun(State) ->
                     {error, Reason, State#state.partition}
                 ),
                 erlang:raise(Class, Reason, ?STACKTRACE(Stacktrace))
+
         after
-            eleveldb:iterator_close(DbIter)
+
+            catch eleveldb:iterator_close(DbIter)
+
         end
     end.
 
@@ -1609,10 +1613,12 @@ close_iterator(Ref, State0) when is_reference(Ref) ->
         {#partition_iterator{disk = undefined}, State1} ->
             _ = erlang:demonitor(Ref, [flush]),
             State1;
+
         {#partition_iterator{disk = DbIter}, State1} ->
             _ = erlang:demonitor(Ref, [flush]),
-            _ = eleveldb:iterator_close(DbIter),
+            _ = catch eleveldb:iterator_close(DbIter),
             State1;
+
         error ->
             State0
     end.

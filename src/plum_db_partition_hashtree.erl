@@ -707,19 +707,40 @@ maybe_reset(State) ->
 build_async(State) ->
     case plum_db_config:get(aae_enabled, true) of
         true ->
-            {_Pid, Ref} = spawn_monitor(fun() ->
-                Partition = State#state.partition,
-                %% We iterate over the whole database
-                FullPrefix = {?WILDCARD, ?WILDCARD},
-                Iterator = plum_db:iterator(
-                    FullPrefix, [{partitions, [Partition]}]),
+            Partition = State#state.partition,
+            Build = fun() ->
                 ?LOG_INFO(#{
                     description => "Starting hashtree build",
-                    partition => State#state.partition,
+                    partition => Partition,
                     node => node()
                 }),
-                build(Partition, Iterator)
-            end),
+
+
+                FullPrefix = {?WILDCARD, ?WILDCARD},
+                Opts = [{partitions, [Partition]}],
+
+                Iterator = plum_db:iterator(FullPrefix, Opts),
+
+                %% We iterate over the whole database
+                try
+                    build(Partition, Iterator)
+                catch
+                    Class:Reason:Stacktrace ->
+                        ?LOG_ERROR(#{
+                            description => "Error while building hashtree.",
+                            class => Class,
+                            reason => Reason,
+                            stacktrace => Stacktrace,
+                            node => node()
+                        }),
+                        exit(Reason)
+                after
+                    plum_db:iterator_close(Iterator)
+                end
+            end,
+
+            {_Pid, Ref} = spawn_monitor(Build),
+
             State#state{built = Ref};
         false ->
             State
@@ -730,7 +751,8 @@ build_async(State) ->
 build(Partition, Iterator) ->
     case plum_db:iterator_done(Iterator) of
         true ->
-            plum_db:iterator_close(Iterator);
+            %% The caller should call plum_db:iterator_close(Iterator)
+            ok;
         false ->
             {{FullPrefix, Key}, Obj} = plum_db:iterator_element(Iterator),
             Hash = plum_db_object:hash(Obj),
@@ -739,27 +761,34 @@ build(Partition, Iterator) ->
             build(Partition, plum_db:iterate(Iterator))
     end.
 
+
 %% @private
 build_done(State) ->
+    Partition = State#state.partition,
+
     ?LOG_INFO(#{
         description => "Finished hashtree build",
-        partition => State#state.partition,
+        partition => Partition,
         node => node()
     }),
-    _ = plum_db_events:notify(
-        hashtree_build_finished, {ok, State#state.partition}),
+
+    _ = plum_db_events:notify(hashtree_build_finished, {ok, Partition}),
+
     State#state{built = true, build_ts_secs = erlang:system_time(second)}.
 
 %% @private
 build_error(Reason, State) ->
+    Partition = State#state.partition,
+
     ?LOG_ERROR(#{
         description => "Building tree failed",
         reason => Reason,
-        partition => State#state.partition,
+        partition => Partition,
         node => node()
     }),
-    _ = plum_db_events:notify(
-        hashtree_build_finished, {ok, State#state.partition}),
+
+    _ = plum_db_events:notify(hashtree_build_finished, {ok, Partition}),
+
     State#state{built = false}.
 
 

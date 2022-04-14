@@ -494,14 +494,29 @@ repair_prefix(Peer, Type, [Prefix, SubPrefix]) ->
     FullPrefix = {Prefix, SubPrefix},
     ItType = repair_iterator_type(Type),
     Iterator = repair_iterator(ItType, Peer, FullPrefix),
-    repair_full_prefix(Type, Peer, Iterator).
+
+    try
+        repair_full_prefix(Type, Peer, Iterator)
+    catch
+        Class:Reason:Stacktrace ->
+            ?LOG_ERROR(#{
+                description => "Error while repairing prefix.",
+                prefix => FullPrefix,
+                class => Class,
+                reason => Reason,
+                stacktrace => Stacktrace
+            }),
+            ok
+    after
+        plum_db:iterator_close(Iterator)
+    end.
 
 
 %% @private
 repair_full_prefix(Type, Peer, Iterator) ->
     case plum_db:iterator_done(Iterator) of
         true ->
-            plum_db:iterator_close(Iterator);
+            ok;
         false ->
             {{FullPrefix, Key}, Obj} = plum_db:iterator_element(Iterator),
             repair_other(Type, Peer, {FullPrefix, Key}, Obj),

@@ -334,9 +334,12 @@
               remote_fun/0,
               acc_fun/1]).
 
-%%%===================================================================
-%%% API
-%%%===================================================================
+
+%% =============================================================================
+%% API
+%% =============================================================================
+
+
 
 -spec new() -> hashtree() | no_return().
 new() ->
@@ -381,18 +384,20 @@ new({Index,TreeId}, LinkedStore, Options) ->
     State2.
 
 -spec close(hashtree()) -> hashtree().
+
 close(State) ->
-    close_iterator(State#state.itr),
+    ok = close_iterator(State#state.itr),
     catch eleveldb:close(State#state.ref),
     State#state{itr=undefined}.
 
+
+close_iterator(undefined) ->
+    ok;
+
 close_iterator(Itr) ->
-    try
-        eleveldb:iterator_close(Itr)
-    catch
-        _:_ ->
-            ok
-    end.
+    catch eleveldb:iterator_close(Itr),
+    ok.
+
 
 -spec destroy(string() | hashtree()) -> ok | hashtree().
 destroy(Path) when is_list(Path) ->
@@ -817,7 +822,7 @@ hashes(State, Segments) ->
 -spec snapshot(hashtree()) -> hashtree().
 snapshot(State) ->
     %% Abuse eleveldb iterators as snapshots
-    catch eleveldb:iterator_close(State#state.itr),
+    ok = close_iterator(State#state.itr),
     {ok, Itr} = eleveldb:iterator(State#state.ref, []),
     State#state{itr=Itr}.
 
@@ -853,9 +858,9 @@ multi_select_segment(#state{id=Id, itr=Itr}, Segments, F) ->
 
 iterator_move(undefined, _Seek) ->
     {error, invalid_iterator};
+
 iterator_move(Itr, Seek) ->
     try
-
         eleveldb:iterator_move(Itr, Seek)
     catch
         _:badarg ->
