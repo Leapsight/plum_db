@@ -199,6 +199,7 @@ get(Name, PKey, Opts) ->
 %% @end
 %% -----------------------------------------------------------------------------
 get({Name, _} = Ref, PKey, Opts, Timeout) when is_atom(Name) ->
+    %% A call to a remote node
     partisan_gen_server:call(Ref, {get, PKey, Opts}, Timeout);
 
 get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
@@ -334,7 +335,7 @@ iterator(Name, FullPrefix) when is_atom(Name) ->
 %% to that prefix and the storage type of the prefix if known. If prefix is
 %% undefined or storage type of is undefined, then it starts with disk and
 %% follows with ram. It does not cover ram_disk as all data in ram_disk is in
-%% disk but not viceversa.
+%% disk.
 %% @end
 %% -----------------------------------------------------------------------------
 iterator(Id, FullPrefix, Opts) when is_integer(Id) ->
