@@ -147,10 +147,11 @@ when is_atom(Name) andalso Name =/= undefined andalso is_pid(NewOwner) ->
 %% SUPERVISOR CALLBACKS
 %% ============================================================================
 
+
+
 -spec start_link() -> {ok, pid()} | ignore | {error, term()}.
 start_link() ->
 	gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-
 
 
 
@@ -198,7 +199,7 @@ handle_call({add_and_claim, Name, Opts0}, {From, _Tag}, St) ->
 handle_call({add_or_claim, Name, Opts0}, {From, _Tag}, St) ->
   case lookup(Name) of
 	{ok, Tab} ->
-		ok = give_away(Tab, From),
+		true = do_give_away(Tab, From),
 		{reply, {ok, Tab}, St};
 	error ->
 		Opts1 = set_heir(Opts0),
@@ -270,9 +271,17 @@ code_change(_OldVsn, St, _Extra) ->
 	{ok, St}.
 
 
+
+%% =============================================================================
+%% PRIVATE
+%% =============================================================================
+
+
+
 %% @private
 set_heir(Opts) ->
 	lists:keystore(heir, 1, Opts, {heir, self(), []}).
+
 
 %% @private
 do_give_away(Tab, From) ->
