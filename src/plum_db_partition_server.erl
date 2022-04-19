@@ -1123,7 +1123,7 @@ init_ram_disk_prefixes_fun(State) ->
                     partition_init_finished,
                     {error, Reason, State#state.partition}
                 ),
-                erlang:raise(Class, Reason, ?STACKTRACE(Stacktrace))
+                erlang:raise(Class, Reason, Stacktrace)
 
         after
 
