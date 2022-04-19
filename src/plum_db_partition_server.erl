@@ -211,7 +211,7 @@ get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
 
             case do_get(PKey, DBInfo) of
                 {ok, Object} ->
-                    {ok, maybe_resolve(Object, Opts)};
+                    maybe_resolve(Object, Opts);
                 {error, _} = Error ->
                     Error
             end
@@ -684,9 +684,13 @@ init([Name, Partition, Opts]) ->
 handle_call({get, PKey, Opts}, _From, State) ->
     Reply = case do_get(PKey, State) of
         {ok, Object} ->
-            Resolved = maybe_resolve(Object, Opts),
-            ok = maybe_modify(PKey, Object, Opts, State, Resolved),
-            {ok, Resolved};
+            case maybe_resolve(Object, Opts) of
+                {ok, Resolved} ->
+                    ok = maybe_modify(PKey, Object, Opts, State, Resolved),
+                    {ok, Resolved};
+                {error, _} = Error ->
+                    Error
+            end;
         {error, _} = Error ->
             Error
     end,
@@ -699,11 +703,16 @@ handle_call({put, PKey, ValueOrFun, Opts}, _From, State) ->
 
 handle_call({take, PKey, Opts}, _From, State) ->
     {Existing, Result} = modify(PKey, ?TOMBSTONE, Opts, State),
-    Resolved = maybe_resolve(Existing, Opts),
+    Reply = case maybe_resolve(Existing, Opts) of
+        {ok, Resolved} ->
+            {ok, {Resolved, Result}};
+        {error, _} = Error ->
+            Error
+    end,
     %% We ignore allow_put here so we do not call maybe_modify/5
     %% since we just deleted the object, we just respect the user option
     %% to resolve the Existing
-    {reply, {Resolved, Result}, State};
+    {reply, Reply, State};
 
 handle_call({erase, PKey}, _From, State) ->
     DbRef = db_ref(State),
@@ -1261,15 +1270,20 @@ modify(PKey, ValueOrFun, _Opts, State, Existing, Ctxt) ->
 
 %% @private
 maybe_resolve(undefined, _) ->
-    undefined;
+    {ok, undefined};
 
 maybe_resolve(Object, Opts) ->
     case plum_db_object:value_count(Object) =< 1 of
         true ->
-            Object;
+            {ok, Object};
         false ->
             Resolver = get_option(resolver, Opts, lww),
-            plum_db_object:resolve(Object, Resolver)
+            try
+                {ok, plum_db_object:resolve(Object, Resolver)}
+            catch
+                Class:Reason:Stacktrace ->
+                    {error, {badresolver, Class, Reason, Stacktrace}}
+            end
     end.
 
 
@@ -1506,6 +1520,7 @@ matches_key(PKey0, #partition_iterator{match_spec = MS} = Iter) ->
         true -> decode_key(PKey0);
         false -> PKey0
     end,
+
     case ets:match_spec_run([PKey], MS) of
         [true] ->
             {true, PKey};
@@ -1686,3 +1701,4 @@ decode_key(Bin) ->
 
 %% decode_key(_L) when is_list(L) ->
 %%     error(not_implemented).
+

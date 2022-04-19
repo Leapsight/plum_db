@@ -434,6 +434,8 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
             Obj;
         {error, not_found} ->
             undefined;
+        {error, {badrpc, Class, Reason, Stack}} ->
+            erlang:raise(Class, Reason, Stack);
         {error, _} = Error ->
             Error
     end.
@@ -453,7 +455,9 @@ get_remote_object(Node, PKey, Opts) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec get_remote_object(node(), plum_db_pkey(), get_opts(), timeout()) ->
-    plum_db_object() | undefined | {error, not_found | timeout | any()}.
+    plum_db_object() | undefined
+    | {error, not_found | timeout | any()}
+    | no_return().
 
 get_remote_object(Node, {{Prefix, SubPrefix}, _Key} = PKey, Opts, Timeout)
 when is_atom(Node) andalso
@@ -473,6 +477,8 @@ when is_atom(Node) andalso
                     Existing;
                 {error, not_found} ->
                     undefined;
+                {error, {badrpc, Class, Reason, Stack}} ->
+                    erlang:raise(Class, Reason, Stack);
                 {error, _} = Error ->
                     Error
             end
@@ -1030,11 +1036,12 @@ iterator_key_value(#iterator{opts = Opts} = I) ->
                     {error, conflict}
             end;
         Resolver ->
-            Value = maybe_tombstone(
-                maybe_resolve(PKey, Obj, Resolver, AllowPut),
-                Default
-            ),
-            {Key, Value}
+            case maybe_resolve(PKey, Obj, Resolver, AllowPut) of
+                {ok, Resolved} ->
+                    {Key, maybe_tombstone(Resolved, Default)};
+                {error, _} = Error ->
+                    Error
+            end
     end;
 
 iterator_key_value(#remote_iterator{ref = Ref, node = Node}) ->
@@ -1074,11 +1081,12 @@ iterator_key_values(#iterator{opts = Opts} = I) ->
             {Key, maybe_tombstones(plum_db_object:values(Obj), Default)};
         Resolver ->
             Prefix = I#iterator.prefix,
-            Value = maybe_tombstone(
-                maybe_resolve({Prefix, Key}, Obj, Resolver, AllowPut),
-                Default
-            ),
-            {Key, Value}
+            case maybe_resolve({Prefix, Key}, Obj, Resolver, AllowPut) of
+                {ok, Resolved} ->
+                    {Key, maybe_tombstone(Resolved, Default)};
+                {error, _} = Error ->
+                    Error
+            end
     end.
 
 
@@ -1287,14 +1295,18 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     PKey = prefixed_key(FullPrefix, Key),
     Name = plum_db_partition_server:name(get_partition(PKey)),
 
-    {Existing, _} = plum_db_partition_server:take(Name, PKey),
+    case plum_db_partition_server:take(Name, PKey) of
+        {ok, {Existing, _}} ->
+            case Existing of
+                undefined ->
+                    undefined;
+                Existing ->
+                    Default = get_option(default, Opts, undefined),
+                    maybe_tombstone(plum_db_object:value(Existing), Default)
+            end;
 
-    case Existing of
-        undefined ->
-            undefined;
-        Existing ->
-            Default = get_option(default, Opts, undefined),
-            maybe_tombstone(plum_db_object:value(Existing), Default)
+        {error, {badrpc, Class, Reason, Stack}} ->
+            erlang:raise(Class, Reason, Stack)
     end.
 
 
@@ -1648,25 +1660,36 @@ maybe_resolve(PKey, Existing, Method, AllowPut) ->
 
 %% @private
 maybe_resolve(_PKey, Existing, 1, _Method, _AllowPut) ->
-    plum_db_object:value(Existing);
+    {ok, plum_db_object:value(Existing)};
 
 maybe_resolve(PKey, Existing, _, Method, AllowPut) ->
-    Resolved = plum_db_object:resolve(Existing, Method),
-    RValue = plum_db_object:value(Resolved),
-    case AllowPut of
-        false ->
-            ok;
-        true ->
-            _ = plum_db_partition_server:put(
-                plum_db_partition_server:name(get_partition(PKey)),
-                PKey,
-                RValue,
-                [],
-                infinity
-            ),
-            ok
-    end,
-    RValue.
+    try plum_db_object:resolve(Existing, Method) of
+        Resolved ->
+            RValue = plum_db_object:value(Resolved),
+            case AllowPut of
+                false ->
+                    ok;
+                true ->
+                    _ = plum_db_partition_server:put(
+                        plum_db_partition_server:name(get_partition(PKey)),
+                        PKey,
+                        RValue,
+                        [],
+                        infinity
+                    ),
+                    ok
+            end,
+            {ok, RValue}
+    catch
+        Class:Reason:Stacktrace ->
+            ?LOG_ERROR(#{
+                description => "Error while applying user resolver function",
+                class => Class,
+                reason => Reason,
+                stacktrace => Stacktrace
+            }),
+            {error, badresolver}
+    end.
 
 
 %% @private
