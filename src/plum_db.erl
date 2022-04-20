@@ -1725,7 +1725,7 @@ get_option(Key, Opts, Default) ->
 new_remote_iterator(PidRef, FullPrefix, Opts, #state{iterators = Iterators}) ->
     Node = partisan:node(PidRef),
     true = partisan:monitor_node(Node, true),
-    Ref = partisan:monitor(PidRef),
+    Ref = partisan:monitor(process, PidRef),
     Iterator = new_iterator(FullPrefix, Opts),
     ets:insert(Iterators, [{Ref, Node, Iterator}]),
     Ref.
@@ -1762,7 +1762,6 @@ from_remote_iterator(Fun, Ref, State) ->
         error:badarg ->
             undefined
     end.
-
 
 
 %% @private

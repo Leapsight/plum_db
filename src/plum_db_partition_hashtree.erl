@@ -491,21 +491,18 @@ handle_cast(_Msg, State) ->
 
 
 handle_info(
-    {'DOWN', BuildRef, process, _Pid, normal},
-    #state{built=BuildRef} = State) ->
+    {'DOWN', Ref, process, _Pid, normal}, #state{built = Ref} = State) ->
     State1 = build_done(State),
     {noreply, State1};
 
 handle_info(
-    {'DOWN', BuildRef, process, _Pid, Reason},
-    #state{built = BuildRef} = State) ->
-
+    {'DOWN', Ref, process, _Pid, Reason}, #state{built = Ref} = State) ->
     State1 = build_error(Reason, State),
     {noreply, State1};
 
 handle_info(
-    {'DOWN', LockRef, process, Pid, _Reason},
-    #state{lock = {Type, LockRef, _}} = State) ->
+    {'DOWN', Ref, process, Pid, _Reason},
+    #state{lock = {Type, Ref, _}} = State) ->
     {_, State1} = do_release_lock(Type, Pid, State),
     {noreply, State1};
 
@@ -813,7 +810,7 @@ do_lock(PidRef, Type, State) ->
     %% This works for PidRef :: pid() and also for Partisan ref
     Node = partisan:node(PidRef),
     _ = partisan:monitor_node(Node, true),
-    LockRef = partisan:monitor(PidRef),
+    LockRef = partisan:monitor(process, PidRef),
     State#state{lock = {Type, LockRef, PidRef}}.
 
 
