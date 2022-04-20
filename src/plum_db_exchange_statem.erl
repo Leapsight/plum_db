@@ -137,7 +137,7 @@ callback_mode() ->
 
 terminate(Reason, _StateName, State) ->
     Peer = State#state.peer,
-    true = partisan:monitor_node(Peer, false),
+    _ = catch partisan:monitor_node(Peer, false),
 
     %% We notify subscribers
     _ = plum_db_events:notify(exchange_finished, {self(), Reason}),
