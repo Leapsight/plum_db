@@ -154,7 +154,8 @@ start_link(Partition, Opts) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc Fails with `badarg' exception if `Partition' is an invalid partition
+%% number.
 %% @end
 %% -----------------------------------------------------------------------------
 %% @private
@@ -164,7 +165,7 @@ name(Partition) ->
     case persistent_term:get(Key, undefined) of
         undefined ->
             plum_db:is_partition(Partition)
-                orelse error(invalid_partition_id),
+                orelse error(badarg),
 
             Name = list_to_atom(
                 "plum_db_partition_" ++ integer_to_list(Partition) ++
@@ -198,6 +199,7 @@ get(Name, PKey, Opts) ->
 %% @end
 %% -----------------------------------------------------------------------------
 get({Name, _} = Ref, PKey, Opts, Timeout) when is_atom(Name) ->
+    %% A call to a remote node
     partisan_gen_server:call(Ref, {get, PKey, Opts}, Timeout);
 
 get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
@@ -209,7 +211,7 @@ get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
 
             case do_get(PKey, DBInfo) of
                 {ok, Object} ->
-                    {ok, maybe_resolve(Object, Opts)};
+                    maybe_resolve(Object, Opts);
                 {error, _} = Error ->
                     Error
             end
@@ -333,7 +335,7 @@ iterator(Name, FullPrefix) when is_atom(Name) ->
 %% to that prefix and the storage type of the prefix if known. If prefix is
 %% undefined or storage type of is undefined, then it starts with disk and
 %% follows with ram. It does not cover ram_disk as all data in ram_disk is in
-%% disk but not viceversa.
+%% disk.
 %% @end
 %% -----------------------------------------------------------------------------
 iterator(Id, FullPrefix, Opts) when is_integer(Id) ->
@@ -682,9 +684,13 @@ init([Name, Partition, Opts]) ->
 handle_call({get, PKey, Opts}, _From, State) ->
     Reply = case do_get(PKey, State) of
         {ok, Object} ->
-            Resolved = maybe_resolve(Object, Opts),
-            ok = maybe_modify(PKey, Object, Opts, State, Resolved),
-            {ok, Resolved};
+            case maybe_resolve(Object, Opts) of
+                {ok, Resolved} ->
+                    ok = maybe_modify(PKey, Object, Opts, State, Resolved),
+                    {ok, Resolved};
+                {error, _} = Error ->
+                    Error
+            end;
         {error, _} = Error ->
             Error
     end,
@@ -697,11 +703,16 @@ handle_call({put, PKey, ValueOrFun, Opts}, _From, State) ->
 
 handle_call({take, PKey, Opts}, _From, State) ->
     {Existing, Result} = modify(PKey, ?TOMBSTONE, Opts, State),
-    Resolved = maybe_resolve(Existing, Opts),
+    Reply = case maybe_resolve(Existing, Opts) of
+        {ok, Resolved} ->
+            {ok, {Resolved, Result}};
+        {error, _} = Error ->
+            Error
+    end,
     %% We ignore allow_put here so we do not call maybe_modify/5
     %% since we just deleted the object, we just respect the user option
     %% to resolve the Existing
-    {reply, {Resolved, Result}, State};
+    {reply, Reply, State};
 
 handle_call({erase, PKey}, _From, State) ->
     DbRef = db_ref(State),
@@ -1097,6 +1108,7 @@ init_ram_disk_prefixes_fun(State) ->
                 partition_init_finished, {ok, State#state.partition}
             ),
             ok
+
         catch
             Class:Reason:Stacktrace ->
                 ?LOG_ERROR(#{
@@ -1111,9 +1123,12 @@ init_ram_disk_prefixes_fun(State) ->
                     partition_init_finished,
                     {error, Reason, State#state.partition}
                 ),
-                erlang:raise(Class, Reason, ?STACKTRACE(Stacktrace))
+                erlang:raise(Class, Reason, Stacktrace)
+
         after
-            eleveldb:iterator_close(DbIter)
+
+            catch eleveldb:iterator_close(DbIter)
+
         end
     end.
 
@@ -1255,15 +1270,20 @@ modify(PKey, ValueOrFun, _Opts, State, Existing, Ctxt) ->
 
 %% @private
 maybe_resolve(undefined, _) ->
-    undefined;
+    {ok, undefined};
 
 maybe_resolve(Object, Opts) ->
     case plum_db_object:value_count(Object) =< 1 of
         true ->
-            Object;
+            {ok, Object};
         false ->
             Resolver = get_option(resolver, Opts, lww),
-            plum_db_object:resolve(Object, Resolver)
+            try
+                {ok, plum_db_object:resolve(Object, Resolver)}
+            catch
+                Class:Reason:Stacktrace ->
+                    {error, {badresolver, Class, Reason, Stacktrace}}
+            end
     end.
 
 
@@ -1500,6 +1520,7 @@ matches_key(PKey0, #partition_iterator{match_spec = MS} = Iter) ->
         true -> decode_key(PKey0);
         false -> PKey0
     end,
+
     case ets:match_spec_run([PKey], MS) of
         [true] ->
             {true, PKey};
@@ -1607,10 +1628,12 @@ close_iterator(Ref, State0) when is_reference(Ref) ->
         {#partition_iterator{disk = undefined}, State1} ->
             _ = erlang:demonitor(Ref, [flush]),
             State1;
+
         {#partition_iterator{disk = DbIter}, State1} ->
             _ = erlang:demonitor(Ref, [flush]),
-            _ = eleveldb:iterator_close(DbIter),
+            _ = catch eleveldb:iterator_close(DbIter),
             State1;
+
         error ->
             State0
     end.
@@ -1678,3 +1701,4 @@ decode_key(Bin) ->
 
 %% decode_key(_L) when is_list(L) ->
 %%     error(not_implemented).
+

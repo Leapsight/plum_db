@@ -117,7 +117,8 @@ start_link(Partition) when is_integer(Partition) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc
+%% @doc Fails with `badarg' exception if `Partition' is an invalid partition
+%% number.
 %% @end
 %% -----------------------------------------------------------------------------
 name(Partition) ->
@@ -126,7 +127,7 @@ name(Partition) ->
     case persistent_term:get(Key, undefined) of
         undefined ->
             plum_db:is_partition(Partition)
-                orelse error(invalid_partition_id),
+                orelse error(badarg),
             Name = list_to_atom(
                 "plum_db_partition_" ++ integer_to_list(Partition) ++
                 "_hashtree"
@@ -490,21 +491,18 @@ handle_cast(_Msg, State) ->
 
 
 handle_info(
-    {'DOWN', BuildRef, process, _Pid, normal},
-    #state{built=BuildRef} = State) ->
+    {'DOWN', Ref, process, _Pid, normal}, #state{built = Ref} = State) ->
     State1 = build_done(State),
     {noreply, State1};
 
 handle_info(
-    {'DOWN', BuildRef, process, _Pid, Reason},
-    #state{built = BuildRef} = State) ->
-
+    {'DOWN', Ref, process, _Pid, Reason}, #state{built = Ref} = State) ->
     State1 = build_error(Reason, State),
     {noreply, State1};
 
 handle_info(
-    {'DOWN', LockRef, process, Pid, _Reason},
-    #state{lock = {Type, LockRef, _}} = State) ->
+    {'DOWN', Ref, process, Pid, _Reason},
+    #state{lock = {Type, Ref, _}} = State) ->
     {_, State1} = do_release_lock(Type, Pid, State),
     {noreply, State1};
 
@@ -526,6 +524,10 @@ handle_info({timeout, Ref, tick}, #state{timer = Ref} = State) ->
     State3 = maybe_build_async(State2),
     State4 = maybe_update_async(State3),
     {noreply, State4};
+
+handle_info({timeout, _, tick}, #state{timer = undefined} = State) ->
+    %% We have already cancelled the timer
+    {noreply, State};
 
 handle_info(Event, State) ->
     ?LOG_INFO(#{
@@ -702,19 +704,40 @@ maybe_reset(State) ->
 build_async(State) ->
     case plum_db_config:get(aae_enabled, true) of
         true ->
-            {_Pid, Ref} = spawn_monitor(fun() ->
-                Partition = State#state.partition,
-                %% We iterate over the whole database
-                FullPrefix = {?WILDCARD, ?WILDCARD},
-                Iterator = plum_db:iterator(
-                    FullPrefix, [{partitions, [Partition]}]),
+            Partition = State#state.partition,
+            Build = fun() ->
                 ?LOG_INFO(#{
                     description => "Starting hashtree build",
-                    partition => State#state.partition,
+                    partition => Partition,
                     node => node()
                 }),
-                build(Partition, Iterator)
-            end),
+
+
+                FullPrefix = {?WILDCARD, ?WILDCARD},
+                Opts = [{partitions, [Partition]}],
+
+                Iterator = plum_db:iterator(FullPrefix, Opts),
+
+                %% We iterate over the whole database
+                try
+                    build(Partition, Iterator)
+                catch
+                    Class:Reason:Stacktrace ->
+                        ?LOG_ERROR(#{
+                            description => "Error while building hashtree.",
+                            class => Class,
+                            reason => Reason,
+                            stacktrace => Stacktrace,
+                            node => node()
+                        }),
+                        exit(Reason)
+                after
+                    plum_db:iterator_close(Iterator)
+                end
+            end,
+
+            {_Pid, Ref} = spawn_monitor(Build),
+
             State#state{built = Ref};
         false ->
             State
@@ -725,7 +748,8 @@ build_async(State) ->
 build(Partition, Iterator) ->
     case plum_db:iterator_done(Iterator) of
         true ->
-            plum_db:iterator_close(Iterator);
+            %% The caller should call plum_db:iterator_close(Iterator)
+            ok;
         false ->
             {{FullPrefix, Key}, Obj} = plum_db:iterator_element(Iterator),
             Hash = plum_db_object:hash(Obj),
@@ -734,27 +758,34 @@ build(Partition, Iterator) ->
             build(Partition, plum_db:iterate(Iterator))
     end.
 
+
 %% @private
 build_done(State) ->
+    Partition = State#state.partition,
+
     ?LOG_INFO(#{
         description => "Finished hashtree build",
-        partition => State#state.partition,
+        partition => Partition,
         node => node()
     }),
-    _ = plum_db_events:notify(
-        hashtree_build_finished, {ok, State#state.partition}),
+
+    _ = plum_db_events:notify(hashtree_build_finished, {ok, Partition}),
+
     State#state{built = true, build_ts_secs = erlang:system_time(second)}.
 
 %% @private
 build_error(Reason, State) ->
+    Partition = State#state.partition,
+
     ?LOG_ERROR(#{
         description => "Building tree failed",
         reason => Reason,
-        partition => State#state.partition,
+        partition => Partition,
         node => node()
     }),
-    _ = plum_db_events:notify(
-        hashtree_build_finished, {ok, State#state.partition}),
+
+    _ = plum_db_events:notify(hashtree_build_finished, {ok, Partition}),
+
     State#state{built = false}.
 
 
@@ -779,7 +810,7 @@ do_lock(PidRef, Type, State) ->
     %% This works for PidRef :: pid() and also for Partisan ref
     Node = partisan:node(PidRef),
     _ = partisan:monitor_node(Node, true),
-    LockRef = partisan:monitor(PidRef),
+    LockRef = partisan:monitor(process, PidRef),
     State#state{lock = {Type, LockRef, PidRef}}.
 
 
@@ -822,19 +853,21 @@ schedule_reset(State) ->
 
 
 %% @private
-schedule_tick(State) ->
-    ok = cancel_timer(State#state.timer),
-    Ms = case State#state.reset of
+schedule_tick(State0) ->
+    State1 = cancel_timer(State0),
+    Ms = case State1#state.reset of
         true -> 1000;
         false -> plum_db_config:get(hashtree_timer)
     end,
-    Ref = erlang:start_timer(Ms, State#state.id, tick),
-    State#state{timer = Ref}.
+    State1#state{
+        timer = erlang:start_timer(Ms, State1#state.id, tick)
+    }.
 
 
 %% @private
-cancel_timer(undefined) ->
-    ok;
-cancel_timer(Ref) ->
+cancel_timer(#state{timer = undefined} = State) ->
+    State;
+
+cancel_timer(#state{timer = Ref} = State) ->
     _ = erlang:cancel_timer(Ref),
-    ok.
+    State#state{timer = undefined}.

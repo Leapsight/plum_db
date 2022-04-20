@@ -147,10 +147,11 @@ when is_atom(Name) andalso Name =/= undefined andalso is_pid(NewOwner) ->
 %% SUPERVISOR CALLBACKS
 %% ============================================================================
 
+
+
 -spec start_link() -> {ok, pid()} | ignore | {error, term()}.
 start_link() ->
 	gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-
 
 
 
@@ -163,7 +164,8 @@ start_link() ->
 init([]) ->
 	?MODULE = ets:new(
         ?MODULE,
-        [named_table, {read_concurrency, true}, {write_concurrency, true}]),
+        [named_table, {read_concurrency, true}, {write_concurrency, true}]
+	),
   	{ok, #state{}}.
 
 handle_call(stop, _From, St) ->
@@ -197,7 +199,7 @@ handle_call({add_and_claim, Name, Opts0}, {From, _Tag}, St) ->
 handle_call({add_or_claim, Name, Opts0}, {From, _Tag}, St) ->
   case lookup(Name) of
 	{ok, Tab} ->
-		ok = give_away(Tab, From),
+		true = do_give_away(Tab, From),
 		{reply, {ok, Tab}, St};
 	error ->
 		Opts1 = set_heir(Opts0),
@@ -208,12 +210,11 @@ handle_call({add_or_claim, Name, Opts0}, {From, _Tag}, St) ->
   end;
 
 handle_call({delete, Name}, {_From, _Tag}, St) ->
-	Reg = ?MODULE,
-	case ets:lookup(Reg, Name) of
+	case ets:lookup(?MODULE, Name) of
 		[] ->
 			{reply, false, St};
 		[{Name, _} = Obj] ->
-			true = ets:delete_object(Reg, Obj),
+			true = ets:delete_object(?MODULE, Obj),
 			{reply, true, St}
 	end;
 
@@ -270,9 +271,17 @@ code_change(_OldVsn, St, _Extra) ->
 	{ok, St}.
 
 
+
+%% =============================================================================
+%% PRIVATE
+%% =============================================================================
+
+
+
 %% @private
 set_heir(Opts) ->
 	lists:keystore(heir, 1, Opts, {heir, self(), []}).
+
 
 %% @private
 do_give_away(Tab, From) ->
