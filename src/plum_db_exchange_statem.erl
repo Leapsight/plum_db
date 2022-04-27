@@ -134,7 +134,6 @@ callback_mode() ->
     state_functions.
 
 
-
 terminate(Reason, _StateName, State) ->
     Peer = State#state.peer,
     _ = catch partisan:monitor_node(Peer, false),
@@ -407,7 +406,7 @@ handle_other_event(_, info, {nodedown, Peer}, #state{peer = Peer} = State0) ->
     }),
     %% We try with the remaining partitions
     State = add_summary(H, skipped, State0#state{partitions = T}),
-    {stop, State};
+    {stop, normal, State};
 
 handle_other_event(StateLabel, Type, Event, State) ->
     ?LOG_INFO(#{
