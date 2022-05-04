@@ -1259,12 +1259,12 @@ modify(PKey, ValueOrFun, Opts, State) ->
 
 
 %% @private
-modify(PKey, ValueOrFun, _Opts, State, Existing, Ctxt) ->
+modify(PKey, ValueOrFun, Opts, State, Existing, Ctxt) ->
     Modified = plum_db_object:modify(
         Existing, Ctxt, ValueOrFun, State#state.actor_id
     ),
     ok = do_put(PKey, Modified, State),
-    ok = broadcast(PKey, Modified),
+    ok = maybe_broadcast(PKey, Modified, Opts),
     {Existing, Modified}.
 
 
@@ -1296,6 +1296,16 @@ maybe_modify(PKey, Existing, Opts, State, NewObject) ->
             Ctxt = plum_db_object:context(NewObject),
             Value = plum_db_object:value(NewObject),
             {_, _} = modify(PKey, Value, Opts, State, Existing, Ctxt),
+            ok
+    end.
+
+
+%% @private
+maybe_broadcast(PKey, Obj, Opts) ->
+    case get_option(broadcast, Opts, true) of
+        true ->
+            broadcast(PKey, Obj);
+        false ->
             ok
     end.
 
