@@ -6,7 +6,7 @@
 %% instead.
 %% @see leveldb.maximum_memory
 {mapping, "db.maximum_memory.percent", "eleveldb.total_leveldb_mem_percent", [
-  {default, "50"},
+  {default, "30"},
   {datatype, integer}
 ]}.
 
