@@ -372,7 +372,9 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
             %% context can be obtained using plum_db_object:context/1.
             %% Values can obtained w/ plum_db_object:values/1.
             maybe_tombstone(
-                maybe_resolve(PKey, Existing, ResolveMethod, AllowPut), Default)
+                maybe_resolve(PKey, Existing, ResolveMethod, AllowPut),
+                Default
+            )
     end.
 
 
@@ -910,7 +912,9 @@ iterator_key_value(#iterator{opts = Opts} = I) ->
             end;
         Resolver ->
             Value = maybe_tombstone(
-                maybe_resolve(PKey, Obj, Resolver, AllowPut), Default),
+                maybe_resolve(PKey, Obj, Resolver, AllowPut),
+                Default
+            ),
             {Key, Value}
     end;
 
@@ -952,7 +956,9 @@ iterator_key_values(#iterator{opts = Opts} = I) ->
         Resolver ->
             Prefix = I#iterator.prefix,
             Value = maybe_tombstone(
-                maybe_resolve({Prefix, Key}, Obj, Resolver, AllowPut), Default),
+                maybe_resolve({Prefix, Key}, Obj, Resolver, AllowPut),
+                Default
+            ),
             {Key, Value}
     end.
 
@@ -1058,13 +1064,13 @@ put(FullPrefix, Key, ValueOrFun) ->
     put_opts()) ->
     ok.
 
-put({Prefix, SubPrefix} = FullPrefix, Key, ValueOrFun, _Opts)
+put({Prefix, SubPrefix} = FullPrefix, Key, ValueOrFun, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     PKey = prefixed_key(FullPrefix, Key),
     Context = current_context(PKey),
     Updated = put_with_context(PKey, Context, ValueOrFun),
-    broadcast(PKey, Updated).
+    maybe_broadcast(PKey, Updated, Opts).
 
 
 %% -----------------------------------------------------------------------------
@@ -1114,7 +1120,7 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     PKey = prefixed_key(FullPrefix, Key),
     Context = current_context(PKey),
     {Existing, Updated} = take_with_context(PKey, Context),
-    _ = broadcast(PKey, Updated),
+    _ = maybe_broadcast(PKey, Updated, Opts),
 
     case Existing of
         undefined ->
@@ -1129,7 +1135,9 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
             %% We do not want to resolve, since we just deleted and broadcasted
             AllowPut = false,
             maybe_tombstone(
-                maybe_resolve(PKey, Existing, ResolveMethod, AllowPut), Default)
+                maybe_resolve(PKey, Existing, ResolveMethod, AllowPut),
+                Default
+            )
     end.
 
 
@@ -1581,6 +1589,16 @@ broadcast(PKey, Obj) ->
     %% TODO use third argument or prefix family config
     Broadcast = #plum_db_broadcast{pkey = PKey, obj = Obj},
     partisan_plumtree_broadcast:broadcast(Broadcast, ?MODULE).
+
+
+%% @private
+maybe_broadcast(PKey, Obj, Opts) ->
+    case get_option(broadcast, Opts, true) of
+        true ->
+            broadcast(PKey, Obj);
+        false ->
+            ok
+    end.
 
 
 %% @private
