@@ -25,8 +25,6 @@
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
 
--define(IS_SEXT(X), X >= 8 andalso X =< 19).
-
 %% leveldb uses $\0 but since external term format will contain nulls
 %% we need an additional separator. We use the ASCII unit separator
 %% ($\31) that was design to separate fields of a record.
