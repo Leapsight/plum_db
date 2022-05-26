@@ -1,14 +1,5 @@
 
-%% @doc limited_developer_mem is a specific option that is used
-%% when a developer is testing a high number of vnodes and/or several
-%% VMs on a machine with limited physical memory.  Do NOT use this
-%% option if making performance measurements.  This option overwrites
-%% values given to write_buffer_size_min and write_buffer_size_max.
-{mapping, "db.limited_developer_mem", "rocksdb.open.limited_developer_mem", [
-{default, off},
-{datatype, flag},
-hidden
-]}.
+
 
 %% @doc Each partition first stores new key/value data in a memory based
 %% write buffer. This write buffer is in parallel to the recovery log
@@ -18,40 +9,18 @@ hidden
 %% write_buffer_size_max.
 %% @see leveldb.sync
 {mapping, "db.write_buffer_size_min", "rocksdb.open.write_buffer_size_min", [
-{default, "48MB"},
+{default, "32MB"},
 {datatype, bytesize},
 hidden
 ]}.
 
 %% @see leveldb.write_buffer_size_min
 {mapping, "db.write_buffer_size_max", "rocksdb.open.write_buffer_size_max", [
-{default, "80MB"},
+{default, "64MB"},
 {datatype, bytesize},
 hidden
 ]}.
 
-
-%% @doc This parameter defines the percentage of total server memory
-%% to assign to LevelDB. LevelDB will dynamically adjust its internal
-%% cache sizes to stay within this size.  The memory size can
-%% alternately be assigned as a byte count via leveldb.maximum_memory
-%% instead.
-%% @see leveldb.maximum_memory
-{mapping, "db.maximum_memory.percent", "rocksdb.open.total_leveldb_mem_percent", [
-  {default, "30"},
-  {datatype, integer}
-]}.
-
-%% @doc This parameter defines the number of bytes of server memory to
-%% assign to LevelDB. LevelDB will dynamically adjust its internal
-%% cache sizes to stay within this size. The memory size can
-%% alternately be assigned as percentage of total server memory via
-%% leveldb.maximum_memory.percent.
-%% @see leveldb.maximum_memory.percent
-{mapping, "db.maximum_memory", "rocksdb.open.total_leveldb_mem", [
-  {datatype, bytesize},
-  hidden
-]}.
 
 %% @doc Whether LevelDB will flush after every write. Note: If you are
 %% familiar with fsync, this is analagous to calling fsync after every
@@ -68,9 +37,9 @@ hidden
 %% are destined to not find the requested key. The Bloom filter
 %% typically increases the size of an .sst table file by about
 %% 2%.
-{mapping, "db.bloomfilter", "rocksdb.open.use_bloomfilter", [
-  {default, on},
-  {datatype, flag},
+{mapping, "db.bloomfilter", "eleveldb.open.block_based_table_options.bloom_filter_policy", [
+  {default, 10},
+  {datatype, integer},
   hidden
 ]}.
 
@@ -87,7 +56,7 @@ hidden
 
 %% @doc Enables or disables the verification of the data fetched from
 %% LevelDB against internal checksums.
-{mapping, "db.verify_checksums", "rocksdb.open.verify_checksums", [
+{mapping, "db.verify_checksums", "rocksdb.read.verify_checksums", [
   {default, on},
   {datatype, flag},
   hidden
@@ -120,159 +89,3 @@ hidden
 %% DEPRECATED
 %% =============================================================================
 
-
-%% @doc Defines the limit where block cache memory can no longer be
-%% released in favor of the page cache.  This has no impact with
-%% regard to release in favor of file cache.  The value is per
-%% vnode.
-{mapping, "db.block_cache_threshold", "eleveldb.block_cache_threshold", [
-{default, "32MB"},
-{datatype, bytesize},
-hidden
-]}.
-
-
-%% @doc Defines the key count threshold for a new key entry in the key
-%% index for a block. Most deployments should leave this parameter
-%% alone.
-{mapping, "db.block.restart_interval", "eleveldb.block_restart_interval", [
-{default, 16},
-{datatype, integer},
-hidden
-]}.
-
-
-%% @doc Defines the number of incremental adjustments to attempt
-%% between the block.size value and the maximum block.size for an .sst
-%% table file.  Value of zero disables the underlying dynamic
-%% block_size feature.
-%% @see leveldb.block.size
-{mapping, "db.block.size_steps", "eleveldb.block_size_steps", [
-{default, 16},
-{datatype, integer},
-hidden
-]}.
-
-
-%% @doc Option to override LevelDB's use of fadvise(DONTNEED) with
-%% fadvise(WILLNEED) instead.  WILLNEED can reduce disk activity on
-%% systems where physical memory exceeds the database size.
-{mapping, "db.fadvise_willneed", "eleveldb.fadvise_willneed", [
-{default, off},
-{datatype, flag},
-hidden
-]}.
-
-%% @doc Controls when a background compaction initiates solely
-%% due to the number of delete tombstones within an individual
-%% .sst table file.  Value of 'off' disables the feature.
-{mapping, "db.compaction.trigger.tombstone_count", "eleveldb.delete_threshold", [
-{default, 1000},
-{datatype, [integer, {atom, off}]},
-hidden
-]}.
-
-{translation,
- "eleveldb.delete_threshold",
- fun(Conf) ->
-   case cuttlefish:conf_get("db.compaction.trigger.tombstone_count", Conf) of
-       off -> 0;
-       Int -> Int
-   end
- end}.
-
-
-%% @doc leveldb can be configured to use different mounts for
-%% different levels. This tiered option defaults to off, but you can
-%% configure it to trigger at levels 1-6. If you do this, anything
-%% stored at the chosen level or greater will be stored on
-%% leveldb.tiered.mounts.slow, while everything at the levels below will
-%% be stored on leveldb.tiered.mounts.fast
-%% Levels 3 or 4 are recommended settings.
-%% WARNING: There is no dynamic reallocation of leveldb
-%% data across mounts.  If you change this setting without manually
-%% moving the level files to the correct mounts, leveldb will act in
-%% an unexpected state.
-%% @see leveldb.tiered.mounts.fast
-%% @see leveldb.tiered.mounts.slow
-{mapping, "db.tiered", "eleveldb.tiered_slow_level", [
-{default, off},
-{datatype, [
-  {atom, off},
-  {integer, 1},
-  {integer, 2},
-  {integer, 3},
-  {integer, 4},
-  {integer, 5},
-  {integer, 6}
-]},
-hidden
-]}.
-
-{translation, "eleveldb.tiered_slow_level",
-fun(Conf) ->
-  case cuttlefish:conf_get("db.tiered", Conf) of
-      off -> 0;
-      I -> I
-  end
-end
-}.
-
-%% @see leveldb.tiered
-{mapping, "db.tiered.path.fast", "eleveldb.tiered_fast_prefix", [
-{datatype, directory},
-hidden
-]}.
-
-%% @see leveldb.tiered
-{mapping, "db.tiered.path.slow", "eleveldb.tiered_slow_prefix", [
-{datatype, directory},
-hidden
-]}.
-
-%% @doc This parameter enables/disables logic that saves a list
-%% of cached objects (currently only open .sst file names) at
-%% database close.  The list is used on the next open to pre-populate
-%% the cache.  This typically eliminates heavy latencies associated
-%% with .sst files opening for early user requests.
-{mapping, "db.cache_object_warming", "eleveldb.cache_object_warming", [
-{default, off},
-{datatype, flag},
-hidden
-]}.
-
-
-%% @doc Enable global expiry.  All leveldb databases / vnodes
-%% will use same retention_time and/or whole_file_expiry settings.
-%% Settings are unique for each leveldb instances in multi_backend.
-{mapping, "db.expiration", "eleveldb.expiry_enabled", [
-{default, off},
-{datatype, flag},
-hidden
-]}.
-
-%% @doc Minutes until object expires.  Gives number of minutes
-%% a stored key/value will stay within the database before automatic
-%% deletion.  Set to unlimited to disable age based expiry.
-{mapping, "db.expiration.retention_time", "eleveldb.expiry_minutes", [
-{default, unlimited},
-{datatype, [{duration, m}, {atom, unlimited}]},
-hidden
-]}.
-
-%% @doc Expire entire .sst table file.  Authorizes leveldb to
-%% eliminate entire files that contain expired data (delete files
-%% instead of removing expired key/values during compaction).
-{mapping, "db.expiration.mode", "eleveldb.whole_file_expiry", [
-{default, whole_file},
-{datatype, {flag, whole_file, normal}},
-hidden
-]}.
-
-%% @doc Enables or disables the verification of LevelDB data during
-%% compaction.
-{mapping, "db.verify_compaction", "eleveldb.verify_compaction", [
-{default, on},
-{datatype, flag},
-hidden
-]}.

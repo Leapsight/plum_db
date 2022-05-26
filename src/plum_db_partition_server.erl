@@ -868,10 +868,10 @@ init_state(Name, Partition, DataRoot, Opts0) ->
     %% of vnodes that try to kick off compaction at the same time
     %% under heavy uniform load...
     WriteBufferMin = key_value:get(
-        [open, write_buffer_size_min], Opts1, 30 * 1024 * 1024
+        [open, write_buffer_size_min], Opts1, 32 * 1024 * 1024
     ),
     WriteBufferMax = key_value:get(
-        [open, write_buffer_size_max], Opts1, 60 * 1024 * 1024
+        [open, write_buffer_size_max], Opts1, 64 * 1024 * 1024
     ),
     WriteBuffer = WriteBufferMin + rand:uniform(
         1 + WriteBufferMax - WriteBufferMin
