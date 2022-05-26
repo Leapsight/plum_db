@@ -145,8 +145,6 @@ on_set(_, _) ->
 
 setup_env() ->
     Config0 = maps:from_list(application:get_all_env(?APP)),
-    DefaultWriteBufferMin = 4 * 1024 * 1024,
-    DefaultWriteBufferMax = 14 * 1024 * 1024,
     Defaults = #{
         wait_for_partitions => true,
         wait_for_hashtrees => true,
@@ -162,10 +160,7 @@ setup_env() ->
         aae_enabled => true,
         aae_concurrency => 1,
         aae_hashtree_ttl => 7 * 24 * 60 * 60, %% 1 week
-        aae_sha_chunk => 4096,
-        aae_leveldb_opts => [
-            {write_buffer_size_min, DefaultWriteBufferMin}, {write_buffer_size_max, DefaultWriteBufferMax}
-        ]
+        aae_sha_chunk => 4096
     },
     Config1 = maps:merge(Defaults, Config0),
     % Prefixes0 = maps:get(prefixes, Config1),

@@ -244,7 +244,7 @@ key_hashes(Node, Partition, Prefixes, Segment) ->
 %% -----------------------------------------------------------------------------
 -spec lock(plum_db:partition()) -> ok | not_built | locked.
 lock(Partition) ->
-    lock(node(), Partition).
+    lock(partisan:node(), Partition).
 
 
 %% -----------------------------------------------------------------------------
@@ -283,7 +283,7 @@ lock(Node, Partition, Pid) ->
 %% -----------------------------------------------------------------------------
 -spec release_lock(plum_db:partition()) -> ok.
 release_lock(Partition) ->
-    release_lock(node(), Partition).
+    release_lock(partisan:node(), Partition).
 
 
 %% -----------------------------------------------------------------------------
@@ -324,7 +324,7 @@ release_lock(Node, Partition, Pid) ->
     ok | not_locked | not_built | ongoing_update.
 
 update(Partition) ->
-    update(node(), Partition).
+    update(partisan:node(), Partition).
 
 
 %% -----------------------------------------------------------------------------
@@ -353,7 +353,7 @@ update(Node, Partition) ->
 -spec reset(plum_db:partition()) -> ok.
 
 reset(Partition) ->
-    reset(node(), Partition).
+    reset(partisan:node(), Partition).
 
 
 %% -----------------------------------------------------------------------------
@@ -461,7 +461,7 @@ handle_cast(reset, #state{built = true, lock = {internal, _, Pid}} = State) ->
         reason => ongoing_update,
         lock_owner => Pid,
         partition => State#state.partition,
-        node => node()
+        node => partisan:node()
     }),
     NewState = schedule_reset(State),
     {noreply, NewState};
@@ -472,7 +472,7 @@ handle_cast(reset, #state{built = true, lock = {external, _, Pid}} = State) ->
         reason => locked,
         lock_owner => Pid,
         partition => State#state.partition,
-        node => node()
+        node => partisan:node()
     }),
     NewState = schedule_reset(State),
     {noreply, NewState};
@@ -482,7 +482,7 @@ handle_cast(reset, #state{built = false} = State) ->
         description => "Skipping hashtree reset",
         reason => not_built,
         partition => State#state.partition,
-        node => node()
+        node => partisan:node()
     }),
     {noreply, State#state{reset = false}};
 
@@ -539,8 +539,7 @@ handle_info(Event, State) ->
 
 terminate(_Reason, State0) ->
     {_, State1} = do_release_lock(State0),
-    hashtree_tree:destroy(State1#state.tree),
-    ok.
+    ok = hashtree_tree:destroy(State1#state.tree).
 
 
 code_change(_OldVsn, State, _Extra) ->
@@ -560,7 +559,8 @@ do_init(#state{data_root = DataRoot, partition = Partition} = State0) ->
     try
         TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
         Tree = hashtree_tree:new(
-            TreeId, [{data_dir, DataRoot}, {num_levels, 2}]),
+            TreeId, [{data_dir, DataRoot}, {num_levels, 2}]
+        ),
         TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
         State = State0#state{
             tree = Tree,
@@ -584,7 +584,7 @@ do_reset(#state{lock = undefined} = State) ->
     ?LOG_INFO(#{
         description => "Resetting hashtree",
         partition => State#state.partition,
-        node => node()
+        node => partisan:node()
     }),
     do_init(State).
 
@@ -709,7 +709,7 @@ build_async(State) ->
                 ?LOG_INFO(#{
                     description => "Starting hashtree build",
                     partition => Partition,
-                    node => node()
+                    node => partisan:node()
                 }),
 
 
@@ -728,7 +728,7 @@ build_async(State) ->
                             class => Class,
                             reason => Reason,
                             stacktrace => Stacktrace,
-                            node => node()
+                            node => partisan:node()
                         }),
                         exit(Reason)
                 after
@@ -766,7 +766,7 @@ build_done(State) ->
     ?LOG_INFO(#{
         description => "Finished hashtree build",
         partition => Partition,
-        node => node()
+        node => partisan:node()
     }),
 
     _ = plum_db_events:notify(hashtree_build_finished, {ok, Partition}),
@@ -781,7 +781,7 @@ build_error(Reason, State) ->
         description => "Building tree failed",
         reason => Reason,
         partition => Partition,
-        node => node()
+        node => partisan:node()
     }),
 
     _ = plum_db_events:notify(hashtree_build_finished, {ok, Partition}),

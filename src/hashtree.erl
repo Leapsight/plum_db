@@ -387,7 +387,7 @@ new({Index,TreeId}, LinkedStore, Options) ->
 
 close(State) ->
     ok = close_iterator(State#state.itr),
-    catch eleveldb:close(State#state.ref),
+    catch rocksdb:close(State#state.ref),
     State#state{itr=undefined}.
 
 
@@ -395,17 +395,18 @@ close_iterator(undefined) ->
     ok;
 
 close_iterator(Itr) ->
-    catch eleveldb:iterator_close(Itr),
+    catch rocksdb:iterator_close(Itr),
     ok.
 
 
 -spec destroy(string() | hashtree()) -> ok | hashtree().
 destroy(Path) when is_list(Path) ->
-    ok = eleveldb:destroy(Path, []);
+    _ = rocksdb:destroy(Path, []),
+    ok;
 destroy(State) ->
     %% Assumption: close was already called on all hashtrees that
     %%             use this LevelDB instance,
-    ok = eleveldb:destroy(State#state.path, []),
+    _ = rocksdb:destroy(State#state.path, []),
     State.
 
 -spec insert(binary(), binary(), hashtree()) -> hashtree().
@@ -447,7 +448,7 @@ maybe_flush_buffer(State=#state{write_buffer_count=WCount}) ->
 flush_buffer(State=#state{write_buffer=WBuffer}) ->
     %% Write buffer is built backwards, reverse to build update list
     Updates = lists:reverse(WBuffer),
-    ok = eleveldb:write(State#state.ref, Updates, []),
+    ok = rocksdb:write(State#state.ref, Updates, []),
     State#state{write_buffer=[],
                 write_buffer_count=0}.
 
@@ -468,7 +469,7 @@ should_insert(HKey, Opts, State) ->
         true ->
             %% Only insert if object does not already exist
             %% TODO: Use bloom filter so we don't always call get here
-            case eleveldb:get(State#state.ref, HKey, []) of
+            case rocksdb:get(State#state.ref, HKey, []) of
                 not_found ->
                     true;
                 _ ->
@@ -556,13 +557,13 @@ mem_levels(#state{mem_levels=M}) ->
 -spec write_meta(binary(), binary(), hashtree()) -> hashtree().
 write_meta(Key, Value, State) when is_binary(Key) and is_binary(Value) ->
     HKey = encode_meta(Key),
-    ok = eleveldb:put(State#state.ref, HKey, Value, []),
+    ok = rocksdb:put(State#state.ref, HKey, Value, []),
     State.
 
 -spec read_meta(binary(), hashtree()) -> {ok, binary()} | undefined.
 read_meta(Key, State) when is_binary(Key) ->
     HKey = encode_meta(Key),
-    case eleveldb:get(State#state.ref, HKey, []) of
+    case rocksdb:get(State#state.ref, HKey, []) of
         {ok, Value} ->
             {ok, Value};
         _ ->
@@ -642,6 +643,7 @@ new_segment_store(Opts, State) ->
                       SegmentPath
               end,
 
+
     DefaultWriteBufferMin = 30 * 1024 * 1024,
     DefaultWriteBufferMax = 60 * 1024 * 1024,
     Default = [
@@ -661,12 +663,11 @@ new_segment_store(Opts, State) ->
     Config2 = orddict:store(write_buffer_size, WriteBufferSize, Config),
     Config3 = orddict:erase(write_buffer_size_min, Config2),
     Config4 = orddict:erase(write_buffer_size_max, Config3),
-    Config5 = orddict:store(is_internal_db, true, Config4),
-    Config6 = orddict:store(use_bloomfilter, true, Config5),
-    Options = orddict:store(create_if_missing, true, Config6),
+    Config5 = orddict:store(use_bloomfilter, true, Config4),
+    Options = orddict:store(create_if_missing, true, Config5),
 
     ok = filelib:ensure_dir(DataDir),
-    {ok, Ref} = eleveldb:open(DataDir, Options),
+    {ok, Ref} = rocksdb:open(DataDir, Options),
     State#state{ref=Ref, path=DataDir}.
 
 -spec share_segment_store(hashtree(), hashtree()) -> hashtree().
@@ -762,7 +763,7 @@ set_memory_bucket(Level, Bucket, Val, State) ->
 -spec get_disk_bucket(integer(), integer(), hashtree()) -> any().
 get_disk_bucket(Level, Bucket, #state{id=Id, ref=Ref}) ->
     HKey = encode_bucket(Id, Level, Bucket),
-    case eleveldb:get(Ref, HKey, []) of
+    case rocksdb:get(Ref, HKey, []) of
         {ok, Bin} ->
             binary_to_term(Bin);
         _ ->
@@ -773,7 +774,7 @@ get_disk_bucket(Level, Bucket, #state{id=Id, ref=Ref}) ->
 set_disk_bucket(Level, Bucket, Val, State=#state{id=Id, ref=Ref}) ->
     HKey = encode_bucket(Id, Level, Bucket),
     Bin = term_to_binary(Val),
-    ok = eleveldb:put(Ref, HKey, Bin, []),
+    ok = rocksdb:put(Ref, HKey, Bin, []),
     State.
 
 -spec encode_id(binary() | non_neg_integer()) -> tree_id_bin().
@@ -821,9 +822,9 @@ hashes(State, Segments) ->
 
 -spec snapshot(hashtree()) -> hashtree().
 snapshot(State) ->
-    %% Abuse eleveldb iterators as snapshots
+    %% Abuse rocksdb iterators as snapshots
     ok = close_iterator(State#state.itr),
-    {ok, Itr} = eleveldb:iterator(State#state.ref, []),
+    {ok, Itr} = rocksdb:iterator(State#state.ref, []),
     State#state{itr=Itr}.
 
 -spec multi_select_segment(hashtree(), list('*'|integer()), select_fun(T))
@@ -859,9 +860,17 @@ multi_select_segment(#state{id=Id, itr=Itr}, Segments, F) ->
 iterator_move(undefined, _Seek) ->
     {error, invalid_iterator};
 
+iterator_move(Itr, prefetch) ->
+    %% Not supported in rocksdb
+    iterator_move(Itr, next);
+
+iterator_move(Itr, prefetch_stop) ->
+    %% Not supported in rocksdb
+    iterator_move(Itr, next);
+
 iterator_move(Itr, Seek) ->
     try
-        eleveldb:iterator_move(Itr, Seek)
+        rocksdb:iterator_move(Itr, Seek)
     catch
         _:badarg ->
             {error, invalid_iterator}
@@ -1183,7 +1192,7 @@ send(To, Message) ->
         {RemoteProcess, RemoteNode} ->
             {RemoteNode, RemoteProcess};
         _ ->
-            {node(), To}
+            {partisan:node(), To}
     end,
 
     partisan:forward_message(
