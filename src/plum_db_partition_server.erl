@@ -37,7 +37,7 @@
     partition                           ::  non_neg_integer(),
     actor_id                            ::  {integer(), node()} | undefined,
     db_info                             ::  db_info() | undefined,
-	config = []							::	opts(),
+	opts = []							::	opts(),
 	data_root							::	file:filename(),
 	open_opts = []						::	opts(),
     iterators = []                      ::  iterators(),
@@ -855,12 +855,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
-init_state(Name, Partition, DataRoot, Config0) ->
-    %% Merge the proplist passed in from Config with any values specified by the
-    %% rocksdb app level; precedence is given to the Config.
-    Config1 = orddict:merge(
+init_state(Name, Partition, DataRoot, Opts0) ->
+    %% Merge the proplist passed in from Opts with any values specified by the
+    %% rocksdb app level; precedence is given to the Opts.
+    Opts1 = orddict:merge(
         fun(_K, VLocal, _VGlobal) -> VLocal end,
-        orddict:from_list(Config0), % Local
+        orddict:from_list(Opts0), % Local
         orddict:from_list(application:get_all_env(rocksdb))
     ), % Global
 
@@ -868,26 +868,27 @@ init_state(Name, Partition, DataRoot, Config0) ->
     %% of vnodes that try to kick off compaction at the same time
     %% under heavy uniform load...
     WriteBufferMin = key_value:get(
-        [open, write_buffer_size_min], Config1, 30 * 1024 * 1024
+        [open, write_buffer_size_min], Opts1, 30 * 1024 * 1024
     ),
     WriteBufferMax = key_value:get(
-        [open, write_buffer_size_max], Config1, 60 * 1024 * 1024
+        [open, write_buffer_size_max], Opts1, 60 * 1024 * 1024
     ),
     WriteBuffer = WriteBufferMin + rand:uniform(
         1 + WriteBufferMax - WriteBufferMin
     ),
 
-    %% Update the write buffer size in the merged config and make sure
+    %% Update the write buffer size in the merged Opts and make sure
     %% create_if_missing is set to true
-    Config2 = key_value:set([open, write_buffer_size], WriteBuffer, Config1),
-    Config3 = key_value:set([open, create_if_missing], true, Config2),
-    Config4 = key_value:remove([open, write_buffer_size_min], Config3),
-    Config = key_value:remove([open, write_buffer_size_max], Config4),
+    Opts2 = key_value:set([open, write_buffer_size], WriteBuffer, Opts1),
+    Opts3 = key_value:set([open, create_if_missing], true, Opts2),
+    Opts4 = key_value:set([open, create_missing_column_families], true, Opts3),
+    Opts5 = key_value:remove([open, write_buffer_size_min], Opts4),
+    Opts = key_value:remove([open, write_buffer_size_max], Opts5),
 
     %% Parse out the open/read/write options
-    OpenOpts = key_value:get(open, Config, []),
-    ReadOpts = key_value:get(read, Config, []),
-    WriteOpts = key_value:get(write, Config, []),
+    OpenOpts = key_value:get(open, Opts, []),
+    ReadOpts = key_value:get(read, Opts, []),
+    WriteOpts = key_value:get(write, Opts, []),
 
     %% Use read options for folding, but FORCE fill_cache to false
     FoldOpts = key_value:set(fill_cache, false, ReadOpts),
@@ -920,12 +921,10 @@ init_state(Name, Partition, DataRoot, Config0) ->
             write_opts = WriteOpts,
             fold_opts = FoldOpts
         },
-		config = Config,
+		opts = Opts,
         data_root = DataRoot,
 		open_opts = OpenOpts
 	}.
-
-
 
 
 %% @private
