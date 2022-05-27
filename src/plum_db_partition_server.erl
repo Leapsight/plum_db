@@ -25,8 +25,6 @@
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
 
--define(IS_SEXT(X), X >= 8 andalso X =< 19).
-
 %% leveldb uses $\0 but since external term format will contain nulls
 %% we need an additional separator. We use the ASCII unit separator
 %% ($\31) that was design to separate fields of a record.
@@ -698,14 +696,26 @@ handle_call({get, PKey, Opts}, _From, State) ->
     {reply, Reply, State};
 
 handle_call({put, PKey, ValueOrFun, Opts}, _From, State) ->
-    {_Existing, Result} = modify(PKey, ValueOrFun, Opts, State),
-    {reply, Result, State};
+    Reply =
+        case modify(PKey, ValueOrFun, Opts, State) of
+            {ok, _Existing, Result} ->
+                {ok, Result};
+            {error, _} = Error ->
+                Error
+        end,
+    {reply, Reply, State};
+
 
 handle_call({take, PKey, Opts}, _From, State) ->
-    {Existing, Result} = modify(PKey, ?TOMBSTONE, Opts, State),
-    Reply = case maybe_resolve(Existing, Opts) of
-        {ok, Resolved} ->
-            {ok, {Resolved, Result}};
+    Reply =
+    case modify(PKey, ?TOMBSTONE, Opts, State) of
+        {ok, Existing, Result} ->
+            case maybe_resolve(Existing, Opts) of
+                {ok, Resolved} ->
+                    {ok, {Resolved, Result}};
+                {error, _} = Error ->
+                    Error
+            end;
         {error, _} = Error ->
             Error
     end,
@@ -1260,12 +1270,18 @@ modify(PKey, ValueOrFun, Opts, State) ->
 
 %% @private
 modify(PKey, ValueOrFun, Opts, State, Existing, Ctxt) ->
-    Modified = plum_db_object:modify(
-        Existing, Ctxt, ValueOrFun, State#state.actor_id
-    ),
-    ok = do_put(PKey, Modified, State),
-    ok = maybe_broadcast(PKey, Modified, Opts),
-    {Existing, Modified}.
+    Actor = State#state.actor_id,
+
+    %% If ValueOrFun is a function then it might raise an exception, so we catch
+    try plum_db_object:modify(Existing, Ctxt, ValueOrFun, Actor) of
+        Modified ->
+            ok = do_put(PKey, Modified, State),
+            ok = maybe_broadcast(PKey, Modified, Opts),
+            {ok, Existing, Modified}
+    catch
+        _:Reason ->
+            {error, Reason}
+    end.
 
 
 %% @private
@@ -1295,7 +1311,7 @@ maybe_modify(PKey, Existing, Opts, State, NewObject) ->
         true ->
             Ctxt = plum_db_object:context(NewObject),
             Value = plum_db_object:value(NewObject),
-            {_, _} = modify(PKey, Value, Opts, State, Existing, Ctxt),
+            _ = modify(PKey, Value, Opts, State, Existing, Ctxt),
             ok
     end.
 

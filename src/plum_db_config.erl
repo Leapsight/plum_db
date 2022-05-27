@@ -178,10 +178,10 @@ setup_env() ->
 
 %% @private
 validate_prefixes(undefined, _) ->
-    [];
+    #{};
 
 validate_prefixes([], _) ->
-    [];
+    #{};
 
 validate_prefixes(L, ShardBy) ->
     Fun = fun

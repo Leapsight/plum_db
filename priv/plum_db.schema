@@ -159,7 +159,7 @@
 %% algorithm that compresses to similar volume but averages twice
 %% as fast on writes and four times as fast on reads.
 {mapping, "db.compression.algorithm", "eleveldb.compression", [
-  {new_conf_value, lz4},
+  {default, lz4},
   {datatype, {enum, [snappy, lz4]}}
 ]}.
 
@@ -170,7 +170,8 @@
     case Setting of
       false -> false;
       true ->
-        cuttlefish:conf_get("db.compression.algorithm", Conf, snappy)
+        exit(Setting),
+        cuttlefish:conf_get("db.compression.algorithm", Conf, lz4)
     end
  end}.
 
