@@ -73,8 +73,9 @@ hash({object, Object}) ->
 -spec modify(plum_db_object() | undefined,
              plum_db_context(),
              plum_db_value() | plum_db_modifier(),
-             term()) -> plum_db_object().
+             term()) -> plum_db_object() | no_return().
 modify(undefined, Context, Fun, ServerId) when is_function(Fun) ->
+    %% Fun could raise an exception
     modify(undefined, Context, Fun(undefined), ServerId);
 modify(Obj, Context, Fun, ServerId) when is_function(Fun) ->
     modify(Obj, Context, Fun(values(Obj)), ServerId);
