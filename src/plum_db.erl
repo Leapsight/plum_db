@@ -1189,20 +1189,27 @@ put(FullPrefix, Key, ValueOrFun) ->
     plum_db_key(),
     plum_db_value() | plum_db_modifier(),
     put_opts()) ->
-    ok.
+    ok | {error, Reason :: any()}.
 
 put({Prefix, SubPrefix} = FullPrefix, Key, ValueOrFun, Opts)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     PKey = prefixed_key(FullPrefix, Key),
-    _ = plum_db_partition_server:put(
+
+    Res = plum_db_partition_server:put(
         plum_db_partition_server:name(get_partition(PKey)),
         PKey,
         ValueOrFun,
         Opts,
         infinity
     ),
-    ok.
+
+    case Res of
+        {ok, _} ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
 
 
 
