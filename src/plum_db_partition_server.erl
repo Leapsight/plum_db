@@ -386,6 +386,14 @@ iterator_move(
     %% We continue with ets so we translate the action
     iterator_move(Iter, first);
 
+iterator_move(#partition_iterator{disk_done = true} = Iter, prefetch) ->
+    %% We continue with ets so we translate the action
+    iterator_move(Iter, next);
+
+iterator_move(#partition_iterator{disk_done = true} = Iter, prefetch_stop) ->
+    %% We continue with ets so we translate the action
+    iterator_move(Iter, next);
+
 iterator_move(#partition_iterator{disk_done = false} = Iter, Action) ->
 
     DbIter = Iter#partition_iterator.disk,
