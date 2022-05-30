@@ -105,7 +105,7 @@
 -type get_opts()            ::  [get_opt()].
 
 %% Iterator Types
--type it_opt_resolver()     ::  {resolver, plum_db_resolver() | lww}.
+-type it_opt_resolver()     ::  {resolver, plum_db_resolver() | lww | fww}.
 -type it_opt_default_fun()  ::  fun((plum_db_key()) -> plum_db_value()).
 -type it_opt_default()      ::  {default,
                                     plum_db_value() | it_opt_default_fun()}.
@@ -349,7 +349,7 @@ get(FullPrefix, Key, Opts) ->
 %% `Opts' is a property list that can take the following options:
 %%
 %% * `default' – value to return if no value is found, Defaults to `undefined'.
-%% * `resolver' – The atom `lww' or a `plum_db_resolver()' that resolves
+%% * `resolver' – The atom `lww', `fww' or a `plum_db_resolver()' that resolves
 %% conflicts if they are encountered. Defaults to `lww' (last-write-wins).
 %% * `allow_put' – whether or not to write and broadcast a resolved value.
 %% Defaults to `true'.
@@ -781,7 +781,7 @@ iterator(Term) ->
 %%
 %% This function can take the following options:
 %%
-%% * `resolver': either the atom `lww' or a function that resolves conflicts if
+%% * `resolver': either the atom `lww', `fww' or a function that resolves conflicts if
 %% they are encounted (see get/3 for more details). Conflict resolution is
 %% performed when values are retrieved (see iterator_key_value/1 and iterator_key_values/1).
 %% If no resolver is provided no resolution is performed. The default is to not
@@ -1053,8 +1053,9 @@ iterator_key_value(#remote_iterator{ref = Ref, node = Node}) ->
 %% Before calling this function, check the iterator is not complete w/
 %% iterator_done/1.
 %% If a resolver was passed to iterator/0 when creating the given iterator,
-%% siblings will be resolved using the given function or last-write-wins (if
-%% `lww' is passed as the resolver). If no resolver was used then no conflict
+%% siblings will be resolved using the given function, last-write-wins (if
+%% `lww' is passed as the resolver) or first-write-wins (if
+%% `fww' is passed as the resolver). If no resolver was used then no conflict
 %% resolution will take place.
 %% If conflicts are resolved, the resolved value is written to
 %% local store and a broadcast is submitted to update other nodes in the

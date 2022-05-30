@@ -388,6 +388,21 @@ lww_last_test() ->
     ?assertEqual( lww(F2,A) , {[{a,4,[{5, 1002345}]}, {b,1,[]}], []}    ),
     ok.
 
+fww_last_test() ->
+    F  = fun (A,B) -> A >= B end,
+    F2 = fun ({_,TS1}, {_,TS2}) -> TS1 >= TS2 end,
+    X  = {[{a,4,[5,2]},{b,1,[]},{c,1,[3]}],[]},
+    Y  = {[{a,4,[5,2]},{b,1,[]},{c,1,[3]}],[10,0]},
+    Z  = {[{a,4,[5,2]}, {b,1,[1]}], [3]},
+    A  = {[{a,4,[{5, 1002345}, {7, 1002340}]}, {b,1,[{4, 1001340}]}], [{2, 1001140}]},
+    ?assertEqual( last(F,X) , 3                                         ),
+    ?assertEqual( last(F,Y) , 0                                        ),
+    ?assertEqual( lww(F,X)  , {[{a,4,[]},{b,1,[]},{c,1,[3]}],[]}        ),
+    ?assertEqual( lww(F,Y)  , {[{a,4,[]},{b,1,[]},{c,1,[]}],[0]}       ),
+    ?assertEqual( lww(F,Z)  , {[{a,4,[]},{b,1,[1]}],[]}                 ),
+    ?assertEqual( lww(F2,A) , {[{a,4,[]}, {b,1,[]}], [{2, 1001140}]}    ),
+    ok.
+
 reconcile_test() ->
     F1 = fun (L) -> lists:sum(L) end,
     F2 = fun (L) -> hd(lists:sort(L)) end,
