@@ -578,6 +578,10 @@ do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt0) ->
             {Acc0, ?EOT};
         true ->
             Acc0;
+        false when It#iterator.keys_only == true ->
+            K = It#iterator.key,
+            {Acc1, Cnt} = do_fold_acc(K, Fun, Acc0, Cnt0, RemoveTombs),
+            do_fold_next(Fun, Acc1, iterate(It), RemoveTombs, Limit, Cnt);
         false when Cnt0 < Limit ->
             KV = iterator_key_values(It),
             {Acc1, Cnt} = do_fold_acc(KV, Fun, Acc0, Cnt0, RemoveTombs),
@@ -592,8 +596,9 @@ do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt0) ->
 do_fold_acc({_, ?TOMBSTONE}, _, Acc, Cnt, true) ->
     {Acc, Cnt};
 
-do_fold_acc(KV, Fun, Acc, Cnt, _) ->
-    {Fun(KV, Acc), Cnt + 1}.
+do_fold_acc(Term, Fun, Acc, Cnt, _) ->
+    %% Term is Key or {Key, Value} depending on keys_only option.
+    {Fun(Term, Acc), Cnt + 1}.
 
 
 
@@ -630,6 +635,9 @@ do_foreach(Fun, It) ->
     case iterator_done(It) of
         true ->
             ok;
+        false when It#iterator.keys_only == true ->
+            _ = Fun(It#iterator.key),
+            do_foreach(Fun, iterate(It));
         false ->
             _ = Fun(iterator_key_values(It)),
             do_foreach(Fun, iterate(It))
@@ -667,13 +675,13 @@ fold_elements(Fun, Acc0, FullPrefix, Opts) ->
     end.
 
 %% @private
-do_fold_elements(Fun, Acc, It) ->
+do_fold_elements(Fun, Acc0, It) ->
     case iterator_done(It) of
         true ->
-            Acc;
+            Acc0;
         false ->
-            Next = Fun(iterator_element(It), Acc),
-            do_fold_elements(Fun, Next, iterate(It))
+            Acc = Fun(iterator_element(It), Acc0),
+            do_fold_elements(Fun, Acc, iterate(It))
     end.
 
 
@@ -804,7 +812,7 @@ iterator(Term) ->
 %%     this can be used to iterate over some subset of keys
 %% * `partitions': The list of partitions this iterator should cover. If
 %% undefined it will cover all partitions (`pdb:partitions/0')
-%% * `keys_only': wether to iterate only on keys (default: false)
+%% * `keys_only': whether to iterate only on keys (default: false)
 %%
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1120,7 +1128,7 @@ iterator_default(#iterator{opts = []}) ->
     ?TOMBSTONE;
 
 iterator_default(#iterator{opts = Opts} = I) ->
-    case proplists:get_value(default, Opts, ?TOMBSTONE) of
+    case key_value:get(default, Opts, ?TOMBSTONE) of
         Fun when is_function(Fun) ->
             Fun(iterator_key(I));
         Val -> Val
@@ -1795,11 +1803,11 @@ new_iterator(#continuation{} = Cont, Opts0) ->
     iterate(I);
 
 new_iterator(FullPrefix, Opts) ->
-    FirstKey = case proplists:get_value(first, Opts, undefined) of
+    FirstKey = case key_value:get(first, Opts, undefined) of
         undefined -> FullPrefix;
         Key -> {FullPrefix, Key}
     end,
-    KeysOnly = proplists:get_value(keys_only, Opts, false),
+    KeysOnly = key_value:get(keys_only, Opts, false),
     Partitions = case get_option(partitions, Opts, undefined) of
         undefined ->
             get_covering_partitions(FullPrefix);
