@@ -105,7 +105,7 @@
 -type get_opts()            ::  [get_opt()].
 
 %% Iterator Types
--type it_opt_resolver()     ::  {resolver, plum_db_resolver() | lww}.
+-type it_opt_resolver()     ::  {resolver, plum_db_resolver() | lww | fww}.
 -type it_opt_default_fun()  ::  fun((plum_db_key()) -> plum_db_value()).
 -type it_opt_default()      ::  {default,
                                     plum_db_value() | it_opt_default_fun()}.
@@ -349,7 +349,7 @@ get(FullPrefix, Key, Opts) ->
 %% `Opts' is a property list that can take the following options:
 %%
 %% * `default' – value to return if no value is found, Defaults to `undefined'.
-%% * `resolver' – The atom `lww' or a `plum_db_resolver()' that resolves
+%% * `resolver' – The atom `lww', `fww' or a `plum_db_resolver()' that resolves
 %% conflicts if they are encountered. Defaults to `lww' (last-write-wins).
 %% * `allow_put' – whether or not to write and broadcast a resolved value.
 %% Defaults to `true'.
@@ -578,6 +578,10 @@ do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt0) ->
             {Acc0, ?EOT};
         true ->
             Acc0;
+        false when It#iterator.keys_only == true ->
+            K = It#iterator.key,
+            {Acc1, Cnt} = do_fold_acc(K, Fun, Acc0, Cnt0, RemoveTombs),
+            do_fold_next(Fun, Acc1, iterate(It), RemoveTombs, Limit, Cnt);
         false when Cnt0 < Limit ->
             KV = iterator_key_values(It),
             {Acc1, Cnt} = do_fold_acc(KV, Fun, Acc0, Cnt0, RemoveTombs),
@@ -592,8 +596,9 @@ do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt0) ->
 do_fold_acc({_, ?TOMBSTONE}, _, Acc, Cnt, true) ->
     {Acc, Cnt};
 
-do_fold_acc(KV, Fun, Acc, Cnt, _) ->
-    {Fun(KV, Acc), Cnt + 1}.
+do_fold_acc(Term, Fun, Acc, Cnt, _) ->
+    %% Term is Key or {Key, Value} depending on keys_only option.
+    {Fun(Term, Acc), Cnt + 1}.
 
 
 
@@ -630,6 +635,9 @@ do_foreach(Fun, It) ->
     case iterator_done(It) of
         true ->
             ok;
+        false when It#iterator.keys_only == true ->
+            _ = Fun(It#iterator.key),
+            do_foreach(Fun, iterate(It));
         false ->
             _ = Fun(iterator_key_values(It)),
             do_foreach(Fun, iterate(It))
@@ -667,13 +675,13 @@ fold_elements(Fun, Acc0, FullPrefix, Opts) ->
     end.
 
 %% @private
-do_fold_elements(Fun, Acc, It) ->
+do_fold_elements(Fun, Acc0, It) ->
     case iterator_done(It) of
         true ->
-            Acc;
+            Acc0;
         false ->
-            Next = Fun(iterator_element(It), Acc),
-            do_fold_elements(Fun, Next, iterate(It))
+            Acc = Fun(iterator_element(It), Acc0),
+            do_fold_elements(Fun, Acc, iterate(It))
     end.
 
 
@@ -781,7 +789,7 @@ iterator(Term) ->
 %%
 %% This function can take the following options:
 %%
-%% * `resolver': either the atom `lww' or a function that resolves conflicts if
+%% * `resolver': either the atom `lww', `fww' or a function that resolves conflicts if
 %% they are encounted (see get/3 for more details). Conflict resolution is
 %% performed when values are retrieved (see iterator_key_value/1 and iterator_key_values/1).
 %% If no resolver is provided no resolution is performed. The default is to not
@@ -804,7 +812,7 @@ iterator(Term) ->
 %%     this can be used to iterate over some subset of keys
 %% * `partitions': The list of partitions this iterator should cover. If
 %% undefined it will cover all partitions (`pdb:partitions/0')
-%% * `keys_only': wether to iterate only on keys (default: false)
+%% * `keys_only': whether to iterate only on keys (default: false)
 %%
 %% @end
 %% -----------------------------------------------------------------------------
@@ -1053,8 +1061,9 @@ iterator_key_value(#remote_iterator{ref = Ref, node = Node}) ->
 %% Before calling this function, check the iterator is not complete w/
 %% iterator_done/1.
 %% If a resolver was passed to iterator/0 when creating the given iterator,
-%% siblings will be resolved using the given function or last-write-wins (if
-%% `lww' is passed as the resolver). If no resolver was used then no conflict
+%% siblings will be resolved using the given function, last-write-wins (if
+%% `lww' is passed as the resolver) or first-write-wins (if
+%% `fww' is passed as the resolver). If no resolver was used then no conflict
 %% resolution will take place.
 %% If conflicts are resolved, the resolved value is written to
 %% local store and a broadcast is submitted to update other nodes in the
@@ -1119,7 +1128,7 @@ iterator_default(#iterator{opts = []}) ->
     ?TOMBSTONE;
 
 iterator_default(#iterator{opts = Opts} = I) ->
-    case proplists:get_value(default, Opts, ?TOMBSTONE) of
+    case key_value:get(default, Opts, ?TOMBSTONE) of
         Fun when is_function(Fun) ->
             Fun(iterator_key(I));
         Val -> Val
@@ -1794,11 +1803,11 @@ new_iterator(#continuation{} = Cont, Opts0) ->
     iterate(I);
 
 new_iterator(FullPrefix, Opts) ->
-    FirstKey = case proplists:get_value(first, Opts, undefined) of
+    FirstKey = case key_value:get(first, Opts, undefined) of
         undefined -> FullPrefix;
         Key -> {FullPrefix, Key}
     end,
-    KeysOnly = proplists:get_value(keys_only, Opts, false),
+    KeysOnly = key_value:get(keys_only, Opts, false),
     Partitions = case get_option(partitions, Opts, undefined) of
         undefined ->
             get_covering_partitions(FullPrefix);

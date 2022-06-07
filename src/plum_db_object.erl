@@ -109,11 +109,19 @@ reconcile({object, RemoteObj}, {object, LocalObj}) ->
 
 %% @doc Resolves siblings using either last-write-wins or the provided function and returns
 %% an object containing a single value. The causal history is not updated
--spec resolve(plum_db_object(), lww | fun(([plum_db_value()]) -> plum_db_value())) ->
-                     plum_db_object().
+-spec resolve(
+    plum_db_object(),
+    lww | fww | fun(([plum_db_value()]) -> plum_db_value())) ->
+    plum_db_object().
+
 resolve({object, Object}, lww) ->
     LWW = fun ({_,TS1}, {_,TS2}) -> TS1 =< TS2 end,
     {object, plum_db_dvvset:lww(LWW, Object)};
+
+resolve({object, Object}, fww) ->
+    LWW = fun ({_,TS1}, {_,TS2}) -> TS1 >= TS2 end,
+    {object, plum_db_dvvset:lww(LWW, Object)};
+
 resolve({object, Existing}, Reconcile) when is_function(Reconcile) ->
     ResolveFun = fun({A, _}, {B, _}) -> timestamped_value(Reconcile(A, B)) end,
     F = fun([Value | Rest]) -> lists:foldl(ResolveFun, Value, Rest) end,
