@@ -526,7 +526,7 @@ fold(Fun, Acc, #continuation{} = Cont, Opts0) ->
             get_option(remove_tombstones, Opts, false)
     end,
 
-    do_fold(Fun, Acc, It, RemoveTombs, Limit);
+    maybe_sort(do_fold(Fun, Acc, It, RemoveTombs, Limit), Opts);
 
 fold(Fun, Acc, FullPrefixPattern, Opts) ->
     It = iterator(FullPrefixPattern, Opts),
@@ -538,7 +538,7 @@ fold(Fun, Acc, FullPrefixPattern, Opts) ->
             get_option(remove_tombstones, Opts, false)
     end,
 
-    do_fold(Fun, Acc, It, RemoveTombs, Limit).
+    maybe_sort(do_fold(Fun, Acc, It, RemoveTombs, Limit), Opts).
 
 
 %% @private
@@ -709,7 +709,7 @@ match(?EOT, _) ->
 
 match(#continuation{} = Cont, Opts) ->
     Fun = fun(KV, Acc) -> [KV | Acc] end,
-    maybe_sort(fold(Fun, [], Cont, Opts), Opts).
+    fold(Fun, [], Cont, Opts).
 
 
 %% -----------------------------------------------------------------------------
@@ -729,7 +729,7 @@ match(FullPrefix0, KeyPattern, Opts0) ->
     %% KeyPattern overrides any match option present in Opts0
     Opts = [{match, KeyPattern} | lists:keydelete(match, 1, Opts0)],
     Fun = fun(KV, Acc) -> [KV | Acc] end,
-    maybe_sort(fold(Fun, [], FullPrefix, Opts), Opts).
+    fold(Fun, [], FullPrefix, Opts).
 
 
 %% -----------------------------------------------------------------------------
@@ -753,7 +753,12 @@ to_list(FullPrefix) ->
 
 to_list(FullPrefix0, Opts) ->
     FullPrefix = normalise_prefix(FullPrefix0),
-    Fun = fun({Key, ValOrVals}, Acc) -> [{Key, ValOrVals} | Acc] end,
+    Fun = fun
+        ({Key, ValOrVals}, Acc) ->
+            [{Key, ValOrVals} | Acc];
+        (Key, Acc) ->
+            [Key | Acc]
+    end,
     fold(Fun, [], FullPrefix, Opts).
 
 
@@ -928,21 +933,19 @@ iterate({error, _, Ref1}, #iterator{partitions = [H|T]} = I) ->
     ),
     iterate(I1);
 
-iterate({ok, PKey, Ref1}, I0) ->
-    {Prefix, Key} = PKey,
+iterate({ok, {{_, _} = Pref, K}, Ref1}, #iterator{keys_only = true} = I0) ->
     I0#iterator{
         ref = Ref1,
-        prefix = Prefix,
-        key = Key,
+        prefix = Pref,
+        key = K,
         object = undefined
     };
 
-iterate({ok, PKey, V, Ref1}, I0) ->
-    {Prefix, Key} = PKey,
+iterate({ok, {{_, _} = Pref, K}, V, Ref1}, #iterator{keys_only = false} = I0) ->
     I0#iterator{
         ref = Ref1,
-        prefix = Prefix,
-        key = Key,
+        prefix = Pref,
+        key = K,
         object = V
     }.
 

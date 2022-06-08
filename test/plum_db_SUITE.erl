@@ -1,10 +1,17 @@
 -module(plum_db_SUITE).
 -include_lib("common_test/include/ct.hrl").
-
+-include_lib("stdlib/include/assert.hrl").
 
 all() ->
     [
-        fold_concurrency
+        fold_disk,
+        fold_ram,
+        fold_ram_disk,
+        fold_match_disk,
+        fold_match_ram,
+        fold_match_ram_disk
+        % ,
+        % fold_concurrency
     ].
 
 
@@ -75,6 +82,48 @@ fold_concurrency(_) ->
 
 
 
+fold_disk(_) ->
+    Prefix = {disk, disk},
+    _ = [plum_db:put(Prefix, X, X) || X <- lists:seq(1, 100)],
+    fold_test(Prefix),
+    fold_keys_test(Prefix).
+
+
+fold_ram(_) ->
+    Prefix = {ram, ram},
+    _ = [plum_db:put(Prefix, X, X) || X <- lists:seq(1, 100)],
+    fold_test(Prefix),
+    fold_keys_test(Prefix).
+
+
+
+fold_ram_disk(_) ->
+    Prefix = {ram_disk, ram_disk},
+    _ = [plum_db:put(Prefix, X, X) || X <- lists:seq(1, 100)],
+    fold_test(Prefix),
+    fold_keys_test(Prefix).
+
+
+fold_match_disk(_) ->
+    Prefix = {disk, disk},
+    _ = [plum_db:put(Prefix, {foo, X}, X) || X <- lists:seq(1, 100)],
+    fold_match_test(Prefix),
+    fold_match_keys_test(Prefix).
+
+
+fold_match_ram(_) ->
+    Prefix = {ram, ram},
+    _ = [plum_db:put(Prefix, {foo, X}, X) || X <- lists:seq(1, 100)],
+    fold_match_test(Prefix),
+    fold_match_keys_test(Prefix).
+
+
+
+fold_match_ram_disk(_) ->
+    Prefix = {ram_disk, ram_disk},
+    _ = [plum_db:put(Prefix, {foo, X}, X) || X <- lists:seq(1, 100)],
+    fold_match_test(Prefix),
+    fold_match_keys_test(Prefix).
 
 
 
@@ -109,3 +158,187 @@ promise(Key, Reply) ->
     {Key, {promise_reply, Reply}}.
 
 
+fold_test(Prefix) ->
+
+    Expected = [{X, X} || X <- lists:seq(1, 100)],
+
+    ?assertEqual(
+        Expected,
+        plum_db:fold(
+            fun({K, [V]}, Acc) -> [{K, V} | Acc] end,
+            [],
+            Prefix,
+            []
+        )
+    ),
+
+    ?assertEqual(
+        Expected,
+        plum_db:fold(
+            fun({K, [V]}, Acc) -> [{K, V} | Acc] end,
+            [],
+            Prefix,
+            [{keys_only, false}]
+        )
+    ),
+
+    ?assertEqual(
+        Expected,
+        plum_db:fold(
+            fun({K, V}, Acc) -> [{K, V} | Acc] end,
+            [],
+            Prefix,
+            [{resolver, lww}]
+        )
+    ),
+
+    ?assertEqual(
+        [{99, 99}, {100, 100}],
+        plum_db:fold(
+            fun({K, V}, Acc) -> [{K, V} | Acc] end,
+            [],
+            Prefix,
+            [{resolver, lww}, {first, 99}]
+        )
+    ).
+
+
+fold_keys_test(Prefix) ->
+
+    Expected = lists:seq(1, 100),
+
+    ?assertEqual(
+        Expected,
+        plum_db:fold(
+            fun(K, Acc) -> [K | Acc] end,
+            [],
+            Prefix,
+            [{keys_only, true}]
+        )
+    ),
+
+    ?assertEqual(
+        Expected,
+        plum_db:fold(
+            fun(K, Acc) -> [K | Acc] end,
+            [],
+            Prefix,
+            [{keys_only, true}, {resolver, lww}]
+        )
+    ),
+
+    ?assertEqual(
+        [99, 100],
+        plum_db:fold(
+            fun(K, Acc) -> [K | Acc] end,
+            [],
+            Prefix,
+            [{keys_only, true}, {resolver, lww}, {first, 99}]
+        )
+    ).
+
+
+fold_match_test(Prefix) ->
+
+    Expected = [{{foo, X}, X} || X <- lists:seq(1, 100)],
+
+    ?assertEqual(
+        Expected,
+        plum_db:fold(
+            fun({K, V}, Acc) -> [{K, V} | Acc] end,
+            [],
+            Prefix,
+            [{resolver, lww}, {match, {foo, '_'}}]
+        )
+    ),
+
+    ?assertEqual(
+        [{{foo, 99}, 99}, {{foo, 100}, 100}],
+        plum_db:fold(
+            fun({K, V}, Acc) -> [{K, V} | Acc] end,
+            [],
+            Prefix,
+            [{resolver, lww}, {first, {foo, 99}}, {match, {foo, '_'}}]
+        )
+    ),
+
+    ?assertEqual(
+        [{{foo, 99}, 99}],
+        plum_db:fold(
+            fun({K, V}, Acc) -> [{K, V} | Acc] end,
+            [],
+            Prefix,
+            [{resolver, lww}, {first, {foo, 99}}, {match, {foo, 99}}]
+        )
+    ),
+
+    ?assertEqual(
+        [],
+        plum_db:fold(
+            fun({K, V}, Acc) -> [{K, V} | Acc] end,
+            [],
+            Prefix,
+            [{resolver, lww}, {match, {bar, '_'}}]
+        )
+    ).
+
+
+
+
+fold_match_keys_test(Prefix) ->
+
+    Expected = [{foo, X} || X <- lists:seq(1, 100)],
+
+    ?assertEqual(
+        Expected,
+        plum_db:fold(
+            fun(K, Acc) -> [K | Acc] end,
+            [],
+            Prefix,
+            [
+                {keys_only, true},
+                {resolver, lww},
+                {match, {foo, '_'}}
+            ]
+        )
+    ),
+
+    ?assertEqual(
+        [{foo, 99}, {foo, 100}],
+        plum_db:fold(
+            fun(K, Acc) -> [K | Acc] end,
+            [],
+            Prefix,
+            [
+                {keys_only, true},
+                {resolver, lww},
+                {first, {foo, 99}},
+                {match, {foo, '_'}}
+            ]
+        )
+    ),
+
+    ?assertEqual(
+        [{foo, 99}],
+        plum_db:fold(
+            fun(K, Acc) -> [K | Acc] end,
+            [],
+            Prefix,
+            [
+                {keys_only, true},
+                {resolver, lww},
+                {first, {foo, 99}},
+                {match, {foo, 99}}
+            ]
+        )
+    ),
+
+    ?assertEqual(
+        [],
+        plum_db:fold(
+            fun(K, Acc) -> [K | Acc] end,
+            [],
+            Prefix,
+            [{resolver, lww}, {match, {bar, '_'}}]
+        )
+    ).
