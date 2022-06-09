@@ -518,6 +518,8 @@ iterator_move(Type, key, Iter, next) ->
     end;
 
 iterator_move(Type, {cont, Cont0}, Iter, next) ->
+    KeysOnly = Iter#partition_iterator.keys_only,
+
     case ets:select(Cont0) of
         ?EOT ->
             case next_iterator(Type, Iter) of
@@ -528,12 +530,13 @@ iterator_move(Type, {cont, Cont0}, Iter, next) ->
                     %% to the first key of the full_prefix
                     iterator_move(NewIter, Iter#partition_iterator.full_prefix)
             end;
-        {[{K, V}], Cont1} ->
+        {[{{_, _}, _} = K], Cont1} when KeysOnly == true ->
             NewIter = update_iterator(Type, Iter, K, {cont, Cont1}),
-            {ok, K, V, NewIter};
-        {[K], Cont1} ->
+            {ok, K, NewIter};
+
+        {[{{{_, _}, _} = K, V}], Cont1} when KeysOnly == false ->
             NewIter = update_iterator(Type, Iter, K, {cont, Cont1}),
-            {ok, K, NewIter}
+            {ok, K, V, NewIter}
     end;
 
 iterator_move(Type, key, Iter, prev) ->
@@ -582,40 +585,48 @@ iterator_move(Type, {cont, _}, Iter, prev) ->
 iterator_move(Type, Cont, Iter, {{_, _} = FullPrefix, ?WILDCARD}) ->
     iterator_move(Type, Cont, Iter, FullPrefix);
 
-iterator_move(Type, _, Iter, {{_, _} = FullPrefix, PKey}) ->
+iterator_move(Type, _, Iter, {{A, B}, PKey}) ->
     Tab = table_name(Iter, Type),
-    Proyection = case Iter#partition_iterator.keys_only of
-        true -> {{FullPrefix, '$1'}};
-        false -> '$_'
+    KeysOnly = Iter#partition_iterator.keys_only,
+
+    Pattern = {{{'$1', '$2'}, PKey}, ?WILDCARD},
+
+    Projection = case KeysOnly of
+        true ->
+            [{element, 1, '$_'}];
+        false ->
+            ['$_']
     end,
 
-    MS = [
-        {
-            {{FullPrefix, '$1'}, ?WILDCARD},
-            [{'>=', '$1', {const, PKey}}],
-            [Proyection]
-        }
-    ],
+    Conds = [{'andalso',
+        {'==', '$1', {const, A}},
+        {'==', '$2', {const, B}}
+    }],
 
+    MS = [
+        {Pattern, Conds, Projection}
+    ],
 
     case ets:select(Tab, MS, 1) of
         ?EOT ->
             {error, invalid_iterator, Iter};
-        {[{K, V}], _} ->
+
+        {[{{_, _}, _} = K], _} when KeysOnly == true ->
             NewIter = update_iterator(Type, Iter, K, key),
             case matches_key(K, Iter) of
                 {true, K} ->
-                    {ok, K, V, NewIter};
+                    {ok, K, NewIter};
                 {false, K} ->
                     {error, no_match, NewIter};
                 ?EOT ->
                     {error, invalid_iterator, NewIter}
             end;
-        {[K], _} ->
+
+        {[{{{_, _}, _} = K, V}], _} when KeysOnly == false ->
             NewIter = update_iterator(Type, Iter, K, key),
             case matches_key(K, Iter) of
                 {true, K} ->
-                    {ok, K, NewIter};
+                    {ok, K, V, NewIter};
                 {false, K} ->
                     {error, no_match, NewIter};
                 ?EOT ->
@@ -625,21 +636,26 @@ iterator_move(Type, _, Iter, {{_, _} = FullPrefix, PKey}) ->
 
 iterator_move(Type, _, Iter, FullPrefix) ->
     Tab = table_name(Iter, Type),
+    KeysOnly = Iter#partition_iterator.keys_only,
+
     Pattern = case Iter#partition_iterator.match_pattern of
         undefined -> FullPrefix;
         KeyPattern -> {FullPrefix, KeyPattern}
     end,
-    MatchSpec = ets_match_spec(Pattern, Iter#partition_iterator.keys_only),
+
+    MatchSpec = ets_match_spec(Pattern, KeysOnly),
 
     case ets:select(Tab, MatchSpec, 1) of
         ?EOT ->
             {error, invalid_iterator, Iter};
-        {[{K, V}], Cont1} ->
+
+        {[{{_, _}, _} = K], Cont1} when KeysOnly == true ->
             NewIter = update_iterator(Type, Iter, K, {cont, Cont1}),
-            {ok, K, V, NewIter};
-        {[K], Cont1} ->
+            {ok, K, NewIter};
+
+        {[{{{_, _}, _} = K, V}], Cont1} when KeysOnly == false ->
             NewIter = update_iterator(Type, Iter, K, {cont, Cont1}),
-            {ok, K, NewIter}
+            {ok, K, V, NewIter}
     end.
 
 
@@ -1514,19 +1530,33 @@ eleveldb_action(prefetch_stop) ->
 
 %% @private
 %% ets key ois {{{Prefix, Suffix} = FullPrefix, Key} = PKey, Object}
-ets_match_spec({{_, _} = FullPrefix, KeyPattern}, KeysOnly) ->
-    Projection =  case KeysOnly of
-        true -> {{FullPrefix, KeyPattern}};
-        false -> '$_'
+
+ets_match_spec({{A, B}, KeyPattern}, KeysOnly) ->
+    Pattern = {{{'$1', '$2'}, KeyPattern}, ?WILDCARD},
+
+    Conds = case B of
+        ?WILDCARD ->
+            [{'==', '$1', {const, A}}];
+        _ ->
+            [{'andalso',
+                {'==', '$1', {const, A}},
+                {'==', '$2', {const, B}}
+            }]
     end,
-    [{
-        {{FullPrefix, KeyPattern}, ?WILDCARD},
-        [],
-        [Projection]
-    }];
+
+    Projection =  case KeysOnly of
+        true ->
+            [{element, 1, '$_'}];
+        false ->
+            ['$_']
+    end,
+
+    [
+        {Pattern, Conds, Projection}
+    ];
 
 ets_match_spec({_, _} = FullPrefix, KeysOnly) ->
-    ets_match_spec({{_, _} = FullPrefix, '$1'}, KeysOnly).
+    ets_match_spec({{_, _} = FullPrefix, ?WILDCARD}, KeysOnly).
 
 
 %% @private
@@ -1536,9 +1566,12 @@ ets_match_spec({_, _} = FullPrefix, KeysOnly) ->
 matches_key(PKey, #partition_iterator{match_spec = undefined} = Iter) ->
     %% We try to match the prefix and if it doesn't we stop
     case matches_prefix(PKey, Iter) of
-        true when is_binary(PKey) -> {true, decode_key(PKey)};
-        true -> {true, PKey};
-        false -> ?EOT
+        true when is_binary(PKey) ->
+            {true, decode_key(PKey)};
+        true ->
+            {true, PKey};
+        false ->
+            ?EOT
     end;
 
 matches_key(PKey0, #partition_iterator{match_spec = MS} = Iter) ->
