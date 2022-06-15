@@ -554,7 +554,11 @@ maybe_sort(Acc, Opts) when is_list(Acc) ->
             lists:reverse(Acc);
         desc ->
             Acc
-    end.
+    end;
+
+maybe_sort(Acc, _) ->
+    %% Acc not a list
+    Acc.
 
 
 %% @private
