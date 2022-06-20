@@ -600,6 +600,9 @@ do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt0) ->
 do_fold_acc({_, ?TOMBSTONE}, _, Acc, Cnt, true) ->
     {Acc, Cnt};
 
+do_fold_acc({_, [?TOMBSTONE]}, _, Acc, Cnt, true) ->
+    {Acc, Cnt};
+
 do_fold_acc(Term, Fun, Acc, Cnt, _) ->
     %% Term is Key or {Key, Value} depending on keys_only option.
     {Fun(Term, Acc), Cnt + 1}.
@@ -627,24 +630,38 @@ foreach(Fun, FullPrefixPattern) ->
 
 foreach(Fun, FullPrefixPattern, Opts) ->
     It = iterator(FullPrefixPattern, Opts),
+    RemoveTombs = case get_option(resolver, Opts, undefined) of
+        undefined ->
+            false;
+        _ ->
+            get_option(remove_tombstones, Opts, false)
+    end,
+
     try
-        do_foreach(Fun, It)
+        do_foreach(Fun, It, RemoveTombs)
     after
         ok = iterator_close(It)
     end.
 
 
 %% @private
-do_foreach(Fun, It) ->
+do_foreach(Fun, It, RemoveTombs) ->
     case iterator_done(It) of
         true ->
             ok;
         false when It#iterator.keys_only == true ->
             _ = Fun(It#iterator.key),
-            do_foreach(Fun, iterate(It));
+            do_foreach(Fun, iterate(It), RemoveTombs);
         false ->
-            _ = Fun(iterator_key_values(It)),
-            do_foreach(Fun, iterate(It))
+            case iterator_key_values(It) of
+                {_, ?TOMBSTONE} when RemoveTombs == true ->
+                    ok;
+                {_, [?TOMBSTONE]} when RemoveTombs == true ->
+                    ok;
+                KV ->
+                    Fun(KV)
+            end,
+            do_foreach(Fun, iterate(It), RemoveTombs)
     end.
 
 
@@ -1092,6 +1109,7 @@ iterator_key_values(#iterator{opts = Opts} = I) ->
     Key = I#iterator.key,
     Obj = I#iterator.object,
     AllowPut = get_option(allow_put, Opts, true),
+
     case get_option(resolver, Opts, undefined) of
         undefined ->
             {Key, maybe_tombstones(plum_db_object:values(Obj), Default)};
