@@ -54,6 +54,9 @@
 -record(partition_iterator, {
     owner_ref               ::  reference(),
     partition               ::  non_neg_integer(),
+    disk                    ::  eleveldb:itr_ref() | undefined,
+    ram_tab                 ::  ets:tab() | undefined,
+    ram_disk_tab            ::  ets:tab() | undefined,
     full_prefix             ::  plum_db_prefix_pattern(),
     match_pattern           ::  term(),
     bin_prefix              ::  binary(),
@@ -63,11 +66,8 @@
     disk_done = true        ::  boolean(),
     ram_disk_done = true    ::  boolean(),
     ram_done = true         ::  boolean(),
-    disk                    ::  eleveldb:itr_ref() | undefined,
     ram                     ::  key | {cont, any()} | undefined,
-    ram_disk                ::  key | {cont, any()} | undefined,
-    ram_tab                 ::  atom(),
-    ram_disk_tab            ::  atom()
+    ram_disk                ::  key | {cont, any()} | undefined
 }).
 
 -type opts()                    :: 	[{atom(), term()}].
@@ -201,7 +201,7 @@ get({Name, _} = Ref, PKey, Opts, Timeout) when is_atom(Name) ->
     partisan_gen_server:call(Ref, {get, PKey, Opts}, Timeout);
 
 get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
-    case get_option(allow_put, Opts, false) of
+    case key_value:get(allow_put, Opts, false) of
         true ->
             partisan_gen_server:call(Name, {get, PKey, Opts}, Timeout);
         false ->
@@ -443,10 +443,10 @@ iterator_move(#partition_iterator{disk_done = false} = Iter, Action) ->
     end;
 
 iterator_move(#partition_iterator{ram_disk_done = false} = Iter, Action) ->
-    iterator_move(ram_disk, Iter#partition_iterator.ram_disk, Iter, Action);
+    ets_iterator_move(ram_disk, Iter#partition_iterator.ram_disk, Iter, Action);
 
 iterator_move(#partition_iterator{ram_done = false} = Iter, Action) ->
-    iterator_move(ram, Iter#partition_iterator.ram, Iter, Action);
+    ets_iterator_move(ram, Iter#partition_iterator.ram, Iter, Action);
 
 iterator_move(
     #partition_iterator{
@@ -457,7 +457,7 @@ iterator_move(
 
 
 %% @private
-iterator_move(Type, _, Iter, first) ->
+ets_iterator_move(Type, _, Iter, first) ->
     KeysOnly = Iter#partition_iterator.keys_only,
     Tab = table_name(Iter, Type),
 
@@ -487,7 +487,7 @@ iterator_move(Type, _, Iter, first) ->
             end
     end;
 
-iterator_move(Type, key, Iter, next) ->
+ets_iterator_move(Type, key, Iter, next) ->
     KeysOnly = Iter#partition_iterator.keys_only,
     Tab = table_name(Iter, Type),
 
@@ -517,7 +517,7 @@ iterator_move(Type, key, Iter, next) ->
             end
     end;
 
-iterator_move(Type, {cont, Cont0}, Iter, next) ->
+ets_iterator_move(Type, {cont, Cont0}, Iter, next) ->
     KeysOnly = Iter#partition_iterator.keys_only,
 
     case ets:select(Cont0) of
@@ -539,7 +539,7 @@ iterator_move(Type, {cont, Cont0}, Iter, next) ->
             {ok, K, V, NewIter}
     end;
 
-iterator_move(Type, key, Iter, prev) ->
+ets_iterator_move(Type, key, Iter, prev) ->
     KeysOnly = Iter#partition_iterator.keys_only,
     Tab = table_name(Iter, Type),
 
@@ -575,21 +575,21 @@ iterator_move(Type, key, Iter, prev) ->
             end
     end;
 
-iterator_move(Type, {cont, _}, Iter, prev) ->
+ets_iterator_move(Type, {cont, _}, Iter, prev) ->
     %% We were using ets:select/1, to go backwards we need to switch to
     %% key iteration
     K = Iter#partition_iterator.prev_key,
     NewIter = update_iterator(Type, Iter, K, key),
     iterator_move(NewIter, prev);
 
-iterator_move(Type, Cont, Iter, {{_, _} = FullPrefix, ?WILDCARD}) ->
-    iterator_move(Type, Cont, Iter, FullPrefix);
+ets_iterator_move(Type, Cont, Iter, {{_, _} = FullPrefix, ?WILDCARD}) ->
+    ets_iterator_move(Type, Cont, Iter, FullPrefix);
 
-iterator_move(Type, _, Iter, {{A, B}, PKey}) ->
+ets_iterator_move(Type, _, Iter, {{A, B}, Key}) ->
     Tab = table_name(Iter, Type),
     KeysOnly = Iter#partition_iterator.keys_only,
 
-    Pattern = {{{'$1', '$2'}, PKey}, ?WILDCARD},
+    Pattern = {{{A, B}, '$1'}, ?WILDCARD},
 
     Projection = case KeysOnly of
         true ->
@@ -598,10 +598,9 @@ iterator_move(Type, _, Iter, {{A, B}, PKey}) ->
             ['$_']
     end,
 
-    Conds = [{'andalso',
-        {'==', '$1', {const, A}},
-        {'==', '$2', {const, B}}
-    }],
+
+    % We use it as prefix to find first
+    Conds = [{'>=', '$1', {const, Key}}],
 
     MS = [
         {Pattern, Conds, Projection}
@@ -634,7 +633,7 @@ iterator_move(Type, _, Iter, {{A, B}, PKey}) ->
             end
     end;
 
-iterator_move(Type, _, Iter, FullPrefix) ->
+ets_iterator_move(Type, _, Iter, {_, _} = FullPrefix) ->
     Tab = table_name(Iter, Type),
     KeysOnly = Iter#partition_iterator.keys_only,
 
@@ -951,7 +950,7 @@ init_state(Name, Partition, DataRoot, Config) ->
     {WriteOpts, _BadWriteOpts} = eleveldb:validate_options(write, FinalConfig),
 
     %% Use read options for folding, but FORCE fill_cache to false
-    FoldOpts = set_option(fill_cache, false, ReadOpts),
+    FoldOpts = key_value:put(fill_cache, false, ReadOpts),
 
     %% Warn if block_size is set
     SSTBS = proplists:get_value(sst_block_size, OpenOpts, false),
@@ -1187,20 +1186,6 @@ init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab) ->
 
 
 %% @private
-get_option(Key, Opts, Default) ->
-    case lists:keyfind(Key, 1, Opts) of
-        {Key, Value} ->
-            Value;
-        _ ->
-            Default
-    end.
-
-%% @private
-set_option(Key, Value, Opts) ->
-    lists:keystore(Key, 1, Opts, {Key, Value}).
-
-
-%% @private
 db_ref(#state{db_info = V}) ->
     db_ref(V);
 
@@ -1309,7 +1294,7 @@ maybe_resolve(Object, Opts) ->
         true ->
             {ok, Object};
         false ->
-            Resolver = get_option(resolver, Opts, lww),
+            Resolver = key_value:get(resolver, Opts, lww),
             try
                 {ok, plum_db_object:resolve(Object, Resolver)}
             catch
@@ -1321,7 +1306,7 @@ maybe_resolve(Object, Opts) ->
 
 %% @private
 maybe_modify(PKey, Existing, Opts, State, NewObject) ->
-    case get_option(allow_put, Opts, false) of
+    case key_value:get(allow_put, Opts, false) of
         false ->
             ok;
         true ->
@@ -1334,7 +1319,7 @@ maybe_modify(PKey, Existing, Opts, State, NewObject) ->
 
 %% @private
 maybe_broadcast(PKey, Obj, Opts) ->
-    case get_option(broadcast, Opts, true) of
+    case key_value:get(broadcast, Opts, true) of
         true ->
             broadcast(PKey, Obj);
         false ->
