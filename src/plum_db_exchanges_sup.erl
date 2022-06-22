@@ -59,13 +59,18 @@
     {ok, pid()} | {error, any()}.
 
 start_exchange(Peer, Opts) ->
-    Children = supervisor:count_children(?MODULE),
-    {active, Count} = lists:keyfind(active, 1, Children),
-    case plum_db_config:get(aae_concurrency) > Count of
-        true ->
-            supervisor:start_child(?MODULE, [Peer, Opts]);
-        false ->
-            {error, concurrency_limit}
+    case partisan:node() of
+        Peer ->
+            {error, this_node};
+        _ ->
+            Children = supervisor:count_children(?MODULE),
+            {active, Count} = lists:keyfind(active, 1, Children),
+            case plum_db_config:get(aae_concurrency) > Count of
+                true ->
+                    supervisor:start_child(?MODULE, [Peer, Opts]);
+                false ->
+                    {error, concurrency_limit}
+            end
     end.
 
 
