@@ -854,7 +854,10 @@ handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
 
 handle_call({iterator_close, Iter}, _From, State0) ->
     State1 = close_iterator(Iter, State0),
-    {reply, ok, State1}.
+    {reply, ok, State1};
+
+handle_call(_Message, _From, State) ->
+    {reply, {error, unsupported_call}, State}.
 
 
 handle_cast(_Msg, State) ->
