@@ -24,8 +24,6 @@
 %% of two parts, a set of unbounded on-disk segments and a fixed size hash
 %% tree (that may be on-disk or in-memory) constructed over these segments.
 %%
-%% A graphical description of this design can be found in: docs/hashtree.md
-%%
 %% Each segment logically represents an on-disk list of (key, hash) pairs.
 %% Whereas the hash tree is represented as a set of levels and buckets, with a
 %% fixed width (or fan-out) between levels that determines how many buckets of
@@ -33,6 +31,8 @@
 %% parent level. Each leaf in the tree corresponds to a hash of one of the
 %% on-disk segments. For example, a tree with a width of 4 and 16 segments
 %% would look like the following:
+%%
+%% The following diagram is a graphical depiction of this design.
 %%
 %% <pre><code class="mermaid">
 %% %%{init: {'theme': 'neutral' } }%%

@@ -1420,7 +1420,10 @@ handle_call({iterator_done, RemoteRef}, _From, State) ->
 
 handle_call({iterator_close, RemoteRef}, _From, State) ->
     close_remote_iterator(RemoteRef, State),
-    {reply, ok, State}.
+    {reply, ok, State};
+
+handle_call(_Message, _From, State) ->
+    {reply, {error, unsupported_call}, State}.
 
 
 %% @private
@@ -1441,6 +1444,17 @@ handle_cast(_Msg, State) ->
 
 handle_info({'DOWN', ItRef, process, _Pid, _Reason}, State) ->
     close_remote_iterator(ItRef, State),
+    {noreply, State};
+
+handle_info({nodedown, Node}, State) ->
+    ok = close_remote_iterators(Node, State),
+    {noreply, State};
+
+handle_info(Event, State) ->
+    ?LOG_INFO(#{
+        description => "Unhandled event",
+        event => Event
+    }),
     {noreply, State}.
 
 
@@ -1746,7 +1760,6 @@ maybe_tombstone(Value, _Default) ->
     Value.
 
 
-
 %% @private
 -spec prefixed_key(plum_db_prefix(), plum_db_key()) -> plum_db_pkey().
 prefixed_key(FullPrefix, Key) ->
@@ -1762,28 +1775,37 @@ get_option(Key, Opts, Default) ->
             Default
     end.
 
+
 %% @private
 new_remote_iterator(PidRef, FullPrefix, Opts, #state{iterators = Iterators}) ->
     Node = partisan:node(PidRef),
-    true = partisan:monitor_node(Node, true),
     Ref = partisan:monitor(process, PidRef),
     Iterator = new_iterator(FullPrefix, Opts),
     ets:insert(Iterators, [{Ref, Node, Iterator}]),
     Ref.
 
+
 %% @private
 close_remote_iterator(Ref, #state{iterators = Iterators} = State) ->
     from_remote_iterator(fun iterator_close/1, Ref, State),
-
     true = partisan:demonitor(Ref, [flush]),
+    _ = ets:take(Iterators, Ref),
+    ok.
 
-    case ets:take(Iterators, Ref) of
-        [] ->
-            ok;
-        [{Ref, Node, _}] ->
-            true = partisan:monitor_node(Node, false),
-            ok
-    end.
+
+%% -----------------------------------------------------------------------------
+%% @private
+%% @doc Used when we get a nodedown signal
+%% @end
+%% -----------------------------------------------------------------------------
+close_remote_iterators(Node, #state{iterators = Iterators}) ->
+    %% We retrieve the references so that we can demonitor
+    Refs = ets:select(Iterators, [{{'$1', Node, '_'}, [], ['$1']}]),
+    _ = [catch partisan:demonitor(Ref, [flush]) || Ref <- Refs],
+
+    %% We delete them all
+    true = ets:match_delete(Iterators, {'_', Node, '_'}),
+    ok.
 
 
 %% @private
@@ -1851,8 +1873,6 @@ new_iterator(FullPrefix, Opts) ->
     },
     %% We fetch the first key
     iterate(I).
-
-
 
 
 %% @private

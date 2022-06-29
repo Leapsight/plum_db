@@ -448,7 +448,10 @@ handle_call(
     {delete, PKey}, _From, #state{tree = Tree} = State) ->
     {Prefixes, Key} = prepare_pkey(PKey),
     Tree1 = hashtree_tree:delete(Prefixes, Key, Tree),
-    {reply, ok, State#state{tree=Tree1}}.
+    {reply, ok, State#state{tree=Tree1}};
+
+handle_call(_Message, _From, State) ->
+    {reply, {error, unsupported_call}, State}.
 
 
 handle_cast(reset, #state{built = true, lock = undefined} = State0) ->
@@ -560,7 +563,8 @@ do_init(#state{data_root = DataRoot, partition = Partition} = State0) ->
     try
         TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
         Tree = hashtree_tree:new(
-            TreeId, [{data_dir, DataRoot}, {num_levels, 2}]),
+            TreeId, [{data_dir, DataRoot}, {num_levels, 2}]
+        ),
         TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
         State = State0#state{
             tree = Tree,
@@ -808,8 +812,6 @@ maybe_external_lock(_, From, State) ->
 %% @private
 do_lock(PidRef, Type, State) ->
     %% This works for PidRef :: pid() and also for Partisan ref
-    Node = partisan:node(PidRef),
-    _ = partisan:monitor_node(Node, true),
     LockRef = partisan:monitor(process, PidRef),
     State#state{lock = {Type, LockRef, PidRef}}.
 
@@ -817,9 +819,7 @@ do_lock(PidRef, Type, State) ->
 %% @private
 do_release_lock(Type, PidRef, #state{lock = {Type, LockRef, PidRef}} = State) ->
     %% This works for PidRef :: pid() and also for Partisan ref
-    Node = partisan:node(PidRef),
-    true = partisan:monitor_node(Node, false),
-    true = partisan:demonitor(LockRef),
+    true = partisan:demonitor(LockRef, [flush]),
     {ok, State#state{lock = undefined}};
 
 do_release_lock(_, _, #state{lock = undefined} = State) ->
