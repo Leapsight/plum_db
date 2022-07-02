@@ -41,8 +41,12 @@
     built           ::  boolean() | reference() | undefined,
     %% a monitor reference for a process that currently holds a
     %% lock on the tree
-    lock            ::  {internal | external, reference(), remote_process_ref()}
-                        | undefined,
+    lock            ::  undefined
+                        | {
+                            internal | external,
+                            reference(),
+                            partisan_remote_ref:r()
+                        },
     %% Timestamp when the tree was build. To be used together with ttl_secs
     %% to calculate if the hashtree has expired
     build_ts_secs   ::  non_neg_integer() | undefined,
@@ -270,7 +274,7 @@ lock(Node, Partition) ->
 -spec lock(node(), plum_db:partition(), pid()) -> ok | not_built | locked.
 
 lock(Node, Partition, Pid) ->
-    PidRef = partisan_util:pid(Pid),
+    PidRef = partisan_remote_ref:from_term(Pid),
     partisan_gen_server:call({name(Partition), Node}, {lock, PidRef}, infinity).
 
 
@@ -310,7 +314,7 @@ release_lock(Node, Partition) ->
     ok | {error, not_locked | not_allowed}.
 
 release_lock(Node, Partition, Pid) ->
-    PidRef = partisan_util:pid(Pid),
+    PidRef = partisan_remote_ref:from_term(Pid),
     partisan_gen_server:call(
         {name(Partition), Node}, {release_lock, external, PidRef}, infinity).
 
