@@ -889,7 +889,7 @@ remote_iterator(Node, FullPrefix) ->
     remote_iterator().
 
 remote_iterator(Node, FullPrefix, Opts) when is_tuple(FullPrefix) ->
-    PidRef = partisan_util:pid(),
+    PidRef = partisan:self(),
     Ref = partisan_gen_server:call(
         {?MODULE, Node},
         {open_remote_iterator, PidRef, FullPrefix, Opts},
