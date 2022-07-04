@@ -32,6 +32,46 @@
 -define(APP, plum_db).
 -define(ERROR, '$error_badarg').
 -define(DEFAULT_RESOURCE_SIZE, erlang:system_info(schedulers)).
+-define(CONFIG_SPEC, #{
+    type => #{
+        required => true,
+        datatype => {in, [ram, ram_disk, disk]},
+        default => disk
+    },
+    shard_by => #{
+        required => true,
+        datatype => {in, [prefix, key]},
+        default => prefix
+    },
+    callbacks => #{
+        required => true,
+        datatype => map,
+        default => #{},
+        validator => ?CALLBACKS_SPEC
+    }
+}).
+
+-define(CALLBACKS_SPEC, #{
+    will_merge => #{
+        required => false,
+        datatype => tuple,
+        validator => ?FUN_WITH_ARITY(3)
+    },
+    object_updated => #{
+        required => false,
+        datatype => tuple,
+        validator => ?FUN_WITH_ARITY(3)
+    }
+}).
+
+-define(FUN_WITH_ARITY(N),
+    fun
+        ({Mod, Fun}) when is_atom(Mod); is_atom(Fun) ->
+            erlang:function_exported(Mod, Fun, N);
+        (_) ->
+            false
+    end
+).
 
 -export([get/1]).
 -export([get/2]).
@@ -111,8 +151,7 @@ will_set(partitions, Value) ->
 
 will_set(prefixes, Values) ->
     try
-        DefaultShardBy = get(shardy, prefix),
-        {ok, validate_prefixes(Values, DefaultShardBy)}
+        {ok, validate_prefixes(Values)}
     catch
         _:Reason ->
             {error, Reason}
@@ -168,59 +207,40 @@ setup_env() ->
         ]
     },
     Config1 = maps:merge(Defaults, Config0),
-    % Prefixes0 = maps:get(prefixes, Config1),
     _ShardBy = validate_shard_by(maps:get(shard_by, Config1)),
-    % Prefixes1 = validate_prefixes(Prefixes0, ShardBy),
-    % Config2 = maps:put(prefixes, Prefixes1, Config1),
     application:set_env([{?APP, maps:to_list(Config1)}]).
 
-
-
-%% @private
-validate_prefixes(undefined, _) ->
-    #{};
-
-validate_prefixes([], _) ->
-    #{};
-
-validate_prefixes(L, ShardBy) ->
-    Fun = fun
-        ({P, Config}, Acc)
-        when is_binary(P) orelse is_atom(P) andalso is_map(Config) ->
-            [{P, validate_prefix_config(Config, ShardBy)} | Acc];
-
-        ({P, Type}, Acc) when is_binary(P) orelse is_atom(P) ->
-            %% Support for previous form, we transform it into the new form
-            Type = validate_prefix_type(Type),
-            Config = #{type => Type, shard_by => ShardBy},
-            [{P, Config} | Acc];
-
-        (Term, _) ->
-            throw({invalid_prefix_config, Term})
-    end,
-
-    maps:from_list(lists:foldl(Fun, [], L)).
-
-
-%% @private
-validate_prefix_type(ram) -> ram;
-validate_prefix_type(ram_disk) -> ram_disk;
-validate_prefix_type(disk) -> disk;
-validate_prefix_type(Term) -> throw({invalid_prefix_type, Term}).
 
 validate_shard_by(prefix) -> prefix;
 validate_shard_by(key) -> key;
 validate_shard_by(Term) -> throw({invalid_prefix_shard_by, Term}).
 
 
-validate_prefix_config(#{type := Type, shard_by := ShardBy} = Config, _) ->
-    Type = validate_prefix_type(Type),
-    ShardBy = validate_shard_by(ShardBy),
-    Config;
 
-validate_prefix_config(#{type := Type} = Config, DefaultShardBy) ->
-    Type = validate_prefix_type(Type),
-    Config#{shard_by => DefaultShardBy}.
+%% @private
+validate_prefixes(undefined) ->
+    #{};
+
+validate_prefixes([]) ->
+    #{};
+
+
+validate_prefixes(L) when is_list(L) ->
+    maps:from_list(
+        lists:map(
+            fun
+                ({Prefix, Config}) when is_map(Config) ->
+                    {Prefix, maps_utils:validate(Config, ?CONFIG_SPEC)};
+
+                ({Prefix, Type})
+                when Type == ram; Type == ram_disk; Type == disk ->
+                    {Prefix, #{type => Type}};
+                (Term) ->
+                    throw({invalid_prefix_config, Term})
+            end,
+            L
+        )
+    ).
 
 
 %% @private
@@ -237,6 +257,7 @@ validate_partitions(0) ->
 
 validate_partitions(N) when is_integer(N) ->
     N.
+
 
 coerce_partitions() ->
     N = get(partitions),
