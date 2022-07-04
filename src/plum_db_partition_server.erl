@@ -766,26 +766,36 @@ handle_call({erase, PKey}, _From, State) ->
     end,
     {reply, Result, State};
 
-handle_call({merge, PKey, Obj}, _From, State) ->
+handle_call({merge, PKey0, Obj0}, _From, State) ->
+
     %% We need to do a read followed by a write atomically
-    Existing = case do_get(PKey, State) of
-        {ok, O} ->
-            O;
+    Existing = case do_get(PKey0, State) of
+        {ok, Val} ->
+            Val;
         {error, not_found} ->
             undefined
     end,
 
-    case plum_db_object:reconcile(Obj, Existing) of
+    case plum_db_object:reconcile(Obj0, Existing) of
         false ->
             %% The remote object is an anscestor of or is equal to the local one
             {reply, false, State};
-        {true, Reconciled} ->
-            ok = do_put(PKey, Reconciled, State),
 
-            %% We notify local subscribers and event handlers
-            ok = plum_db_events:update({PKey, Reconciled, Existing}),
+        {true, Obj1} ->
+            case will_merge(PKey0, Obj1, Existing) of
+                {true, Obj} ->
+                    ok = do_put(PKey0, Obj, State),
+                    ok = on_update(PKey0, Obj, Existing),
+                    {reply, true, State};
 
-            {reply, true, State}
+                {true, PKey2, Obj2} ->
+                    ok = do_put(PKey2, Obj2, State),
+                    ok = on_update(PKey2, Obj2, Existing),
+                    {reply, true, State};
+
+                false ->
+                    {reply, false, State}
+            end
     end;
 
 handle_call(byte_size, _From, State) ->
@@ -1749,3 +1759,68 @@ decode_key(Bin) ->
 %% decode_key(_L) when is_list(L) ->
 %%     error(not_implemented).
 
+
+%% @private
+on_update(PKey, New, Existing) ->
+    ok = object_updated(PKey, New, Existing),
+    ok = plum_db_events:update({PKey, New, Existing}).
+
+
+%% @private
+will_merge({{Prefix, _}, _} = PKey, New, Existing) ->
+    try
+        Path = [prefixes, Prefix, callbacks, will_merge],
+        case plum_db_config:get(Path, undefined) of
+            undefined ->
+                {true, New};
+
+            {Mod, Fun} ->
+                case erlang:apply(Mod, Fun, [PKey, New, Existing]) of
+                    true ->
+                        {true, New};
+                    {true, _} = Result ->
+                        Result;
+                    {true, PKey, Obj} ->
+                        {true, Obj};
+                    {true, _, _} = Result ->
+                        %% A Diff Key
+                        Result;
+                    false ->
+                        false
+                end
+        end
+    catch
+        Class:Reason:Stacktrace ->
+            ?LOG_ERROR(#{
+                description => "Error while invoking prefix callback. Ignored",
+                callback => will_merge,
+                class => Class,
+                reason => Reason,
+                stacktrace => Stacktrace
+            }),
+            {true, New}
+    end.
+
+
+%% @private
+object_updated({{Prefix, _}, _} = PKey, Reconciled, Existing) ->
+    try
+        Path = [prefixes, Prefix, callbacks, object_updated],
+        case plum_db_config:get(Path, undefined) of
+            undefined ->
+                ok;
+            {Mod, Fun} ->
+                _ = erlang:apply(Mod, Fun, [PKey, Reconciled, Existing]),
+                ok
+        end
+    catch
+        Class:Reason:Stacktrace ->
+            ?LOG_ERROR(#{
+                description => "Error while invoking prefix callback.",
+                callback => object_updated,
+                class => Class,
+                reason => Reason,
+                stacktrace => Stacktrace
+            }),
+            ok
+    end.
