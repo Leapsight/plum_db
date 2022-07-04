@@ -666,8 +666,8 @@ ets_iterator_move(Type, _, Iter, {_, _} = FullPrefix) ->
 
 
 init([Name, Partition, Opts]) ->
-    %% Initialize random seed
-    rand:seed(exsplus, erlang:timestamp()),
+    %% Seed the random number generator.
+    partisan_config:seed(),
 
     process_flag(trap_exit, true),
 
