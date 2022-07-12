@@ -24,7 +24,7 @@
  {<<"observer_cli">>,{pkg,<<"observer_cli">>,<<"1.7.1">>},0},
  {<<"partisan">>,
   {git,"http://github.com/aramallo/partisan.git",
-       {ref,"472b67167c146c8958f9b40bec355d353bd484b5"}},
+       {ref,"4db92b4477b2ed97669efc3f3d6143081fcc1dbc"}},
   0},
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"2.0.4">>},2},
  {<<"recon">>,{pkg,<<"recon">>,<<"2.5.2">>},0},
