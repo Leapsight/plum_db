@@ -18,19 +18,18 @@
 %% =============================================================================
 
 -module(plum_db).
+
 -behaviour(partisan_gen_server).
 -behaviour(partisan_plumtree_broadcast_handler).
+
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
-
-
 
 -record(state, {
     %% an ets table to hold iterators opened
     %% by other nodes
     iterators           ::  ets:tab()
 }).
-
 
 -record(iterator, {
     %% The query
@@ -54,7 +53,6 @@
     ref                     ::  reference(),
     match_prefix            ::  plum_db_prefix() | atom() | binary()
 }).
-
 
 -record(continuation, {
     %% The query
