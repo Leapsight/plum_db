@@ -57,10 +57,25 @@
         datatype => tuple,
         validator => ?FUN_WITH_ARITY(3)
     },
-    object_updated => #{
+    on_merge => #{
         required => false,
         datatype => tuple,
         validator => ?FUN_WITH_ARITY(3)
+    },
+    on_update => #{
+        required => false,
+        datatype => tuple,
+        validator => ?FUN_WITH_ARITY(2)
+    },
+    on_delete => #{
+        required => false,
+        datatype => tuple,
+        validator => ?FUN_WITH_ARITY(1)
+    },
+    on_erase => #{
+        required => false,
+        datatype => tuple,
+        validator => ?FUN_WITH_ARITY(1)
     }
 }).
 

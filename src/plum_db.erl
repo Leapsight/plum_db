@@ -138,12 +138,19 @@
 %% Erase Option types
 -type erase_opts()         :: [].
 
+-type will_merge_cb_result() :: true
+                                | {true, Merged :: term()}
+                                | false.
+
+-type cb_result()           ::  ok.
 
 -export_type([prefixes/0]).
 -export_type([prefix_type/0]).
 -export_type([partition/0]).
 -export_type([iterator/0]).
 -export_type([continuation/0]).
+-export_type([will_merge_cb_result/0]).
+-export_type([cb_result/0]).
 
 -export([delete/2]).
 -export([delete/3]).
