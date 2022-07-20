@@ -713,8 +713,8 @@ handle_call({get, PKey, Opts}, _From, State) ->
 handle_call({put, PKey, ValueOrFun, Opts}, _From, State) ->
     Reply =
         case modify(PKey, ValueOrFun, Opts, State) of
-            {ok, _Existing, Result} ->
-                ok = on_update(PKey, Result),
+            {ok, Existing, Result} ->
+                ok = on_update(PKey, Result, Existing),
                 {ok, Result};
             {error, _} = Error ->
                 Error
