@@ -65,17 +65,17 @@
     on_update => #{
         required => false,
         datatype => tuple,
-        validator => ?FUN_WITH_ARITY(2)
+        validator => ?FUN_WITH_ARITY(3)
     },
     on_delete => #{
         required => false,
         datatype => tuple,
-        validator => ?FUN_WITH_ARITY(1)
+        validator => ?FUN_WITH_ARITY(2)
     },
     on_erase => #{
         required => false,
         datatype => tuple,
-        validator => ?FUN_WITH_ARITY(1)
+        validator => ?FUN_WITH_ARITY(2)
     }
 }).
 

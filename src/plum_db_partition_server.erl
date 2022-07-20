@@ -725,7 +725,7 @@ handle_call({take, PKey, Opts}, _From, State) ->
     Reply =
     case modify(PKey, ?TOMBSTONE, Opts, State) of
         {ok, Existing, Result} ->
-            ok = on_update(PKey, Result),
+            ok = on_update(PKey, Result, Existing),
             case maybe_resolve(Existing, Opts) of
                 {ok, Resolved} ->
                     {ok, {Resolved, Result}};
@@ -771,7 +771,7 @@ handle_call({erase, PKey}, _From, State) ->
         {error, _} ->
             ok;
         _ ->
-            ok = on_erase(PKey)
+            ok = on_erase(PKey, Existing)
     end,
 
     {reply, Result, State};
@@ -1360,8 +1360,8 @@ maybe_modify(PKey, Existing, Opts, State, NewObject) ->
             Ctxt = plum_db_object:context(NewObject),
             Value = plum_db_object:value(NewObject),
             case modify(PKey, Value, Opts, State, Existing, Ctxt) of
-                ok ->
-                    ok = on_update(PKey, Value);
+                {ok, _, Modified} ->
+                    ok = on_update(PKey, Modified, Existing);
 
                 {error, Reason} ->
                     ?LOG_ERROR(#{
@@ -1807,15 +1807,15 @@ decode_key(Bin) ->
 
 
 %% @private
-on_update(_, undefined) ->
+on_update(_, undefined, _) ->
     ok;
 
-on_update(PKey, Obj) ->
-    case plum_db_object:value(Obj) of
+on_update(PKey, New, Existing) ->
+    case plum_db_object:value(New) of
         ?TOMBSTONE ->
-            on_delete(PKey);
+            on_delete(PKey, Existing);
         _ ->
-            true = callback(on_update, PKey, [Obj])
+            true = callback(on_update, PKey, [New, Existing])
     end,
     ok.
 
@@ -1827,14 +1827,14 @@ on_merge(PKey, New, Existing) ->
 
 
 %% @private
-on_delete(PKey) ->
-    true = callback(on_delete, PKey, []),
+on_delete(PKey, Obj) ->
+    true = callback(on_delete, PKey, [Obj]),
     ok.
 
 
 %% @private
-on_erase(PKey) ->
-    true = callback(on_erase, PKey, []),
+on_erase(PKey, Obj) ->
+    true = callback(on_erase, PKey, [Obj]),
     ok.
 
 
