@@ -713,18 +713,19 @@ handle_call({get, PKey, Opts}, _From, State) ->
 handle_call({put, PKey, ValueOrFun, Opts}, _From, State) ->
     Reply =
         case modify(PKey, ValueOrFun, Opts, State) of
-            {ok, _Existing, Result} ->
+            {ok, Existing, Result} ->
+                ok = on_update(PKey, Result, Existing),
                 {ok, Result};
             {error, _} = Error ->
                 Error
         end,
     {reply, Reply, State};
 
-
 handle_call({take, PKey, Opts}, _From, State) ->
     Reply =
     case modify(PKey, ?TOMBSTONE, Opts, State) of
         {ok, Existing, Result} ->
+            ok = on_update(PKey, Result, Existing),
             case maybe_resolve(Existing, Opts) of
                 {ok, Resolved} ->
                     {ok, {Resolved, Result}};
@@ -764,12 +765,21 @@ handle_call({erase, PKey}, _From, State) ->
             Actions = [{delete, encode_key(PKey)}],
             result(eleveldb:write(DbRef, Actions, Opts))
     end,
+
+    %% Maybe callback
+    case Result of
+        {error, _} ->
+            ok;
+        _ ->
+            ok = on_erase(PKey, Existing)
+    end,
+
     {reply, Result, State};
 
-handle_call({merge, PKey0, Obj0}, _From, State) ->
+handle_call({merge, PKey, Obj0}, _From, State) ->
 
     %% We need to do a read followed by a write atomically
-    Existing = case do_get(PKey0, State) of
+    Existing = case do_get(PKey, State) of
         {ok, Val} ->
             Val;
         {error, not_found} ->
@@ -782,18 +792,36 @@ handle_call({merge, PKey0, Obj0}, _From, State) ->
             {reply, false, State};
 
         {true, Obj1} ->
-            case will_merge(PKey0, Obj1, Existing) of
-                {true, Obj} ->
-                    ok = do_put(PKey0, Obj, State),
-                    ok = on_update(PKey0, Obj, Existing),
-                    {reply, true, State};
+            Result =
+                case callback(will_merge, PKey, [Obj1, Existing]) of
+                    true ->
+                        {true, Obj1};
+                    {true, _} = R ->
+                        R;
+                    false ->
+                        false
+                end,
 
-                {true, PKey2, Obj2} ->
-                    ok = do_put(PKey2, Obj2, State),
-                    ok = on_update(PKey2, Obj2, Existing),
-                    {reply, true, State};
+            case Result of
+                {true, Obj} ->
+                    case do_put(PKey, Obj, State) of
+                        ok ->
+                            ok = on_merge(PKey, Obj1, Existing),
+                            {reply, true, State};
+
+                        {error, Reason} ->
+                            ?LOG_ERROR(#{
+                                description =>
+                                    "Error while writing merged object",
+                                prefixed_key => PKey,
+                                object => Obj,
+                                reason => Reason
+                            }),
+                            {reply, false, State}
+                    end;
 
                 false ->
+                    %% We cancel the merge
                     {reply, false, State}
             end
     end;
@@ -868,7 +896,6 @@ handle_call({iterator_close, Iter}, _From, State0) ->
 
 handle_call(_Message, _From, State) ->
     {reply, {error, unsupported_call}, State}.
-
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -1287,11 +1314,18 @@ modify(PKey, ValueOrFun, Opts, State, Existing, Ctxt) ->
     Actor = State#state.actor_id,
 
     %% If ValueOrFun is a function then it might raise an exception, so we catch
-    try plum_db_object:modify(Existing, Ctxt, ValueOrFun, Actor) of
-        Modified ->
-            ok = do_put(PKey, Modified, State),
-            ok = maybe_broadcast(PKey, Modified, Opts),
-            {ok, Existing, Modified}
+    try
+        Modified = plum_db_object:modify(Existing, Ctxt, ValueOrFun, Actor),
+
+        case do_put(PKey, Modified, State) of
+            ok ->
+                ok = maybe_broadcast(PKey, Modified, Opts),
+                {ok, Existing, Modified};
+
+            {error, _} = Error ->
+                Error
+        end
+
     catch
         _:Reason ->
             {error, Reason}
@@ -1325,8 +1359,20 @@ maybe_modify(PKey, Existing, Opts, State, NewObject) ->
         true ->
             Ctxt = plum_db_object:context(NewObject),
             Value = plum_db_object:value(NewObject),
-            _ = modify(PKey, Value, Opts, State, Existing, Ctxt),
-            ok
+            case modify(PKey, Value, Opts, State, Existing, Ctxt) of
+                {ok, _, Modified} ->
+                    ok = on_update(PKey, Modified, Existing);
+
+                {error, Reason} ->
+                    ?LOG_ERROR(#{
+                        description =>
+                            "Error while during read-repair write",
+                        reason => Reason,
+                        prefixed_key => PKey,
+                        object => Value
+                    }),
+                    ok
+            end
     end.
 
 
@@ -1761,31 +1807,68 @@ decode_key(Bin) ->
 
 
 %% @private
+on_update(_, undefined, _) ->
+    ok;
+
 on_update(PKey, New, Existing) ->
-    ok = object_updated(PKey, New, Existing),
+    case plum_db_object:value(New) of
+        ?TOMBSTONE ->
+            on_delete(PKey, Existing);
+        _ ->
+            true = callback(on_update, PKey, [New, Existing])
+    end,
+    ok.
+
+
+%% @private
+on_merge(PKey, New, Existing) ->
+    true = callback(on_merge, PKey, [New, Existing]),
     ok = plum_db_events:update({PKey, New, Existing}).
 
 
 %% @private
-will_merge({{Prefix, _}, _} = PKey, New, Existing) ->
+on_delete(PKey, Obj) ->
+    true = callback(on_delete, PKey, [Obj]),
+    ok.
+
+
+%% @private
+on_erase(PKey, Obj) ->
+    true = callback(on_erase, PKey, [Obj]),
+    ok.
+
+
+%% -----------------------------------------------------------------------------
+%% @private
+%% @doc Applies the user defined callback.
+%% The will_merge callback needs to reply
+%% true | {true, Obj} | {true, Pkey, Obj} | false
+%% @end
+%% -----------------------------------------------------------------------------
+callback(Name, {{Prefix, _}, _} = PKey, Args) when is_list(Args) ->
+    Default = true,
+
     try
-        Path = [prefixes, Prefix, callbacks, will_merge],
+        Path = [prefixes, Prefix, callbacks, Name],
+
         case plum_db_config:get(Path, undefined) of
             undefined ->
-                {true, New};
+                Default;
 
             {Mod, Fun} ->
-                case erlang:apply(Mod, Fun, [PKey, New, Existing]) of
-                    true ->
-                        {true, New};
-                    {true, _} = Result ->
+                case erlang:apply(Mod, Fun, [PKey | Args]) of
+                    ok when Name == on_update;
+                            Name == on_merge;
+                            Name == on_delete;
+                            Name == on_erase ->
+                        true;
+                    true when Name == will_merge ->
+                        true;
+                    {true, _} = Result when Name == will_merge ->
                         Result;
-                    {true, PKey, Obj} ->
-                        {true, Obj};
-                    {true, _, _} = Result ->
-                        %% A Diff Key
+                    {true, _, _} = Result when Name == will_merge ->
                         Result;
-                    false ->
+                    false when Name == will_merge ->
                         false
                 end
         end
@@ -1793,34 +1876,10 @@ will_merge({{Prefix, _}, _} = PKey, New, Existing) ->
         Class:Reason:Stacktrace ->
             ?LOG_ERROR(#{
                 description => "Error while invoking prefix callback. Ignored",
-                callback => will_merge,
+                callback => Name,
                 class => Class,
                 reason => Reason,
                 stacktrace => Stacktrace
             }),
-            {true, New}
-    end.
-
-
-%% @private
-object_updated({{Prefix, _}, _} = PKey, Reconciled, Existing) ->
-    try
-        Path = [prefixes, Prefix, callbacks, object_updated],
-        case plum_db_config:get(Path, undefined) of
-            undefined ->
-                ok;
-            {Mod, Fun} ->
-                _ = erlang:apply(Mod, Fun, [PKey, Reconciled, Existing]),
-                ok
-        end
-    catch
-        Class:Reason:Stacktrace ->
-            ?LOG_ERROR(#{
-                description => "Error while invoking prefix callback.",
-                callback => object_updated,
-                class => Class,
-                reason => Reason,
-                stacktrace => Stacktrace
-            }),
-            ok
+            Default
     end.
