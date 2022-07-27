@@ -805,6 +805,13 @@ handle_call({merge, PKey, Obj0}, _From, State) ->
             case Result of
                 {true, Obj} ->
                     case do_put(PKey, Obj, State) of
+                        ok when Obj =/= Obj1 ->
+                            %% The case then the callback modified the object,
+                            %% so we need to let the peers know
+                            ok = maybe_broadcast(PKey, Obj, []),
+                            ok = on_merge(PKey, Obj1, Existing),
+                            {reply, true, State};
+
                         ok ->
                             ok = on_merge(PKey, Obj1, Existing),
                             {reply, true, State};
