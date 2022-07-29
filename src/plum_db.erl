@@ -571,7 +571,7 @@ do_fold(Fun, Acc, It, RemoveTombs, Limit) ->
     try
         do_fold_next(Fun, Acc, It, RemoveTombs, Limit, 0)
     catch
-        {break, Result} ->
+        _:{break, Result} ->
             Result
     after
         ok = iterator_close(It)
@@ -628,7 +628,7 @@ foreach(Fun, FullPrefixPattern) ->
 %% -----------------------------------------------------------------------------
 %% @doc Fold over all keys and values stored under a given prefix/subprefix.
 %% Available options are the same as those provided to iterator/2. To return
-%% early, throw {break, Result} in your fold function.
+%% early, throw `break' in your fold function.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec foreach(foreach_fun(), plum_db_prefix_pattern(), fold_opts()) -> any().
@@ -644,6 +644,8 @@ foreach(Fun, FullPrefixPattern, Opts) ->
 
     try
         do_foreach(Fun, It, RemoveTombs)
+    catch
+        _:break -> ok
     after
         ok = iterator_close(It)
     end.
@@ -695,7 +697,7 @@ fold_elements(Fun, Acc0, FullPrefix, Opts) ->
     try
         do_fold_elements(Fun, Acc0, It)
     catch
-        {break, Result} -> Result
+        _:{break, Result} -> Result
     after
         ok = iterator_close(It)
     end.
