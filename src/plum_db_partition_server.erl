@@ -98,12 +98,11 @@
 -export_type([iterator_move_result/0]).
 
 -export([byte_size/1]).
+-export([dirty_put/5]).
 -export([erase/3]).
 -export([get/2]).
 -export([get/3]).
 -export([get/4]).
--export([merge/3]).
--export([merge/4]).
 -export([is_empty/1]).
 -export([iterator/2]).
 -export([iterator/3]).
@@ -111,14 +110,16 @@
 -export([iterator_move/2]).
 -export([key_iterator/2]).
 -export([key_iterator/3]).
+-export([merge/3]).
+-export([merge/4]).
 -export([name/1]).
 -export([put/3]).
 -export([put/4]).
 -export([put/5]).
+-export([start_link/2]).
 -export([take/2]).
 -export([take/3]).
 -export([take/4]).
--export([start_link/2]).
 
 %% GEN_SERVER CALLBACKS
 -export([init/1]).
@@ -238,6 +239,14 @@ put(Name, PKey, ValueOrFun, Opts) ->
 %% -----------------------------------------------------------------------------
 put(Name, PKey, ValueOrFun, Opts, Timeout) when is_atom(Name) ->
     partisan_gen_server:call(Name, {put, PKey, ValueOrFun, Opts}, Timeout).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+dirty_put(Name, PKey, Object, Opts, Timeout) when is_atom(Name) ->
+    partisan_gen_server:call(Name, {dirty_put, PKey, Object, Opts}, Timeout).
 
 
 %% -----------------------------------------------------------------------------
@@ -718,6 +727,33 @@ handle_call({put, PKey, ValueOrFun, Opts}, _From, State) ->
                 {ok, Result};
             {error, _} = Error ->
                 Error
+        end,
+    {reply, Reply, State};
+
+
+handle_call({dirty_put, PKey, Object, Opts}, _From, State) ->
+    Existing =
+        case do_get(PKey, State) of
+            {ok, Obj} ->
+                Obj;
+            {error, not_found} ->
+                undefined
+        end,
+
+    Reply =
+        try
+            case do_put(PKey, Object, State) of
+                ok ->
+                    ok = maybe_broadcast(PKey, Object, Opts),
+                    ok = on_update(PKey, Object, Existing),
+                    {ok, Object};
+
+                {error, _} = Error ->
+                    Error
+            end
+        catch
+            _:Reason ->
+                {error, Reason}
         end,
     {reply, Reply, State};
 
