@@ -20,6 +20,10 @@
 -module(plum_db_object).
 -include("plum_db.hrl").
 
+-type t() :: {object, plum_db_dvvset:clock()}.
+
+-export_type([t/0]).
+
 -export([value/1,
          values/1,
          value_count/1,

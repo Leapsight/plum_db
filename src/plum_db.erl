@@ -154,27 +154,25 @@
 
 -export([delete/2]).
 -export([delete/3]).
+-export([dirty_put/4]).
 -export([erase/2]).
 -export([erase/3]).
 -export([exchange/2]).
 -export([fold/3]).
 -export([fold/4]).
--export([foreach/2]).
--export([foreach/3]).
 -export([fold_elements/3]).
 -export([fold_elements/4]).
+-export([foreach/2]).
+-export([foreach/3]).
 -export([get/2]).
 -export([get/3]).
 -export([get/4]).
--export([match/1]).
--export([match/2]).
--export([match/3]).
 -export([get_object/1]).
 -export([get_object/2]).
 -export([get_object/3]).
+-export([get_partition/1]).
 -export([get_remote_object/3]).
 -export([get_remote_object/4]).
--export([get_partition/1]).
 -export([is_partition/1]).
 -export([iterate/1]).
 -export([iterator/0]).
@@ -188,18 +186,21 @@
 -export([iterator_key_value/1]).
 -export([iterator_key_values/1]).
 -export([iterator_prefix/1]).
--export([sync_exchange/1]).
--export([sync_exchange/2]).
+-export([match/1]).
+-export([match/2]).
+-export([match/3]).
 -export([merge/3]).
 -export([partition_count/0]).
 -export([partitions/0]).
 -export([prefix_hash/2]).
--export([prefixes/0]).
 -export([prefix_type/1]).
+-export([prefixes/0]).
 -export([put/3]).
 -export([put/4]).
 -export([remote_iterator/1]).
 -export([remote_iterator/2]).
+-export([sync_exchange/1]).
+-export([sync_exchange/2]).
 -export([take/2]).
 -export([take/3]).
 -export([to_list/1]).
@@ -1295,6 +1296,38 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
         plum_db_partition_server:name(get_partition(PKey)),
         PKey,
         ValueOrFun,
+        Opts,
+        infinity
+    ),
+
+    case Res of
+        {ok, _} ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec dirty_put(
+    plum_db_prefix(),
+    plum_db_key(),
+    plum_db_object:t(),
+    put_opts()) ->
+    ok | {error, Reason :: any()}.
+
+dirty_put({Prefix, SubPrefix} = FullPrefix, Key, Object, Opts)
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
+    PKey = prefixed_key(FullPrefix, Key),
+
+    Res = plum_db_partition_server:dirty_put(
+        plum_db_partition_server:name(get_partition(PKey)),
+        PKey,
+        Object,
         Opts,
         infinity
     ),
