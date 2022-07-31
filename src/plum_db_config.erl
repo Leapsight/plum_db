@@ -244,12 +244,16 @@ validate_prefixes(L) when is_list(L) ->
     maps:from_list(
         lists:map(
             fun
-                ({Prefix, Config}) when is_map(Config) ->
-                    {Prefix, maps_utils:validate(Config, ?CONFIG_SPEC)};
+                ({Prefix, Config0}) when is_map(Config0) ->
+                    Config = maps_utils:validate(Config0, ?CONFIG_SPEC),
+                    {Prefix, Config};
 
                 ({Prefix, Type})
                 when Type == ram; Type == ram_disk; Type == disk ->
-                    {Prefix, #{type => Type}};
+                    Config0 = #{type => Type},
+                    Config = maps_utils:validate(Config0, ?CONFIG_SPEC),
+                    {Prefix, Config};
+
                 (Term) ->
                     throw({invalid_prefix_config, Term})
             end,

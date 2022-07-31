@@ -249,7 +249,7 @@ start_link() ->
 %% provided Key
 %% @end
 %% -----------------------------------------------------------------------------
--spec get_partition(term()) -> partition().
+-spec get_partition(Arg :: plum_db_pkey()) -> partition().
 
 get_partition({{'_', _}, _}) ->
     error(badarg);
@@ -257,11 +257,12 @@ get_partition({{'_', _}, _}) ->
 get_partition({{_, '_'}, _}) ->
     error(badarg);
 
-get_partition({{_, _} = FP, _}) ->
-    get_partition(plum_db_config:get(shard_by), FP);
+get_partition({{Prefix, _}, _} = Key) ->
+    ShardBy = plum_db_config:get([prefixes, Prefix, shard_by], prefix),
+    get_partition(ShardBy, Key);
 
 get_partition({_, _} = FP) ->
-      case partition_count() > 1 of
+    case partition_count() > 1 of
         true ->
             %% partition :: 0..(partition_count() - 1)
             erlang:phash2(FP, partition_count() - 1);
@@ -275,11 +276,21 @@ get_partition({_, _} = FP) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
+-spec get_partition
+        (prefix | key, Arg :: plum_db_pkey()) -> partition();
+        (prefix, Arg :: plum_db_pkey() | plum_db_prefix()) -> partition().
+
 get_partition(prefix, {{_, _} = FP, _}) ->
     get_partition(FP);
 
 get_partition(prefix, {_, _} = FP) ->
-    get_partition(FP);
+    case partition_count() > 1 of
+        true ->
+            %% partition :: 0..(partition_count() - 1)
+            erlang:phash2(FP, partition_count() - 1);
+        false ->
+            0
+    end;
 
 get_partition(key, {{_, _}, _} = Key) ->
     case partition_count() > 1 of
@@ -1906,10 +1917,17 @@ new_continuation(#iterator{} = I) ->
 %% -----------------------------------------------------------------------------
 get_covering_partitions({'_', _}) ->
     partitions();
+
 get_covering_partitions({_, '_'}) ->
     partitions();
-get_covering_partitions(FullPrefix) ->
-    [get_partition(FullPrefix)].
+
+get_covering_partitions({Prefix, _} = FullPrefix) ->
+    case plum_db_config:get([prefixes, Prefix, shard_by], prefix) of
+        prefix ->
+            [get_partition(prefix, FullPrefix)];
+        key ->
+            partitions()
+    end.
 
 
 %% @private
