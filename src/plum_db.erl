@@ -249,7 +249,7 @@ start_link() ->
 %% provided Key
 %% @end
 %% -----------------------------------------------------------------------------
--spec get_partition(term()) -> partition().
+-spec get_partition(Arg :: plum_db_pkey()) -> partition().
 
 get_partition({{'_', _}, _}) ->
     error(badarg);
@@ -257,11 +257,12 @@ get_partition({{'_', _}, _}) ->
 get_partition({{_, '_'}, _}) ->
     error(badarg);
 
-get_partition({{_, _} = FP, _}) ->
-    get_partition(plum_db_config:get(shard_by), FP);
+get_partition({{Prefix, _}, _} = Key) ->
+    ShardBy = plum_db_config:get([prefixes, Prefix, shard_by], prefix),
+    get_partition(ShardBy, Key);
 
 get_partition({_, _} = FP) ->
-      case partition_count() > 1 of
+    case partition_count() > 1 of
         true ->
             %% partition :: 0..(partition_count() - 1)
             erlang:phash2(FP, partition_count() - 1);
@@ -275,11 +276,21 @@ get_partition({_, _} = FP) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
+-spec get_partition
+        (prefix | key, Arg :: plum_db_pkey()) -> partition();
+        (prefix, Arg :: plum_db_pkey() | plum_db_prefix()) -> partition().
+
 get_partition(prefix, {{_, _} = FP, _}) ->
     get_partition(FP);
 
 get_partition(prefix, {_, _} = FP) ->
-    get_partition(FP);
+    case partition_count() > 1 of
+        true ->
+            %% partition :: 0..(partition_count() - 1)
+            erlang:phash2(FP, partition_count() - 1);
+        false ->
+            0
+    end;
 
 get_partition(key, {{_, _}, _} = Key) ->
     case partition_count() > 1 of
@@ -571,7 +582,7 @@ do_fold(Fun, Acc, It, RemoveTombs, Limit) ->
     try
         do_fold_next(Fun, Acc, It, RemoveTombs, Limit, 0)
     catch
-        _:{break, Result} ->
+        throw:{stop, Result} ->
             Result
     after
         ok = iterator_close(It)
@@ -587,14 +598,24 @@ do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt0) ->
             {Acc0, ?EOT};
         true ->
             Acc0;
-        false when It#iterator.keys_only == true ->
-            K = It#iterator.key,
-            {Acc1, Cnt} = do_fold_acc(K, Fun, Acc0, Cnt0, RemoveTombs),
-            do_fold_next(Fun, Acc1, iterate(It), RemoveTombs, Limit, Cnt);
-        false when Cnt0 < Limit ->
-            KV = iterator_key_values(It),
-            {Acc1, Cnt} = do_fold_acc(KV, Fun, Acc0, Cnt0, RemoveTombs),
-            do_fold_next(Fun, Acc1, iterate(It), RemoveTombs, Limit, Cnt);
+        false when It#iterator.keys_only orelse Cnt0 < Limit ->
+            KV =
+                case It#iterator.keys_only of
+                    true ->
+                        It#iterator.key;
+                    false ->
+                        iterator_key_values(It)
+                end,
+
+            try
+                {Acc1, Cnt} = do_fold_acc(KV, Fun, Acc0, Cnt0, RemoveTombs),
+                do_fold_next(Fun, Acc1, iterate(It), RemoveTombs, Limit, Cnt)
+            catch
+                _:{break, _} = Break ->
+                    do_fold_next(
+                        Fun, Acc0, iterate(Break, It), RemoveTombs, Limit, Cnt0
+                    )
+            end;
         false ->
             Cont = new_continuation(It),
             {Acc0, Cont}
@@ -645,7 +666,8 @@ foreach(Fun, FullPrefixPattern, Opts) ->
     try
         do_foreach(Fun, It, RemoveTombs)
     catch
-        _:break -> ok
+        throw:{stop, ok} ->
+            ok
     after
         ok = iterator_close(It)
     end.
@@ -657,18 +679,28 @@ do_foreach(Fun, It, RemoveTombs) ->
         true ->
             ok;
         false when It#iterator.keys_only == true ->
-            _ = Fun(It#iterator.key),
-            do_foreach(Fun, iterate(It), RemoveTombs);
+            try
+                _ = Fun(It#iterator.key),
+                do_foreach(Fun, iterate(It), RemoveTombs)
+            catch
+                _:break ->
+                    do_foreach(Fun, iterate({break, ok}, It), RemoveTombs)
+            end;
         false ->
-            case iterator_key_values(It) of
-                {_, ?TOMBSTONE} when RemoveTombs == true ->
-                    ok;
-                {_, [?TOMBSTONE]} when RemoveTombs == true ->
-                    ok;
-                KV ->
-                    Fun(KV)
-            end,
-            do_foreach(Fun, iterate(It), RemoveTombs)
+            try
+                case iterator_key_values(It) of
+                    {_, ?TOMBSTONE} when RemoveTombs == true ->
+                        ok;
+                    {_, [?TOMBSTONE]} when RemoveTombs == true ->
+                        ok;
+                    KV ->
+                        Fun(KV)
+                end,
+                do_foreach(Fun, iterate(It), RemoveTombs)
+            catch
+                _:break ->
+                    do_foreach(Fun, iterate({break, ok}, It), RemoveTombs)
+            end
     end.
 
 
@@ -685,7 +717,8 @@ fold_elements(Fun, Acc0, FullPrefix) ->
 %% -----------------------------------------------------------------------------
 %% @doc Fold over all elements stored under a given prefix/subprefix.
 %% Available options are the same as those provided to iterator/2. To return
-%% early, throw {break, Result} in your fold function.
+%% early, raise an exception with reason `{break, Result :: any()}' in your
+%% fold function.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec fold_elements(
@@ -697,7 +730,7 @@ fold_elements(Fun, Acc0, FullPrefix, Opts) ->
     try
         do_fold_elements(Fun, Acc0, It)
     catch
-        _:{break, Result} -> Result
+        throw:{stop, Result} -> Result
     after
         ok = iterator_close(It)
     end.
@@ -708,8 +741,13 @@ do_fold_elements(Fun, Acc0, It) ->
         true ->
             Acc0;
         false ->
-            Acc = Fun(iterator_element(It), Acc0),
-            do_fold_elements(Fun, Acc, iterate(It))
+            try
+                Acc = Fun(iterator_element(It), Acc0),
+                do_fold_elements(Fun, Acc, iterate(It))
+            catch
+                _:{break, _} = Break ->
+                    do_fold_elements(Fun, Acc0, iterate(Break, It))
+            end
     end.
 
 
@@ -953,6 +991,21 @@ iterate({error, no_match, Ref1}, I0) ->
     iterate(I0#iterator{ref = Ref1});
 
 iterate({error, _, Ref1}, #iterator{partitions = [H|T]} = I) ->
+    %% There are no more elements in the partition
+    Name = plum_db_partition_server:name(H),
+    ok = plum_db_partition_server:iterator_close(Name, Ref1),
+    I1 = iterator_reset_pointers(
+        I#iterator{ref = undefined, partitions = T}
+    ),
+    iterate(I1);
+
+iterate({break, Result}, #iterator{ref = Ref1, partitions = [H]}) ->
+    %% There are no more elements in the partition
+    Name = plum_db_partition_server:name(H),
+    ok = plum_db_partition_server:iterator_close(Name, Ref1),
+    throw({stop, Result});
+
+iterate({break, _}, #iterator{ref = Ref1, partitions = [H|T]} = I) ->
     %% There are no more elements in the partition
     Name = plum_db_partition_server:name(H),
     ok = plum_db_partition_server:iterator_close(Name, Ref1),
@@ -1209,7 +1262,8 @@ prefix_type(Prefix) when is_atom(Prefix) orelse is_binary(Prefix) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec put(
-    plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier()) -> ok.
+    plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier()) ->
+    ok.
 
 put(FullPrefix, Key, ValueOrFun) ->
     put(FullPrefix, Key, ValueOrFun, []).
@@ -1906,10 +1960,17 @@ new_continuation(#iterator{} = I) ->
 %% -----------------------------------------------------------------------------
 get_covering_partitions({'_', _}) ->
     partitions();
+
 get_covering_partitions({_, '_'}) ->
     partitions();
-get_covering_partitions(FullPrefix) ->
-    [get_partition(FullPrefix)].
+
+get_covering_partitions({Prefix, _} = FullPrefix) ->
+    case plum_db_config:get([prefixes, Prefix, shard_by], prefix) of
+        prefix ->
+            [get_partition(prefix, FullPrefix)];
+        key ->
+            partitions()
+    end.
 
 
 %% @private
