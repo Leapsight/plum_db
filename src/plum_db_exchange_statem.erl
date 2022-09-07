@@ -364,7 +364,7 @@ handle_other_event(_, cast, {remote_lock_acquired, Partition}, State) ->
 handle_other_event(_, info, {nodedown, Peer}, #state{peer = Peer} = State0) ->
     [H|T] = State0#state.partitions,
     ok = release_local_lock(H),
-    ?LOG_INFO(#{
+    ?LOG_NOTICE(#{
         description => "AAE Exchange aborting, peer node down",
         reason => nodedown,
         peer => State0#state.peer
