@@ -111,12 +111,13 @@ start_link(Partition) when is_integer(Partition) ->
     Dir = plum_db_config:get(hashtrees_dir),
     DataRoot = filename:join([Dir, integer_to_list(Partition)]),
     Name = name(Partition),
+    StartOpts = [{channel,  plum_db_config:get(data_channel)}],
 
     partisan_gen_server:start_link(
         {local, Name},
         ?MODULE,
         [Partition, DataRoot],
-        [{channel,  ?DATA_CHANNEL}]
+        StartOpts
     ).
 
 

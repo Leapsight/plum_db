@@ -17,6 +17,10 @@
 %%  limitations under the License.
 %% =============================================================================
 
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
 -module(plum_db).
 
 -behaviour(partisan_gen_server).
@@ -219,6 +223,7 @@
 
 %% partisan_plumtree_broadcast_handler callbacks
 -export([broadcast_data/1]).
+-export([broadcast_channel/0]).
 -export([exchange/1]).
 -export([graft/1]).
 -export([is_stale/1]).
@@ -1571,6 +1576,16 @@ code_change(_OldVsn, State, _Extra) ->
 %% API: PARTISAN_PLUMTREE_BROADCAST_HANDLER CALLBACKS
 %% =============================================================================
 
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Returns the channel to be used when broadcasting plum_db operations.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec broadcast_channel() -> partisan:channel().
+
+broadcast_channel() ->
+    plum_db_config:get(data_channel).
 
 
 %% -----------------------------------------------------------------------------

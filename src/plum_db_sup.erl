@@ -56,6 +56,7 @@ start_link() ->
     %% It is important we init the config before starting the supervisor
     %% as we override some user configuration for Partisan.
     ok = plum_db_config:init(),
+    {ok, _} = application:ensure_all_started(partisan),
 
     case supervisor:start_link({local, ?MODULE}, ?MODULE, []) of
         {ok, _} = OK ->

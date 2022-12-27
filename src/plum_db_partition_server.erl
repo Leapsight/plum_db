@@ -144,11 +144,12 @@
 
 start_link(Partition, Opts) ->
     Name = name(Partition),
+    StartOpts = [{channel,  plum_db_config:get(data_channel)}],
     partisan_gen_server:start_link(
         {local, Name},
         ?MODULE,
         [Name, Partition, Opts],
-        [{channel,  ?DATA_CHANNEL}]
+        StartOpts
     ).
 
 

@@ -19,8 +19,8 @@
         sext,
         app_config,
         gproc,
-        utils,
-        partisan
+        utils
+        %% partisan is started manually
     ]},
     {env, []},
     {modules, []},
