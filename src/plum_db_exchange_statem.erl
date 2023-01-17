@@ -81,9 +81,8 @@ start(Peer, Opts) when is_list(Opts) ->
     start(Peer, maps:from_list(Opts));
 
 start(Peer, Opts) when is_map(Opts) ->
-    partisan_gen_statem:start(
-        ?MODULE, [Peer, Opts], [{channel, ?DATA_CHANNEL}]
-    ).
+    StartOpts = [{channel,  plum_db_config:get(data_channel)}],
+    partisan_gen_statem:start(?MODULE, [Peer, Opts], StartOpts).
 
 
 -spec start_link(node(), list() | map()) ->
@@ -93,9 +92,8 @@ start_link(Peer, Opts) when is_list(Opts) ->
     start_link(Peer, maps:from_list(Opts));
 
 start_link(Peer, Opts) when is_map(Opts) ->
-    partisan_gen_statem:start_link(
-        ?MODULE, [Peer, Opts], [{channel,  ?DATA_CHANNEL}]
-    ).
+    StartOpts = [{channel,  plum_db_config:get(data_channel)}],
+    partisan_gen_statem:start_link(?MODULE, [Peer, Opts], StartOpts).
 
 
 
@@ -141,10 +139,12 @@ terminate(Reason, _StateName, State) ->
     %% We notify subscribers
     _ = plum_db_events:notify(exchange_finished, {self(), Reason}),
 
+    Summary = maps:map(fun(_, V) -> lists:sort(V) end, State#state.summary),
+
     ?LOG_NOTICE(#{
         description => "AAE exchange finished",
         peer => Peer,
-        summary => State#state.summary
+        summary => Summary
     }),
 
     ok.
@@ -256,7 +256,7 @@ updating_hashtrees(
         partition => H,
         node => Peer
     }),
-    ok = release_locks(H, Peer),
+    _ = catch release_locks(H, Peer),
     %% We try again with the remaining partitions
     State = add_summary(H, skipped, State0#state{partitions = T}),
     {next_state, acquiring_locks, State, [{next_event, internal, next}]};
@@ -281,7 +281,7 @@ updating_hashtrees(cast, remote_tree_updated, State0) ->
 
 updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
     [H|T] = State#state.partitions,
-    ok = release_locks(H, State#state.peer),
+    _ = catch release_locks(H, State#state.peer),
     ?LOG_ERROR(#{
         description => "Error while updating hashtree",
         hashtree => LocOrRemote,
@@ -301,9 +301,148 @@ updating_hashtrees(Type, Content, State) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-exchanging_data(timeout, _, State) ->
+exchanging_data(timeout, _, #state{partitions = []} = State) ->
+    {stop, normal, State};
+
+exchanging_data(timeout, _, #state{partitions = [H|_]} = State) ->
+    try
+        Result = case perform_exchange(H, State) of
+            #state{partitions = []} = NewState ->
+                %% H was the last partition, so we stop
+                {stop, normal, NewState};
+
+            NewState ->
+                %% We carry on with the remaining partitions
+                {
+                    next_state, acquiring_locks, NewState,
+                    [{next_event, internal, next}]
+                }
+        end,
+
+        release_locks(H, State#state.peer),
+
+        Result
+
+    catch
+        exit:{nodedown, Peer} ->
+            ?LOG_NOTICE(#{
+                description => "AAE Exchange aborting, peer is down",
+                partition => H,
+                peer => Peer,
+                reason => nodedown
+            }),
+            {stop, normal, State}
+    end;
+
+exchanging_data(Type, Content, State) ->
+    handle_other_event(exchanging_data, Type, Content, State).
+
+
+
+%% =============================================================================
+%% PRIVATE
+%% =============================================================================
+
+
+
+%% @private
+reset_state(State) ->
+    State#state{
+        local_tree_updated = false,
+        remote_tree_updated = false
+    }.
+
+
+handle_other_event(_, cast, {remote_lock_acquired, Partition}, State) ->
+    %% We received a late response to an async_acquire_remote_lock
+    %% Unlock it.
+    ok = release_remote_lock(Partition, State#state.peer),
+    {keep_state, State};
+
+handle_other_event(_, info, {nodedown, Peer}, #state{peer = Peer} = State0) ->
+    [H|T] = State0#state.partitions,
+    ok = release_local_lock(H),
+    ?LOG_NOTICE(#{
+        description => "AAE Exchange aborting, peer node down",
+        reason => nodedown,
+        peer => State0#state.peer
+    }),
+    %% We try with the remaining partitions
+    State = add_summary(H, skipped, State0#state{partitions = T}),
+    {stop, normal, State};
+
+handle_other_event(StateLabel, Type, Event, State) ->
+    ?LOG_INFO(#{
+        reason => unsupported_event,
+        state_name => StateLabel,
+        event => Event,
+        type => Type
+    }),
+    {keep_state, State}.
+
+
+%% @private
+async_acquire_remote_lock(Peer, Partition) ->
+    Self = self(),
+    do_async(fun() ->
+        case plum_db_partition_hashtree:lock(Peer, Partition, Self) of
+            ok ->
+                {remote_lock_acquired, Partition};
+            Res ->
+                {remote_lock_error, Res}
+        end
+    end).
+
+
+%% @private
+release_locks(Partition, Peer) ->
+    %% First release local lock as there are mote chances releasing the remote
+    %% could fail
+    ok = release_local_lock(Partition),
+    ok = release_remote_lock(Partition, Peer).
+
+
+%% @private
+release_local_lock(Partition) ->
+    plum_db_partition_hashtree:release_lock(Partition).
+
+
+%% @private
+release_remote_lock(Partition, Peer) ->
+    plum_db_partition_hashtree:release_lock(Peer, Partition).
+
+
+%% @private
+update_request(Node, Partition) when Node =:= node() ->
+    do_async(fun() ->
+        %% acquired lock so we know there is no other update
+        %% and tree is built
+        case plum_db_partition_hashtree:update(Node, Partition) of
+            ok -> local_tree_updated;
+            Error -> {error, {local, Error}}
+        end
+    end);
+
+update_request(Node, Partition) ->
+    do_async(fun() ->
+        %% acquired lock so we know there is no other update
+        %% and tree is built
+        case plum_db_partition_hashtree:update(Node, Partition) of
+            ok -> remote_tree_updated;
+            Error -> {error, {remote, Error}}
+        end
+    end).
+
+
+%% @private
+do_async(F) ->
+    Statem = self(),
+    _ = spawn_link(fun() -> partisan_gen_statem:cast(Statem, F()) end),
+    ok.
+
+
+perform_exchange(Partition, State) ->
     Peer = State#state.peer,
-    Partition = hd(State#state.partitions),
 
     RemoteFun = fun
         (Prefixes, {get_bucket, {Level, Bucket}}) ->
@@ -355,125 +494,7 @@ exchanging_data(timeout, _, State) ->
     end,
 
     [H|T] = State#state.partitions,
-    NewState = add_summary(H, success, State#state{partitions = T}),
-
-    ok = release_locks(H, Peer),
-
-    case T of
-        [] ->
-            %% H was the last partition, so we stop
-            {stop, normal, NewState};
-        _ ->
-            %% We carry on with the remaining partitions
-            {
-                next_state, acquiring_locks, NewState,
-                [{next_event, internal, next}]
-            }
-    end;
-
-exchanging_data(Type, Content, State) ->
-    handle_other_event(exchanging_data, Type, Content, State).
-
-
-
-%% =============================================================================
-%% PRIVATE
-%% =============================================================================
-
-
-
-%% @private
-reset_state(State) ->
-    State#state{
-        local_tree_updated = false,
-        remote_tree_updated = false
-    }.
-
-
-handle_other_event(_, cast, {remote_lock_acquired, Partition}, State) ->
-    %% We received a late response to an async_acquire_remote_lock
-    %% Unlock it.
-    ok = release_remote_lock(Partition, State#state.peer),
-    {keep_state, State};
-
-handle_other_event(_, info, {nodedown, Peer}, #state{peer = Peer} = State0) ->
-    [H|T] = State0#state.partitions,
-    ok = release_local_lock(H),
-    ?LOG_INFO(#{
-        description => "Failed to finish exchange, peer node down",
-        reason => nodedown,
-        peer => State0#state.peer
-    }),
-    %% We try with the remaining partitions
-    State = add_summary(H, skipped, State0#state{partitions = T}),
-    {stop, normal, State};
-
-handle_other_event(StateLabel, Type, Event, State) ->
-    ?LOG_INFO(#{
-        reason => unsupported_event,
-        state_name => StateLabel,
-        event => Event,
-        type => Type
-    }),
-    {keep_state, State}.
-
-
-%% @private
-async_acquire_remote_lock(Peer, Partition) ->
-    Self = self(),
-    do_async(fun() ->
-        case plum_db_partition_hashtree:lock(Peer, Partition, Self) of
-            ok ->
-                {remote_lock_acquired, Partition};
-            Res ->
-                {remote_lock_error, Res}
-        end
-    end).
-
-
-%% @private
-release_locks(Partition, Peer) ->
-    ok = release_remote_lock(Partition, Peer),
-    release_local_lock(Partition).
-
-
-%% @private
-release_local_lock(Partition) ->
-    ok = plum_db_partition_hashtree:release_lock(Partition),
-    ok.
-
-%% @private
-release_remote_lock(Partition, Peer) ->
-    plum_db_partition_hashtree:release_lock(Peer, Partition).
-
-
-%% @private
-update_request(Node, Partition) when Node =:= node() ->
-    do_async(fun() ->
-        %% acquired lock so we know there is no other update
-        %% and tree is built
-        case plum_db_partition_hashtree:update(Node, Partition) of
-            ok -> local_tree_updated;
-            Error -> {error, {local, Error}}
-        end
-    end);
-
-update_request(Node, Partition) ->
-    do_async(fun() ->
-        %% acquired lock so we know there is no other update
-        %% and tree is built
-        case plum_db_partition_hashtree:update(Node, Partition) of
-            ok -> remote_tree_updated;
-            Error -> {error, {remote, Error}}
-        end
-    end).
-
-
-%% @private
-do_async(F) ->
-    Statem = self(),
-    _ = spawn_link(fun() -> partisan_gen_statem:cast(Statem, F()) end),
-    ok.
+    add_summary(H, success, State#state{partitions = T}).
 
 
 %% @private
@@ -591,6 +612,7 @@ track_repair({key_diffs, _, Diffs}, #exchange{keys = Keys} = Acc) ->
     Acc#exchange{keys = Keys + length(Diffs)}.
 
 
+%% @private
 add_summary(Partition, Status, State)
 when Status == success; Status == error; Status == skipped ->
     Summary = State#state.summary,

@@ -32,12 +32,66 @@
 -define(APP, plum_db).
 -define(ERROR, '$error_badarg').
 -define(DEFAULT_RESOURCE_SIZE, erlang:system_info(schedulers)).
+-define(CONFIG_SPEC, #{
+    type => #{
+        required => true,
+        datatype => {in, [ram, ram_disk, disk]},
+        default => disk
+    },
+    shard_by => #{
+        required => true,
+        datatype => {in, [prefix, key]},
+        default => prefix
+    },
+    callbacks => #{
+        required => true,
+        datatype => map,
+        default => #{},
+        validator => ?CALLBACKS_SPEC
+    }
+}).
+
+-define(CALLBACKS_SPEC, #{
+    will_merge => #{
+        required => false,
+        datatype => tuple,
+        validator => ?FUN_WITH_ARITY(3)
+    },
+    on_merge => #{
+        required => false,
+        datatype => tuple,
+        validator => ?FUN_WITH_ARITY(3)
+    },
+    on_update => #{
+        required => false,
+        datatype => tuple,
+        validator => ?FUN_WITH_ARITY(3)
+    },
+    on_delete => #{
+        required => false,
+        datatype => tuple,
+        validator => ?FUN_WITH_ARITY(2)
+    },
+    on_erase => #{
+        required => false,
+        datatype => tuple,
+        validator => ?FUN_WITH_ARITY(2)
+    }
+}).
+
+-define(FUN_WITH_ARITY(N),
+    fun
+        ({Mod, Fun}) when is_atom(Mod); is_atom(Fun) ->
+            erlang:function_exported(Mod, Fun, N);
+        (_) ->
+            false
+    end
+).
 
 -export([get/1]).
 -export([get/2]).
 -export([set/2]).
 -export([init/0]).
--export([setup_dependencies/0]).
 -export([on_set/2]).
 -export([will_set/2]).
 
@@ -56,9 +110,10 @@
 %% @end
 %% -----------------------------------------------------------------------------
 init() ->
-    ok = setup_dependencies(),
     ok = setup_env(),
     ok = app_config:init(?APP, #{callback_mod => ?MODULE}),
+
+    ok = setup_partisan(),
     ok = coerce_partitions(),
     ?LOG_NOTICE(#{description => "PlumDB configuration initialised}"}),
     ok.
@@ -111,8 +166,7 @@ will_set(partitions, Value) ->
 
 will_set(prefixes, Values) ->
     try
-        DefaultShardBy = get(shardy, prefix),
-        {ok, validate_prefixes(Values, DefaultShardBy)}
+        {ok, validate_prefixes(Values)}
     catch
         _:Reason ->
             {error, Reason}
@@ -153,6 +207,7 @@ setup_env() ->
         store_open_retry_Limit => 30,
         shard_by => prefix,
         data_dir => "data",
+        data_channel => ?DATA_CHANNEL,
         data_exchange_timeout => 60000,
         hashtree_timer => 10000,
         partitions => max(erlang:system_info(schedulers), 8),
@@ -163,59 +218,44 @@ setup_env() ->
         aae_sha_chunk => 4096
     },
     Config1 = maps:merge(Defaults, Config0),
-    % Prefixes0 = maps:get(prefixes, Config1),
     _ShardBy = validate_shard_by(maps:get(shard_by, Config1)),
-    % Prefixes1 = validate_prefixes(Prefixes0, ShardBy),
-    % Config2 = maps:put(prefixes, Prefixes1, Config1),
     application:set_env([{?APP, maps:to_list(Config1)}]).
 
-
-
-%% @private
-validate_prefixes(undefined, _) ->
-    #{};
-
-validate_prefixes([], _) ->
-    #{};
-
-validate_prefixes(L, ShardBy) ->
-    Fun = fun
-        ({P, Config}, Acc)
-        when is_binary(P) orelse is_atom(P) andalso is_map(Config) ->
-            [{P, validate_prefix_config(Config, ShardBy)} | Acc];
-
-        ({P, Type}, Acc) when is_binary(P) orelse is_atom(P) ->
-            %% Support for previous form, we transform it into the new form
-            Type = validate_prefix_type(Type),
-            Config = #{type => Type, shard_by => ShardBy},
-            [{P, Config} | Acc];
-
-        (Term, _) ->
-            throw({invalid_prefix_config, Term})
-    end,
-
-    maps:from_list(lists:foldl(Fun, [], L)).
-
-
-%% @private
-validate_prefix_type(ram) -> ram;
-validate_prefix_type(ram_disk) -> ram_disk;
-validate_prefix_type(disk) -> disk;
-validate_prefix_type(Term) -> throw({invalid_prefix_type, Term}).
 
 validate_shard_by(prefix) -> prefix;
 validate_shard_by(key) -> key;
 validate_shard_by(Term) -> throw({invalid_prefix_shard_by, Term}).
 
 
-validate_prefix_config(#{type := Type, shard_by := ShardBy} = Config, _) ->
-    Type = validate_prefix_type(Type),
-    ShardBy = validate_shard_by(ShardBy),
-    Config;
 
-validate_prefix_config(#{type := Type} = Config, DefaultShardBy) ->
-    Type = validate_prefix_type(Type),
-    Config#{shard_by => DefaultShardBy}.
+%% @private
+validate_prefixes(undefined) ->
+    #{};
+
+validate_prefixes([]) ->
+    #{};
+
+
+validate_prefixes(L) when is_list(L) ->
+    maps:from_list(
+        lists:map(
+            fun
+                ({Prefix, Config0}) when is_map(Config0) ->
+                    Config = maps_utils:validate(Config0, ?CONFIG_SPEC),
+                    {Prefix, Config};
+
+                ({Prefix, Type})
+                when Type == ram; Type == ram_disk; Type == disk ->
+                    Config0 = #{type => Type},
+                    Config = maps_utils:validate(Config0, ?CONFIG_SPEC),
+                    {Prefix, Config};
+
+                (Term) ->
+                    throw({invalid_prefix_config, Term})
+            end,
+            L
+        )
+    ).
 
 
 %% @private
@@ -232,6 +272,7 @@ validate_partitions(0) ->
 
 validate_partitions(N) when is_integer(N) ->
     N.
+
 
 coerce_partitions() ->
     N = get(partitions),
@@ -259,9 +300,10 @@ coerce_partitions() ->
 
 
 %% @private
-setup_dependencies() ->
+setup_partisan() ->
     PartisanDefaults = #{
-        partisan_peer_service_manager => partisan_pluggable_peer_service_manager,
+        partisan_peer_service_manager =>
+            partisan_pluggable_peer_service_manager,
         connect_disterl => false,
         exchange_selection => optimized,
         lazy_tick_period => 1000,
@@ -269,12 +311,32 @@ setup_dependencies() ->
     },
 
     PartisanEnv0 = maps:from_list(application:get_all_env(partisan)),
-    Channels = maps:get(channels, PartisanEnv0, []),
+    Channels0 = maps:get(channels, PartisanEnv0, []),
     BroadcastMods = maps:get(broadcast_mods, PartisanEnv0, []),
+    Channels =
+        case ?MODULE:get(data_channel) of
+            Name when is_map(Channels0), is_atom(Name) ->
+                maps:put(Name, #{}, Channels0);
+
+            {monotonic, Name} when is_map(Channels0) ->
+                maps:put(Name, #{monotonic => true}, Channels0);
+
+            {Name, ChannelOpts}
+            when is_map(Channels0), is_atom(Name), is_map(ChannelOpts) ->
+                maps:put(Name, ChannelOpts, Channels0);
+
+            #{name := Name} = Spec when is_map(Channels0) ->
+                ChannelOpts = maps:without([name], Spec),
+                maps:put(Name, ChannelOpts, Channels0);
+
+            Arg when is_list(Channels0) ->
+                [Arg | Channels0]
+    end,
+
 
     PartisanOverrides = #{
         pid_encoding => false,
-        channels => [?DATA_CHANNEL | Channels],
+        channels => Channels,
         broadcast_mods => ordsets:to_list(
             ordsets:union(
                 ordsets:from_list([plum_db, partisan_plumtree_backend]),

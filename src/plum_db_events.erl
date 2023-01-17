@@ -20,6 +20,9 @@
 
 -behaviour(gen_event).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 %% API
 -export([start_link/0]).
 -export([subscribe/1]).
@@ -46,9 +49,11 @@
     callback    :: function() | undefined
 }).
 
-%% ===================================================================
-%% API functions
-%% ===================================================================
+
+
+%% =============================================================================
+%% API
+%% =============================================================================
 
 
 
@@ -225,7 +230,19 @@ handle_event({Event, Message}, #state{callback = undefined} = State) ->
 
 handle_event({Event, Message}, State) ->
     %% We notify callback funs
-    (State#state.callback)({Event, Message}),
+    try
+        (State#state.callback)({Event, Message})
+    catch
+        Class:Reason:Stacktrace ->
+            ?LOG_ERROR(#{
+                description => "Error while applying callback function.",
+                class => Class,
+                reason => Reason,
+                event => {Event, Message},
+                stacktrace => Stacktrace
+            })
+    end,
+
     {ok, State}.
 
 

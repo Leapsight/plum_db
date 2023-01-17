@@ -17,20 +17,23 @@
 %%  limitations under the License.
 %% =============================================================================
 
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
 -module(plum_db).
+
 -behaviour(partisan_gen_server).
 -behaviour(partisan_plumtree_broadcast_handler).
+
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
-
-
 
 -record(state, {
     %% an ets table to hold iterators opened
     %% by other nodes
     iterators           ::  ets:tab()
 }).
-
 
 -record(iterator, {
     %% The query
@@ -54,7 +57,6 @@
     ref                     ::  reference(),
     match_prefix            ::  plum_db_prefix() | atom() | binary()
 }).
-
 
 -record(continuation, {
     %% The query
@@ -140,36 +142,41 @@
 %% Erase Option types
 -type erase_opts()         :: [].
 
+-type will_merge_cb_result() :: true
+                                | {true, Merged :: term()}
+                                | false.
+
+-type cb_result()           ::  ok.
 
 -export_type([prefixes/0]).
 -export_type([prefix_type/0]).
 -export_type([partition/0]).
 -export_type([iterator/0]).
 -export_type([continuation/0]).
+-export_type([will_merge_cb_result/0]).
+-export_type([cb_result/0]).
 
 -export([delete/2]).
 -export([delete/3]).
+-export([dirty_put/4]).
 -export([erase/2]).
 -export([erase/3]).
 -export([exchange/2]).
 -export([fold/3]).
 -export([fold/4]).
--export([foreach/2]).
--export([foreach/3]).
 -export([fold_elements/3]).
 -export([fold_elements/4]).
+-export([foreach/2]).
+-export([foreach/3]).
 -export([get/2]).
 -export([get/3]).
 -export([get/4]).
--export([match/1]).
--export([match/2]).
--export([match/3]).
 -export([get_object/1]).
 -export([get_object/2]).
 -export([get_object/3]).
+-export([get_partition/1]).
 -export([get_remote_object/3]).
 -export([get_remote_object/4]).
--export([get_partition/1]).
 -export([is_partition/1]).
 -export([iterate/1]).
 -export([iterator/0]).
@@ -183,18 +190,21 @@
 -export([iterator_key_value/1]).
 -export([iterator_key_values/1]).
 -export([iterator_prefix/1]).
--export([sync_exchange/1]).
--export([sync_exchange/2]).
+-export([match/1]).
+-export([match/2]).
+-export([match/3]).
 -export([merge/3]).
 -export([partition_count/0]).
 -export([partitions/0]).
 -export([prefix_hash/2]).
--export([prefixes/0]).
 -export([prefix_type/1]).
+-export([prefixes/0]).
 -export([put/3]).
 -export([put/4]).
 -export([remote_iterator/1]).
 -export([remote_iterator/2]).
+-export([sync_exchange/1]).
+-export([sync_exchange/2]).
 -export([take/2]).
 -export([take/3]).
 -export([to_list/1]).
@@ -213,6 +223,7 @@
 
 %% partisan_plumtree_broadcast_handler callbacks
 -export([broadcast_data/1]).
+-export([broadcast_channel/0]).
 -export([exchange/1]).
 -export([graft/1]).
 -export([is_stale/1]).
@@ -244,7 +255,7 @@ start_link() ->
 %% provided Key
 %% @end
 %% -----------------------------------------------------------------------------
--spec get_partition(term()) -> partition().
+-spec get_partition(Arg :: plum_db_pkey()) -> partition().
 
 get_partition({{'_', _}, _}) ->
     error(badarg);
@@ -252,11 +263,12 @@ get_partition({{'_', _}, _}) ->
 get_partition({{_, '_'}, _}) ->
     error(badarg);
 
-get_partition({{_, _} = FP, _}) ->
-    get_partition(plum_db_config:get(shard_by), FP);
+get_partition({{Prefix, _}, _} = Key) ->
+    ShardBy = plum_db_config:get([prefixes, Prefix, shard_by], prefix),
+    get_partition(ShardBy, Key);
 
 get_partition({_, _} = FP) ->
-      case partition_count() > 1 of
+    case partition_count() > 1 of
         true ->
             %% partition :: 0..(partition_count() - 1)
             erlang:phash2(FP, partition_count() - 1);
@@ -270,11 +282,21 @@ get_partition({_, _} = FP) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
+-spec get_partition
+        (prefix | key, Arg :: plum_db_pkey()) -> partition();
+        (prefix, Arg :: plum_db_pkey() | plum_db_prefix()) -> partition().
+
 get_partition(prefix, {{_, _} = FP, _}) ->
     get_partition(FP);
 
 get_partition(prefix, {_, _} = FP) ->
-    get_partition(FP);
+    case partition_count() > 1 of
+        true ->
+            %% partition :: 0..(partition_count() - 1)
+            erlang:phash2(FP, partition_count() - 1);
+        false ->
+            0
+    end;
 
 get_partition(key, {{_, _}, _} = Key) ->
     case partition_count() > 1 of
@@ -566,7 +588,7 @@ do_fold(Fun, Acc, It, RemoveTombs, Limit) ->
     try
         do_fold_next(Fun, Acc, It, RemoveTombs, Limit, 0)
     catch
-        {break, Result} ->
+        throw:{stop, Result} ->
             Result
     after
         ok = iterator_close(It)
@@ -582,14 +604,24 @@ do_fold_next(Fun, Acc0, It, RemoveTombs, Limit, Cnt0) ->
             {Acc0, ?EOT};
         true ->
             Acc0;
-        false when It#iterator.keys_only == true ->
-            K = It#iterator.key,
-            {Acc1, Cnt} = do_fold_acc(K, Fun, Acc0, Cnt0, RemoveTombs),
-            do_fold_next(Fun, Acc1, iterate(It), RemoveTombs, Limit, Cnt);
-        false when Cnt0 < Limit ->
-            KV = iterator_key_values(It),
-            {Acc1, Cnt} = do_fold_acc(KV, Fun, Acc0, Cnt0, RemoveTombs),
-            do_fold_next(Fun, Acc1, iterate(It), RemoveTombs, Limit, Cnt);
+        false when It#iterator.keys_only orelse Cnt0 < Limit ->
+            KV =
+                case It#iterator.keys_only of
+                    true ->
+                        It#iterator.key;
+                    false ->
+                        iterator_key_values(It)
+                end,
+
+            try
+                {Acc1, Cnt} = do_fold_acc(KV, Fun, Acc0, Cnt0, RemoveTombs),
+                do_fold_next(Fun, Acc1, iterate(It), RemoveTombs, Limit, Cnt)
+            catch
+                _:{break, _} = Break ->
+                    do_fold_next(
+                        Fun, Acc0, iterate(Break, It), RemoveTombs, Limit, Cnt0
+                    )
+            end;
         false ->
             Cont = new_continuation(It),
             {Acc0, Cont}
@@ -623,7 +655,7 @@ foreach(Fun, FullPrefixPattern) ->
 %% -----------------------------------------------------------------------------
 %% @doc Fold over all keys and values stored under a given prefix/subprefix.
 %% Available options are the same as those provided to iterator/2. To return
-%% early, throw {break, Result} in your fold function.
+%% early, throw `break' in your fold function.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec foreach(foreach_fun(), plum_db_prefix_pattern(), fold_opts()) -> any().
@@ -639,6 +671,9 @@ foreach(Fun, FullPrefixPattern, Opts) ->
 
     try
         do_foreach(Fun, It, RemoveTombs)
+    catch
+        throw:{stop, ok} ->
+            ok
     after
         ok = iterator_close(It)
     end.
@@ -650,18 +685,28 @@ do_foreach(Fun, It, RemoveTombs) ->
         true ->
             ok;
         false when It#iterator.keys_only == true ->
-            _ = Fun(It#iterator.key),
-            do_foreach(Fun, iterate(It), RemoveTombs);
+            try
+                _ = Fun(It#iterator.key),
+                do_foreach(Fun, iterate(It), RemoveTombs)
+            catch
+                _:break ->
+                    do_foreach(Fun, iterate({break, ok}, It), RemoveTombs)
+            end;
         false ->
-            case iterator_key_values(It) of
-                {_, ?TOMBSTONE} when RemoveTombs == true ->
-                    ok;
-                {_, [?TOMBSTONE]} when RemoveTombs == true ->
-                    ok;
-                KV ->
-                    Fun(KV)
-            end,
-            do_foreach(Fun, iterate(It), RemoveTombs)
+            try
+                case iterator_key_values(It) of
+                    {_, ?TOMBSTONE} when RemoveTombs == true ->
+                        ok;
+                    {_, [?TOMBSTONE]} when RemoveTombs == true ->
+                        ok;
+                    KV ->
+                        Fun(KV)
+                end,
+                do_foreach(Fun, iterate(It), RemoveTombs)
+            catch
+                _:break ->
+                    do_foreach(Fun, iterate({break, ok}, It), RemoveTombs)
+            end
     end.
 
 
@@ -678,7 +723,8 @@ fold_elements(Fun, Acc0, FullPrefix) ->
 %% -----------------------------------------------------------------------------
 %% @doc Fold over all elements stored under a given prefix/subprefix.
 %% Available options are the same as those provided to iterator/2. To return
-%% early, throw {break, Result} in your fold function.
+%% early, raise an exception with reason `{break, Result :: any()}' in your
+%% fold function.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec fold_elements(
@@ -690,7 +736,7 @@ fold_elements(Fun, Acc0, FullPrefix, Opts) ->
     try
         do_fold_elements(Fun, Acc0, It)
     catch
-        {break, Result} -> Result
+        throw:{stop, Result} -> Result
     after
         ok = iterator_close(It)
     end.
@@ -701,8 +747,13 @@ do_fold_elements(Fun, Acc0, It) ->
         true ->
             Acc0;
         false ->
-            Acc = Fun(iterator_element(It), Acc0),
-            do_fold_elements(Fun, Acc, iterate(It))
+            try
+                Acc = Fun(iterator_element(It), Acc0),
+                do_fold_elements(Fun, Acc, iterate(It))
+            catch
+                _:{break, _} = Break ->
+                    do_fold_elements(Fun, Acc0, iterate(Break, It))
+            end
     end.
 
 
@@ -889,7 +940,7 @@ remote_iterator(Node, FullPrefix) ->
     remote_iterator().
 
 remote_iterator(Node, FullPrefix, Opts) when is_tuple(FullPrefix) ->
-    PidRef = partisan_util:pid(),
+    PidRef = partisan:self(),
     Ref = partisan_gen_server:call(
         {?MODULE, Node},
         {open_remote_iterator, PidRef, FullPrefix, Opts},
@@ -946,6 +997,21 @@ iterate({error, no_match, Ref1}, I0) ->
     iterate(I0#iterator{ref = Ref1});
 
 iterate({error, _, Ref1}, #iterator{partitions = [H|T]} = I) ->
+    %% There are no more elements in the partition
+    Name = plum_db_partition_server:name(H),
+    ok = plum_db_partition_server:iterator_close(Name, Ref1),
+    I1 = iterator_reset_pointers(
+        I#iterator{ref = undefined, partitions = T}
+    ),
+    iterate(I1);
+
+iterate({break, Result}, #iterator{ref = Ref1, partitions = [H]}) ->
+    %% There are no more elements in the partition
+    Name = plum_db_partition_server:name(H),
+    ok = plum_db_partition_server:iterator_close(Name, Ref1),
+    throw({stop, Result});
+
+iterate({break, _}, #iterator{ref = Ref1, partitions = [H|T]} = I) ->
     %% There are no more elements in the partition
     Name = plum_db_partition_server:name(H),
     ok = plum_db_partition_server:iterator_close(Name, Ref1),
@@ -1202,7 +1268,8 @@ prefix_type(Prefix) when is_atom(Prefix) orelse is_binary(Prefix) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec put(
-    plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier()) -> ok.
+    plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier()) ->
+    ok.
 
 put(FullPrefix, Key, ValueOrFun) ->
     put(FullPrefix, Key, ValueOrFun, []).
@@ -1234,6 +1301,38 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
         plum_db_partition_server:name(get_partition(PKey)),
         PKey,
         ValueOrFun,
+        Opts,
+        infinity
+    ),
+
+    case Res of
+        {ok, _} ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec dirty_put(
+    plum_db_prefix(),
+    plum_db_key(),
+    plum_db_object:t(),
+    put_opts()) ->
+    ok | {error, Reason :: any()}.
+
+dirty_put({Prefix, SubPrefix} = FullPrefix, Key, Object, Opts)
+when (is_binary(Prefix) orelse is_atom(Prefix))
+andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
+    PKey = prefixed_key(FullPrefix, Key),
+
+    Res = plum_db_partition_server:dirty_put(
+        plum_db_partition_server:name(get_partition(PKey)),
+        PKey,
+        Object,
         Opts,
         infinity
     ),
@@ -1420,7 +1519,10 @@ handle_call({iterator_done, RemoteRef}, _From, State) ->
 
 handle_call({iterator_close, RemoteRef}, _From, State) ->
     close_remote_iterator(RemoteRef, State),
-    {reply, ok, State}.
+    {reply, ok, State};
+
+handle_call(_Message, _From, State) ->
+    {reply, {error, unsupported_call}, State}.
 
 
 %% @private
@@ -1441,6 +1543,17 @@ handle_cast(_Msg, State) ->
 
 handle_info({'DOWN', ItRef, process, _Pid, _Reason}, State) ->
     close_remote_iterator(ItRef, State),
+    {noreply, State};
+
+handle_info({nodedown, Node}, State) ->
+    ok = close_remote_iterators(Node, State),
+    {noreply, State};
+
+handle_info(Event, State) ->
+    ?LOG_INFO(#{
+        description => "Unhandled event",
+        event => Event
+    }),
     {noreply, State}.
 
 
@@ -1463,6 +1576,16 @@ code_change(_OldVsn, State, _Extra) ->
 %% API: PARTISAN_PLUMTREE_BROADCAST_HANDLER CALLBACKS
 %% =============================================================================
 
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Returns the channel to be used when broadcasting plum_db operations.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec broadcast_channel() -> partisan:channel().
+
+broadcast_channel() ->
+    plum_db_config:get(data_channel).
 
 
 %% -----------------------------------------------------------------------------
@@ -1746,7 +1869,6 @@ maybe_tombstone(Value, _Default) ->
     Value.
 
 
-
 %% @private
 -spec prefixed_key(plum_db_prefix(), plum_db_key()) -> plum_db_pkey().
 prefixed_key(FullPrefix, Key) ->
@@ -1762,28 +1884,37 @@ get_option(Key, Opts, Default) ->
             Default
     end.
 
+
 %% @private
 new_remote_iterator(PidRef, FullPrefix, Opts, #state{iterators = Iterators}) ->
     Node = partisan:node(PidRef),
-    true = partisan:monitor_node(Node, true),
     Ref = partisan:monitor(process, PidRef),
     Iterator = new_iterator(FullPrefix, Opts),
     ets:insert(Iterators, [{Ref, Node, Iterator}]),
     Ref.
 
+
 %% @private
 close_remote_iterator(Ref, #state{iterators = Iterators} = State) ->
     from_remote_iterator(fun iterator_close/1, Ref, State),
-
     true = partisan:demonitor(Ref, [flush]),
+    _ = ets:take(Iterators, Ref),
+    ok.
 
-    case ets:take(Iterators, Ref) of
-        [] ->
-            ok;
-        [{Ref, Node, _}] ->
-            true = partisan:monitor_node(Node, false),
-            ok
-    end.
+
+%% -----------------------------------------------------------------------------
+%% @private
+%% @doc Used when we get a nodedown signal
+%% @end
+%% -----------------------------------------------------------------------------
+close_remote_iterators(Node, #state{iterators = Iterators}) ->
+    %% We retrieve the references so that we can demonitor
+    Refs = ets:select(Iterators, [{{'$1', Node, '_'}, [], ['$1']}]),
+    _ = [catch partisan:demonitor(Ref, [flush]) || Ref <- Refs],
+
+    %% We delete them all
+    true = ets:match_delete(Iterators, {'_', Node, '_'}),
+    ok.
 
 
 %% @private
@@ -1853,8 +1984,6 @@ new_iterator(FullPrefix, Opts) ->
     iterate(I).
 
 
-
-
 %% @private
 new_continuation(#iterator{} = I) ->
     MatchPrefix = I#iterator.match_prefix,
@@ -1879,10 +2008,17 @@ new_continuation(#iterator{} = I) ->
 %% -----------------------------------------------------------------------------
 get_covering_partitions({'_', _}) ->
     partitions();
+
 get_covering_partitions({_, '_'}) ->
     partitions();
-get_covering_partitions(FullPrefix) ->
-    [get_partition(FullPrefix)].
+
+get_covering_partitions({Prefix, _} = FullPrefix) ->
+    case plum_db_config:get([prefixes, Prefix, shard_by], prefix) of
+        prefix ->
+            [get_partition(prefix, FullPrefix)];
+        key ->
+            partitions()
+    end.
 
 
 %% @private

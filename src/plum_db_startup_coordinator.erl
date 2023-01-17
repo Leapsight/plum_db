@@ -235,9 +235,8 @@ handle_call(remaining_hashtrees, _From, State) ->
     Res = State#state.remaining_hashtrees,
     {reply, Res, State};
 
-handle_call(_Event, _From, State) ->
-    Res = ok,
-    {reply, Res, State}.
+handle_call(_Message, _From, State) ->
+    {reply, {error, unsupported_call}, State}.
 
 
 %% @private

@@ -19,8 +19,9 @@
 -module(plum_db_table_owner).
 -behaviour(gen_server).
 
--record(state, {
-}).
+-include_lib("kernel/include/logger.hrl").
+
+-record(state, {}).
 
 %% API
 -export([add/2]).
@@ -254,8 +255,17 @@ handle_cast(_, St) ->
 	{noreply, St}.
 
 
-handle_info(_Info, St) ->
-	{noreply, St}.
+handle_info({'ETS-TRANSFER', _, _, _}, State) ->
+	%% The owner for a table has crashed so ets is giving us the table back.
+	%% We do nothing.
+	{noreply, State};
+
+handle_info(Event, State) ->
+    ?LOG_INFO(#{
+        reason => unsupported_event,
+        event => Event
+    }),
+    {noreply, State}.
 
 
 terminate(_Reason, _State) ->

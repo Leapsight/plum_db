@@ -56,6 +56,9 @@
 -record(partition_iterator, {
     owner_ref               ::  reference(),
     partition               ::  non_neg_integer(),
+    disk                    ::  rocksdb:itr_ref() | undefined,
+    ram_tab                 ::  ets:tab() | undefined,
+    ram_disk_tab            ::  ets:tab() | undefined,
     full_prefix             ::  plum_db_prefix_pattern(),
     match_pattern           ::  term(),
     bin_prefix              ::  binary(),
@@ -65,11 +68,8 @@
     disk_done = true        ::  boolean(),
     ram_disk_done = true    ::  boolean(),
     ram_done = true         ::  boolean(),
-    disk                    ::  rocksdb:itr_ref() | undefined,
     ram                     ::  key | {cont, any()} | undefined,
-    ram_disk                ::  key | {cont, any()} | undefined,
-    ram_tab                 ::  atom(),
-    ram_disk_tab            ::  atom()
+    ram_disk                ::  key | {cont, any()} | undefined
 }).
 
 -type opts()                    :: 	[{atom(), term()}].
@@ -99,12 +99,12 @@
 -export_type([iterator/0]).
 -export_type([iterator_move_result/0]).
 
+-export([byte_size/1]).
+-export([dirty_put/5]).
 -export([erase/3]).
 -export([get/2]).
 -export([get/3]).
 -export([get/4]).
--export([merge/3]).
--export([merge/4]).
 -export([is_empty/1]).
 -export([iterator/2]).
 -export([iterator/3]).
@@ -112,14 +112,16 @@
 -export([iterator_move/2]).
 -export([key_iterator/2]).
 -export([key_iterator/3]).
+-export([merge/3]).
+-export([merge/4]).
 -export([name/1]).
 -export([put/3]).
 -export([put/4]).
 -export([put/5]).
+-export([start_link/2]).
 -export([take/2]).
 -export([take/3]).
 -export([take/4]).
--export([start_link/2]).
 
 %% GEN_SERVER CALLBACKS
 -export([init/1]).
@@ -144,11 +146,12 @@
 
 start_link(Partition, Opts) ->
     Name = name(Partition),
+    StartOpts = [{channel,  plum_db_config:get(data_channel)}],
     partisan_gen_server:start_link(
         {local, Name},
         ?MODULE,
         [Name, Partition, Opts],
-        [{channel,  ?DATA_CHANNEL}]
+        StartOpts
     ).
 
 
@@ -239,6 +242,14 @@ put(Name, PKey, ValueOrFun, Opts) ->
 %% -----------------------------------------------------------------------------
 put(Name, PKey, ValueOrFun, Opts, Timeout) when is_atom(Name) ->
     partisan_gen_server:call(Name, {put, PKey, ValueOrFun, Opts}, Timeout).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+dirty_put(Name, PKey, Object, Opts, Timeout) when is_atom(Name) ->
+    partisan_gen_server:call(Name, {dirty_put, PKey, Object, Opts}, Timeout).
 
 
 %% -----------------------------------------------------------------------------
@@ -433,10 +444,10 @@ iterator_move(#partition_iterator{disk_done = false} = Iter, Action) ->
     end;
 
 iterator_move(#partition_iterator{ram_disk_done = false} = Iter, Action) ->
-    iterator_move(ram_disk, Iter#partition_iterator.ram_disk, Iter, Action);
+    ets_iterator_move(ram_disk, Iter#partition_iterator.ram_disk, Iter, Action);
 
 iterator_move(#partition_iterator{ram_done = false} = Iter, Action) ->
-    iterator_move(ram, Iter#partition_iterator.ram, Iter, Action);
+    ets_iterator_move(ram, Iter#partition_iterator.ram, Iter, Action);
 
 iterator_move(
     #partition_iterator{
@@ -447,7 +458,7 @@ iterator_move(
 
 
 %% @private
-iterator_move(Type, _, Iter, first) ->
+ets_iterator_move(Type, _, Iter, first) ->
     KeysOnly = Iter#partition_iterator.keys_only,
     Tab = table_name(Iter, Type),
 
@@ -477,7 +488,7 @@ iterator_move(Type, _, Iter, first) ->
             end
     end;
 
-iterator_move(Type, key, Iter, next) ->
+ets_iterator_move(Type, key, Iter, next) ->
     KeysOnly = Iter#partition_iterator.keys_only,
     Tab = table_name(Iter, Type),
 
@@ -507,7 +518,7 @@ iterator_move(Type, key, Iter, next) ->
             end
     end;
 
-iterator_move(Type, {cont, Cont0}, Iter, next) ->
+ets_iterator_move(Type, {cont, Cont0}, Iter, next) ->
     KeysOnly = Iter#partition_iterator.keys_only,
 
     case ets:select(Cont0) of
@@ -529,7 +540,7 @@ iterator_move(Type, {cont, Cont0}, Iter, next) ->
             {ok, K, V, NewIter}
     end;
 
-iterator_move(Type, key, Iter, prev) ->
+ets_iterator_move(Type, key, Iter, prev) ->
     KeysOnly = Iter#partition_iterator.keys_only,
     Tab = table_name(Iter, Type),
 
@@ -565,21 +576,21 @@ iterator_move(Type, key, Iter, prev) ->
             end
     end;
 
-iterator_move(Type, {cont, _}, Iter, prev) ->
+ets_iterator_move(Type, {cont, _}, Iter, prev) ->
     %% We were using ets:select/1, to go backwards we need to switch to
     %% key iteration
     K = Iter#partition_iterator.prev_key,
     NewIter = update_iterator(Type, Iter, K, key),
     iterator_move(NewIter, prev);
 
-iterator_move(Type, Cont, Iter, {{_, _} = FullPrefix, ?WILDCARD}) ->
-    iterator_move(Type, Cont, Iter, FullPrefix);
+ets_iterator_move(Type, Cont, Iter, {{_, _} = FullPrefix, ?WILDCARD}) ->
+    ets_iterator_move(Type, Cont, Iter, FullPrefix);
 
-iterator_move(Type, _, Iter, {{A, B}, PKey}) ->
+ets_iterator_move(Type, _, Iter, {{A, B}, Key}) ->
     Tab = table_name(Iter, Type),
     KeysOnly = Iter#partition_iterator.keys_only,
 
-    Pattern = {{{'$1', '$2'}, PKey}, ?WILDCARD},
+    Pattern = {{{A, B}, '$1'}, ?WILDCARD},
 
     Projection = case KeysOnly of
         true ->
@@ -588,8 +599,9 @@ iterator_move(Type, _, Iter, {{A, B}, PKey}) ->
             ['$_']
     end,
 
-    Conds = [{'andalso',
-        {'==', '$1', {const, A}},
+
+    % We use it as prefix to find first
+    Conds = [{'>=', '$1', {const, Key}}],
         {'==', '$2', {const, B}}
     }],
 
@@ -624,7 +636,7 @@ iterator_move(Type, _, Iter, {{A, B}, PKey}) ->
             end
     end;
 
-iterator_move(Type, _, Iter, FullPrefix) ->
+ets_iterator_move(Type, _, Iter, {_, _} = FullPrefix) ->
     Tab = table_name(Iter, Type),
     KeysOnly = Iter#partition_iterator.keys_only,
 
@@ -657,8 +669,8 @@ iterator_move(Type, _, Iter, FullPrefix) ->
 
 
 init([Name, Partition, Opts]) ->
-    %% Initialize random seed
-    rand:seed(exsplus, erlang:timestamp()),
+    %% Seed the random number generator.
+    partisan_config:seed(),
 
     process_flag(trap_exit, true),
 
@@ -704,7 +716,8 @@ handle_call({get, PKey, Opts}, _From, State) ->
 handle_call({put, PKey, ValueOrFun, Opts}, _From, State) ->
     Reply =
         case modify(PKey, ValueOrFun, Opts, State) of
-            {ok, _Existing, Result} ->
+            {ok, Existing, Result} ->
+                ok = on_update(PKey, Result, Existing),
                 {ok, Result};
             {error, _} = Error ->
                 Error
@@ -712,10 +725,37 @@ handle_call({put, PKey, ValueOrFun, Opts}, _From, State) ->
     {reply, Reply, State};
 
 
+handle_call({dirty_put, PKey, Object, Opts}, _From, State) ->
+    Existing =
+        case do_get(PKey, State) of
+            {ok, Obj} ->
+                Obj;
+            {error, not_found} ->
+                undefined
+        end,
+
+    Reply =
+        try
+            case do_put(PKey, Object, State) of
+                ok ->
+                    ok = maybe_broadcast(PKey, Object, Opts),
+                    ok = on_update(PKey, Object, Existing),
+                    {ok, Object};
+
+                {error, _} = Error ->
+                    Error
+            end
+        catch
+            _:Reason ->
+                {error, Reason}
+        end,
+    {reply, Reply, State};
+
 handle_call({take, PKey, Opts}, _From, State) ->
     Reply =
     case modify(PKey, ?TOMBSTONE, Opts, State) of
         {ok, Existing, Result} ->
+            ok = on_update(PKey, Result, Existing),
             case maybe_resolve(Existing, Opts) of
                 {ok, Resolved} ->
                     {ok, {Resolved, Result}};
@@ -755,28 +795,86 @@ handle_call({erase, PKey}, _From, State) ->
             Actions = [{delete, encode_key(PKey)}],
             result(rocksdb:write(DbRef, Actions, Opts))
     end,
+
+    %% Maybe callback
+    case Result of
+        {error, _} ->
+            ok;
+        _ ->
+            ok = on_erase(PKey, Existing)
+    end,
+
     {reply, Result, State};
 
-handle_call({merge, PKey, Obj}, _From, State) ->
+handle_call({merge, PKey, Obj0}, _From, State) ->
+
     %% We need to do a read followed by a write atomically
     Existing = case do_get(PKey, State) of
-        {ok, O} ->
-            O;
+        {ok, Val} ->
+            Val;
         {error, not_found} ->
             undefined
     end,
 
-    case plum_db_object:reconcile(Obj, Existing) of
+    case plum_db_object:reconcile(Obj0, Existing) of
         false ->
             %% The remote object is an anscestor of or is equal to the local one
             {reply, false, State};
-        {true, Reconciled} ->
-            ok = do_put(PKey, Reconciled, State),
 
-            %% We notify local subscribers and event handlers
-            ok = plum_db_events:update({PKey, Reconciled, Existing}),
+        {true, Obj1} ->
+            Result =
+                case callback(will_merge, PKey, [Obj1, Existing]) of
+                    true ->
+                        {true, Obj1};
+                    {true, _} = R ->
+                        R;
+                    false ->
+                        false
+                end,
 
-            {reply, true, State}
+            case Result of
+                {true, Obj} ->
+                    case do_put(PKey, Obj, State) of
+                        ok when Obj =/= Obj1 ->
+                            %% The case then the callback modified the object,
+                            %% so we need to let the peers know
+                            ok = maybe_broadcast(PKey, Obj, []),
+                            ok = on_merge(PKey, Obj1, Existing),
+                            {reply, true, State};
+
+                        ok ->
+                            ok = on_merge(PKey, Obj1, Existing),
+                            {reply, true, State};
+
+                        {error, Reason} ->
+                            ?LOG_ERROR(#{
+                                description =>
+                                    "Error while writing merged object",
+                                prefixed_key => PKey,
+                                object => Obj,
+                                reason => Reason
+                            }),
+                            {reply, false, State}
+                    end;
+
+                false ->
+                    %% We cancel the merge
+                    {reply, false, State}
+            end
+    end;
+
+handle_call(byte_size, _From, State) ->
+    DbRef = db_ref(State),
+    Ram = ets:info(ram_tab(State), memory),
+    RamDisk = ets:info(ram_disk_tab(State), memory),
+    Ets = (Ram + RamDisk) * erlang:system_info(wordsize),
+
+    try eleveldb:status(DbRef, <<"leveldb.total-bytes">>) of
+        {ok, Bin} ->
+            {reply, binary_to_integer(Bin) + Ets, State}
+    catch
+        error:_ ->
+            {reply, Ets, State}
     end;
 
 handle_call(is_empty, _From, State) ->
@@ -831,8 +929,10 @@ handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
 
 handle_call({iterator_close, Iter}, _From, State0) ->
     State1 = close_iterator(Iter, State0),
-    {reply, ok, State1}.
+    {reply, ok, State1};
 
+handle_call(_Message, _From, State) ->
+    {reply, {error, unsupported_call}, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -927,7 +1027,7 @@ init_state(Name, Partition, DataRoot, Opts0) ->
     WriteOpts = key_value:get(write, Opts, []),
 
     %% Use read options for folding, but FORCE fill_cache to false
-    FoldOpts = key_value:set(fill_cache, false, ReadOpts),
+    FoldOpts = key_value:put(fill_cache, false, ReadOpts),
 
     %% We create two ets tables for ram and ram_disk storage levels
     EtsOpts = [
@@ -961,6 +1061,16 @@ init_state(Name, Partition, DataRoot, Opts0) ->
         data_root = DataRoot,
 		open_opts = OpenOpts
 	}.
+
+
+%% @private
+config_value(Key, Config, Default) ->
+    case orddict:find(Key, Config) of
+        error ->
+            Default;
+        {ok, Value} ->
+            Value
+    end.
 
 
 %% @private
@@ -1220,11 +1330,19 @@ modify(PKey, ValueOrFun, Opts, State, Existing, Ctxt) ->
     Actor = State#state.actor_id,
 
     %% If ValueOrFun is a function then it might raise an exception, so we catch
-    try plum_db_object:modify(Existing, Ctxt, ValueOrFun, Actor) of
-        Modified ->
+    try
+        Modified = plum_db_object:modify(Existing, Ctxt, ValueOrFun, Actor),
+
+        case do_put(PKey, Modified, State) of
+            ok ->
             ok = do_put(PKey, Modified, State),
-            ok = maybe_broadcast(PKey, Modified, Opts),
-            {ok, Existing, Modified}
+                ok = maybe_broadcast(PKey, Modified, Opts),
+                {ok, Existing, Modified};
+
+            {error, _} = Error ->
+                Error
+        end
+
     catch
         _:Reason ->
             {error, Reason}
@@ -1258,8 +1376,20 @@ maybe_modify(PKey, Existing, Opts, State, NewObject) ->
         true ->
             Ctxt = plum_db_object:context(NewObject),
             Value = plum_db_object:value(NewObject),
-            _ = modify(PKey, Value, Opts, State, Existing, Ctxt),
-            ok
+            case modify(PKey, Value, Opts, State, Existing, Ctxt) of
+                {ok, _, Modified} ->
+                    ok = on_update(PKey, Modified, Existing);
+
+                {error, Reason} ->
+                    ?LOG_ERROR(#{
+                        description =>
+                            "Error while during read-repair write",
+                        reason => Reason,
+                        prefixed_key => PKey,
+                        object => Value
+                    }),
+                    ok
+            end
     end.
 
 
@@ -1693,3 +1823,80 @@ decode_key(Bin) ->
 %%     error(not_implemented).
 
 
+%% @private
+on_update(_, undefined, _) ->
+    ok;
+
+on_update(PKey, New, Existing) ->
+    case plum_db_object:value(New) of
+        ?TOMBSTONE ->
+            on_delete(PKey, Existing);
+        _ ->
+            true = callback(on_update, PKey, [New, Existing])
+    end,
+    ok.
+
+
+%% @private
+on_merge(PKey, New, Existing) ->
+    true = callback(on_merge, PKey, [New, Existing]),
+    ok = plum_db_events:update({PKey, New, Existing}).
+
+
+%% @private
+on_delete(PKey, Obj) ->
+    true = callback(on_delete, PKey, [Obj]),
+    ok.
+
+
+%% @private
+on_erase(PKey, Obj) ->
+    true = callback(on_erase, PKey, [Obj]),
+    ok.
+
+
+%% -----------------------------------------------------------------------------
+%% @private
+%% @doc Applies the user defined callback.
+%% The will_merge callback needs to reply
+%% true | {true, Obj} | {true, Pkey, Obj} | false
+%% @end
+%% -----------------------------------------------------------------------------
+callback(Name, {{Prefix, _}, _} = PKey, Args) when is_list(Args) ->
+    Default = true,
+
+    try
+        Path = [prefixes, Prefix, callbacks, Name],
+
+        case plum_db_config:get(Path, undefined) of
+            undefined ->
+                Default;
+
+            {Mod, Fun} ->
+                case erlang:apply(Mod, Fun, [PKey | Args]) of
+                    ok when Name == on_update;
+                            Name == on_merge;
+                            Name == on_delete;
+                            Name == on_erase ->
+                        true;
+                    true when Name == will_merge ->
+                        true;
+                    {true, _} = Result when Name == will_merge ->
+                        Result;
+                    {true, _, _} = Result when Name == will_merge ->
+                        Result;
+                    false when Name == will_merge ->
+                        false
+                end
+        end
+    catch
+        Class:Reason:Stacktrace ->
+            ?LOG_ERROR(#{
+                description => "Error while invoking prefix callback. Ignored",
+                callback => Name,
+                class => Class,
+                reason => Reason,
+                stacktrace => Stacktrace
+            }),
+            Default
+    end.

@@ -41,8 +41,12 @@
     built           ::  boolean() | reference() | undefined,
     %% a monitor reference for a process that currently holds a
     %% lock on the tree
-    lock            ::  {internal | external, reference(), remote_process_ref()}
-                        | undefined,
+    lock            ::  undefined
+                        | {
+                            internal | external,
+                            reference(),
+                            partisan_remote_ref:r()
+                        },
     %% Timestamp when the tree was build. To be used together with ttl_secs
     %% to calculate if the hashtree has expired
     build_ts_secs   ::  non_neg_integer() | undefined,
@@ -107,12 +111,13 @@ start_link(Partition) when is_integer(Partition) ->
     Dir = plum_db_config:get(hashtrees_dir),
     DataRoot = filename:join([Dir, integer_to_list(Partition)]),
     Name = name(Partition),
+    StartOpts = [{channel,  plum_db_config:get(data_channel)}],
 
     partisan_gen_server:start_link(
         {local, Name},
         ?MODULE,
         [Partition, DataRoot],
-        [{channel,  ?DATA_CHANNEL}]
+        StartOpts
     ).
 
 
@@ -270,7 +275,7 @@ lock(Node, Partition) ->
 -spec lock(node(), plum_db:partition(), pid()) -> ok | not_built | locked.
 
 lock(Node, Partition, Pid) ->
-    PidRef = partisan_util:pid(Pid),
+    PidRef = partisan_remote_ref:from_term(Pid),
     partisan_gen_server:call({name(Partition), Node}, {lock, PidRef}, infinity).
 
 
@@ -310,7 +315,7 @@ release_lock(Node, Partition) ->
     ok | {error, not_locked | not_allowed}.
 
 release_lock(Node, Partition, Pid) ->
-    PidRef = partisan_util:pid(Pid),
+    PidRef = partisan_remote_ref:from_term(Pid),
     partisan_gen_server:call(
         {name(Partition), Node}, {release_lock, external, PidRef}, infinity).
 
@@ -448,7 +453,10 @@ handle_call(
     {delete, PKey}, _From, #state{tree = Tree} = State) ->
     {Prefixes, Key} = prepare_pkey(PKey),
     Tree1 = hashtree_tree:delete(Prefixes, Key, Tree),
-    {reply, ok, State#state{tree=Tree1}}.
+    {reply, ok, State#state{tree=Tree1}};
+
+handle_call(_Message, _From, State) ->
+    {reply, {error, unsupported_call}, State}.
 
 
 handle_cast(reset, #state{built = true, lock = undefined} = State0) ->
@@ -808,8 +816,6 @@ maybe_external_lock(_, From, State) ->
 %% @private
 do_lock(PidRef, Type, State) ->
     %% This works for PidRef :: pid() and also for Partisan ref
-    Node = partisan:node(PidRef),
-    _ = partisan:monitor_node(Node, true),
     LockRef = partisan:monitor(process, PidRef),
     State#state{lock = {Type, LockRef, PidRef}}.
 
@@ -817,9 +823,7 @@ do_lock(PidRef, Type, State) ->
 %% @private
 do_release_lock(Type, PidRef, #state{lock = {Type, LockRef, PidRef}} = State) ->
     %% This works for PidRef :: pid() and also for Partisan ref
-    Node = partisan:node(PidRef),
-    true = partisan:monitor_node(Node, false),
-    true = partisan:demonitor(LockRef),
+    true = partisan:demonitor(LockRef, [flush]),
     {ok, State#state{lock = undefined}};
 
 do_release_lock(_, _, #state{lock = undefined} = State) ->
