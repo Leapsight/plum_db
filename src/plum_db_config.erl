@@ -92,7 +92,6 @@
 -export([get/2]).
 -export([set/2]).
 -export([init/0]).
--export([setup_dependencies/0]).
 -export([on_set/2]).
 -export([will_set/2]).
 
@@ -111,9 +110,10 @@
 %% @end
 %% -----------------------------------------------------------------------------
 init() ->
-    ok = setup_dependencies(),
     ok = setup_env(),
     ok = app_config:init(?APP, #{callback_mod => ?MODULE}),
+
+    ok = setup_partisan(),
     ok = coerce_partitions(),
     ?LOG_NOTICE(#{description => "PlumDB configuration initialised}"}),
     ok.
@@ -209,6 +209,7 @@ setup_env() ->
         store_open_retry_Limit => 30,
         shard_by => prefix,
         data_dir => "data",
+        data_channel => ?DATA_CHANNEL,
         data_exchange_timeout => 60000,
         hashtree_timer => 10000,
         partitions => max(erlang:system_info(schedulers), 8),
@@ -304,9 +305,10 @@ coerce_partitions() ->
 
 
 %% @private
-setup_dependencies() ->
+setup_partisan() ->
     PartisanDefaults = #{
-        partisan_peer_service_manager => partisan_pluggable_peer_service_manager,
+        partisan_peer_service_manager =>
+            partisan_pluggable_peer_service_manager,
         connect_disterl => false,
         exchange_selection => optimized,
         lazy_tick_period => 1000,
@@ -314,12 +316,32 @@ setup_dependencies() ->
     },
 
     PartisanEnv0 = maps:from_list(application:get_all_env(partisan)),
-    Channels = maps:get(channels, PartisanEnv0, []),
+    Channels0 = maps:get(channels, PartisanEnv0, []),
     BroadcastMods = maps:get(broadcast_mods, PartisanEnv0, []),
+    Channels =
+        case ?MODULE:get(data_channel) of
+            Name when is_map(Channels0), is_atom(Name) ->
+                maps:put(Name, #{}, Channels0);
+
+            {monotonic, Name} when is_map(Channels0) ->
+                maps:put(Name, #{monotonic => true}, Channels0);
+
+            {Name, ChannelOpts}
+            when is_map(Channels0), is_atom(Name), is_map(ChannelOpts) ->
+                maps:put(Name, ChannelOpts, Channels0);
+
+            #{name := Name} = Spec when is_map(Channels0) ->
+                ChannelOpts = maps:without([name], Spec),
+                maps:put(Name, ChannelOpts, Channels0);
+
+            Arg when is_list(Channels0) ->
+                [Arg | Channels0]
+    end,
+
 
     PartisanOverrides = #{
         pid_encoding => false,
-        channels => lists:usort([?DATA_CHANNEL | Channels]),
+        channels => Channels,
         broadcast_mods => ordsets:to_list(
             ordsets:union(
                 ordsets:from_list([plum_db, partisan_plumtree_backend]),

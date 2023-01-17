@@ -81,9 +81,8 @@ start(Peer, Opts) when is_list(Opts) ->
     start(Peer, maps:from_list(Opts));
 
 start(Peer, Opts) when is_map(Opts) ->
-    partisan_gen_statem:start(
-        ?MODULE, [Peer, Opts], [{channel, ?DATA_CHANNEL}]
-    ).
+    StartOpts = [{channel,  plum_db_config:get(data_channel)}],
+    partisan_gen_statem:start(?MODULE, [Peer, Opts], StartOpts).
 
 
 -spec start_link(node(), list() | map()) ->
@@ -93,9 +92,8 @@ start_link(Peer, Opts) when is_list(Opts) ->
     start_link(Peer, maps:from_list(Opts));
 
 start_link(Peer, Opts) when is_map(Opts) ->
-    partisan_gen_statem:start_link(
-        ?MODULE, [Peer, Opts], [{channel,  ?DATA_CHANNEL}]
-    ).
+    StartOpts = [{channel,  plum_db_config:get(data_channel)}],
+    partisan_gen_statem:start_link(?MODULE, [Peer, Opts], StartOpts).
 
 
 
