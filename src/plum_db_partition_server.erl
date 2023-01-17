@@ -321,6 +321,18 @@ is_empty(Store) when is_pid(Store); is_atom(Store) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
+byte_size(Id) when is_integer(Id) ->
+    ?MODULE:byte_size(name(Id));
+
+byte_size(Store) when is_pid(Store); is_atom(Store) ->
+    partisan_gen_server:call(Store, byte_size, infinity).
+
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
 iterator(Id, FullPrefix) when is_integer(Id) ->
     iterator(name(Id), FullPrefix);
 
@@ -602,8 +614,6 @@ ets_iterator_move(Type, _, Iter, {{A, B}, Key}) ->
 
     % We use it as prefix to find first
     Conds = [{'>=', '$1', {const, Key}}],
-        {'==', '$2', {const, B}}
-    }],
 
     MS = [
         {Pattern, Conds, Projection}
@@ -1061,16 +1071,6 @@ init_state(Name, Partition, DataRoot, Opts0) ->
         data_root = DataRoot,
 		open_opts = OpenOpts
 	}.
-
-
-%% @private
-config_value(Key, Config, Default) ->
-    case orddict:find(Key, Config) of
-        error ->
-            Default;
-        {ok, Value} ->
-            Value
-    end.
 
 
 %% @private
