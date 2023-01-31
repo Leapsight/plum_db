@@ -10,23 +10,21 @@ all() ->
         fold_match_disk,
         fold_match_ram,
         fold_match_ram_disk
-        % ,
-        % fold_concurrency
+        ,fold_concurrency
     ].
 
 
 
 init_per_suite(Config) ->
-    %% Pid = spawn(fun loop/0),
-    {ok, Hostname} = inet:gethostname(),
-    Nodename = [list_to_atom("runner@" ++ Hostname), shortnames],
-    case net_kernel:start(Nodename) of
+    application:ensure_all_started(plum_db),
+
+    case net_kernel:start([partisan:node()]) of
         {ok, _} ->
             ok;
         {error, {already_started, _}} ->
             ok
     end,
-    application:ensure_all_started(plum_db),
+
     N = 15000,
     {N, Time} = insert(0, N),
     ct:pal(
@@ -132,10 +130,11 @@ fold_match_ram_disk(_) ->
 %% =============================================================================
 
 insert(From, N) ->
+    L = lists:seq(From, From + N),
     T0 = erlang:system_time(millisecond),
     _ = [
         plum_db:put({foo, bar}, integer_to_binary(X), X)
-        || X <- lists:seq(From, From + N)
+        || X <- L
     ],
     T1 = erlang:system_time(millisecond),
     {N, T1 - T0}.

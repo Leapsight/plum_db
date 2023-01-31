@@ -1176,7 +1176,7 @@ do_remote(N) ->
 
 
 send(To, Message) ->
-    Ref = partisan_util:ref(make_ref()),
+    Ref = partisan:make_ref(),
 
     %% Figure out remote node.
     {Node, ServerRef} = case To of
@@ -1186,9 +1186,7 @@ send(To, Message) ->
             {node(), To}
     end,
 
-    partisan:forward_message(
-        Node, undefined, ServerRef, Message, []
-    ),
+    partisan:forward_message(Node, ServerRef, Message, []),
 
     Ref.
 

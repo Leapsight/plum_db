@@ -111,7 +111,7 @@ start_link(Partition) when is_integer(Partition) ->
     Dir = plum_db_config:get(hashtrees_dir),
     DataRoot = filename:join([Dir, integer_to_list(Partition)]),
     Name = name(Partition),
-    StartOpts = [{channel,  plum_db_config:get(data_channel)}],
+    StartOpts = [{channel, plum_db_config:get(data_channel)}],
 
     partisan_gen_server:start_link(
         {local, Name},
@@ -179,7 +179,7 @@ insert(PKey, Hash) ->
 %% inserted into the tree if the key is not already present.
 %% @end
 %% -----------------------------------------------------------------------------
--spec insert(plum_db_pkey(), binary(), boolean()) -> ok.
+-spec insert(plum_db_pkey(), binary(), IfMissing :: boolean()) -> ok.
 insert(PKey, Hash, IfMissing) ->
     Name = name(plum_db:get_partition(PKey)),
     partisan_gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
@@ -224,7 +224,7 @@ get_bucket(Node, Partition, Prefixes, Level, Bucket) ->
     partisan_gen_server:call(
         {name(Partition), Node},
         {get_bucket, Prefixes, Level, Bucket},
-        infinity
+        ?CALL_OPTS
     ).
 
 
@@ -238,7 +238,8 @@ get_bucket(Node, Partition, Prefixes, Level, Bucket) ->
 
 key_hashes(Node, Partition, Prefixes, Segment) ->
     partisan_gen_server:call(
-        {name(Partition), Node}, {key_hashes, Prefixes, Segment}, infinity).
+        {name(Partition), Node}, {key_hashes, Prefixes, Segment}, ?CALL_OPTS
+    ).
 
 
 %% -----------------------------------------------------------------------------
@@ -248,6 +249,7 @@ key_hashes(Node, Partition, Prefixes, Segment) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec lock(plum_db:partition()) -> ok | not_built | locked.
+
 lock(Partition) ->
     lock(node(), Partition).
 
@@ -276,7 +278,9 @@ lock(Node, Partition) ->
 
 lock(Node, Partition, Pid) ->
     PidRef = partisan_remote_ref:from_term(Pid),
-    partisan_gen_server:call({name(Partition), Node}, {lock, PidRef}, infinity).
+    partisan_gen_server:call(
+        {name(Partition), Node}, {lock, PidRef}, ?CALL_OPTS
+    ).
 
 
 
@@ -317,7 +321,8 @@ release_lock(Node, Partition) ->
 release_lock(Node, Partition, Pid) ->
     PidRef = partisan_remote_ref:from_term(Pid),
     partisan_gen_server:call(
-        {name(Partition), Node}, {release_lock, external, PidRef}, infinity).
+        {name(Partition), Node}, {release_lock, external, PidRef}, ?CALL_OPTS
+    ).
 
 
 %% -----------------------------------------------------------------------------
@@ -348,7 +353,7 @@ update(Partition) ->
     ok | not_locked | not_built | ongoing_update.
 
 update(Node, Partition) ->
-    partisan_gen_server:call({name(Partition), Node}, update, infinity).
+    partisan_gen_server:call({name(Partition), Node}, update, ?CALL_OPTS).
 
 
 %% -----------------------------------------------------------------------------
@@ -394,7 +399,8 @@ compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
     partisan_gen_server:call(
         name(Partition),
         {compare, RemoteFun, HandlerFun, HandlerAcc},
-        infinity).
+        infinity
+    ).
 
 
 
@@ -406,9 +412,12 @@ compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
 
 init([Partition, DataRoot]) ->
     Id = name(Partition),
-    State = do_init(#state{
-        id = Id, data_root = DataRoot, partition = Partition
-    }),
+    State0 = #state{
+        id = Id,
+        data_root = DataRoot,
+        partition = Partition
+    },
+    State = do_init(State0),
     {ok, State}.
 
 handle_call({compare, RemoteFun, HandlerFun, HandlerAcc}, From, State) ->
@@ -817,7 +826,7 @@ maybe_external_lock(_, From, State) ->
 %% @private
 do_lock(PidRef, Type, State) ->
     %% This works for PidRef :: pid() and also for Partisan ref
-    LockRef = partisan:monitor(process, PidRef),
+    LockRef = partisan:monitor(process, PidRef, ?MONITOR_OPTS),
     State#state{lock = {Type, LockRef, PidRef}}.
 
 

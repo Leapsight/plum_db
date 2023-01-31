@@ -246,7 +246,8 @@
 -spec start_link() -> {ok, pid()} | ignore | {error, term()}.
 
 start_link() ->
-    partisan_gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    StartOpts = [{channel, plum_db_config:get(data_channel)}],
+    partisan_gen_server:start_link({local, ?MODULE}, ?MODULE, [], StartOpts).
 
 
 %% -----------------------------------------------------------------------------
@@ -944,7 +945,7 @@ remote_iterator(Node, FullPrefix, Opts) when is_tuple(FullPrefix) ->
     Ref = partisan_gen_server:call(
         {?MODULE, Node},
         {open_remote_iterator, PidRef, FullPrefix, Opts},
-        infinity
+        ?CALL_OPTS
     ),
     #remote_iterator{ref = Ref, match_prefix = FullPrefix, node = Node}.
 
@@ -957,7 +958,7 @@ remote_iterator(Node, FullPrefix, Opts) when is_tuple(FullPrefix) ->
 -spec iterate(iterator() | remote_iterator()) -> iterator() | remote_iterator().
 
 iterate(#remote_iterator{ref = Ref, node = Node} = I) ->
-    _ = partisan_gen_server:call({?MODULE, Node}, {iterate, Ref}, infinity),
+    _ = partisan_gen_server:call({?MODULE, Node}, {iterate, Ref}, ?CALL_OPTS),
     I;
 
 iterate(#iterator{done = true} = I) ->
@@ -1044,7 +1045,9 @@ iterate({ok, {{_, _} = Pref, K}, V, Ref1}, #iterator{keys_only = false} = I0) ->
 -spec iterator_close(iterator() | iterator() | remote_iterator()) -> ok.
 
 iterator_close(#remote_iterator{ref = Ref, node = Node}) ->
-    partisan_gen_server:call({?MODULE, Node}, {iterator_close, Ref}, infinity);
+    partisan_gen_server:call(
+        {?MODULE, Node}, {iterator_close, Ref}, ?CALL_OPTS
+    );
 
 iterator_close(#iterator{ref = undefined}) ->
     ok;
@@ -1061,7 +1064,9 @@ iterator_close(#iterator{ref = DBIter, partitions = [H|_]}) ->
 -spec iterator_done(iterator() | iterator() | remote_iterator()) -> boolean().
 
 iterator_done(#remote_iterator{ref = Ref, node = Node}) ->
-    partisan_gen_server:call({?MODULE, Node}, {iterator_done, Ref}, infinity);
+    partisan_gen_server:call(
+        {?MODULE, Node}, {iterator_done, Ref}, ?CALL_OPTS
+    );
 
 iterator_done(#iterator{done = true}) ->
     true;
@@ -1080,7 +1085,9 @@ iterator_done(#iterator{}) ->
 -spec iterator_prefix(iterator() | remote_iterator()) -> plum_db_prefix().
 
 iterator_prefix(#remote_iterator{ref = Ref, node = Node}) ->
-    partisan_gen_server:call({?MODULE, Node}, {prefix, Ref}, infinity);
+    partisan_gen_server:call(
+        {?MODULE, Node}, {prefix, Ref}, ?CALL_OPTS
+    );
 
 iterator_prefix(#iterator{prefix = Prefix}) ->
     Prefix.
@@ -1143,7 +1150,9 @@ iterator_key_value(#iterator{opts = Opts} = I) ->
     end;
 
 iterator_key_value(#remote_iterator{ref = Ref, node = Node}) ->
-    partisan_gen_server:call({?MODULE, Node}, {iterator_key_value, Ref}, infinity).
+    partisan_gen_server:call(
+        {?MODULE, Node}, {iterator_key_value, Ref}, ?CALL_OPTS
+    ).
 
 
 %% -----------------------------------------------------------------------------
@@ -1198,7 +1207,9 @@ iterator_key_values(#iterator{opts = Opts} = I) ->
     iterator_element().
 
 iterator_element(#remote_iterator{ref = Ref, node = Node}) ->
-    partisan_gen_server:call({?MODULE, Node}, {iterator_element, Ref}, infinity);
+    partisan_gen_server:call(
+        {?MODULE, Node}, {iterator_element, Ref}, ?CALL_OPTS
+    );
 
 iterator_element(#iterator{prefix = P, key = K, object = Obj}) ->
     {{P, K}, Obj}.
@@ -1888,7 +1899,7 @@ get_option(Key, Opts, Default) ->
 %% @private
 new_remote_iterator(PidRef, FullPrefix, Opts, #state{iterators = Iterators}) ->
     Node = partisan:node(PidRef),
-    Ref = partisan:monitor(process, PidRef),
+    Ref = partisan:monitor(process, PidRef, ?MONITOR_OPTS),
     Iterator = new_iterator(FullPrefix, Opts),
     ets:insert(Iterators, [{Ref, Node, Iterator}]),
     Ref.
