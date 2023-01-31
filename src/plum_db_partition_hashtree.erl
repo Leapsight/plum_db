@@ -412,9 +412,12 @@ compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
 
 init([Partition, DataRoot]) ->
     Id = name(Partition),
-    State = do_init(#state{
-        id = Id, data_root = DataRoot, partition = Partition
-    }),
+    State0 = #state{
+        id = Id,
+        data_root = DataRoot,
+        partition = Partition
+    },
+    State = do_init(State0),
     {ok, State}.
 
 handle_call({compare, RemoteFun, HandlerFun, HandlerAcc}, From, State) ->
