@@ -1,6 +1,6 @@
 {application, plum_db, [
     {description, "A database globally replicated via Plumtree (Epidemic Broadcast Trees) and Partisan. An offspring of Plumtree and Partisan, a descendant of Riak Core Metadata Store."},
-    {vsn, "1.0.0-beta.48"},
+    {vsn, "1.0.0-beta.49"},
     {registered, []},
     {mod, {plum_db_app, []}},
     % {mod, {application_starter, [plum_db_app, []]}},
@@ -26,5 +26,5 @@
     {modules, []},
     {maintainers, ["Alejandro M. Ramallo"]},
     {licenses, ["Apache 2.0"]},
-    {links, [{"Gitlab", "https://gitlab.com/leapsight/plum_db"}]}
+    {links, [{"Github", "https://github.com/leapsight/plum_db"}]}
 ]}.
