@@ -24,7 +24,7 @@
  {<<"observer_cli">>,{pkg,<<"observer_cli">>,<<"1.7.4">>},0},
  {<<"partisan">>,
   {git,"http://github.com/lasp-lang/partisan.git",
-       {ref,"d94bf5d59d88458421a5ac5367c8392a54e8b6a7"}},
+       {ref,"d73ab689d97e03811aec6af60113de30b3c47ed7"}},
   0},
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"2.0.5">>},2},
  {<<"recon">>,{pkg,<<"recon">>,<<"2.5.3">>},0},
