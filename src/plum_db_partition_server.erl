@@ -146,7 +146,10 @@
 
 start_link(Partition, Opts) ->
     Name = name(Partition),
-    StartOpts = [{channel,  plum_db_config:get(data_channel)}],
+    StartOpts = [
+        {channel,  plum_db_config:get(data_channel)},
+        {spawn_opt, [{min_heap_size, 1598}]}
+    ],
     partisan_gen_server:start_link(
         {local, Name},
         ?MODULE,
@@ -200,9 +203,9 @@ get(Name, PKey, Opts) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-get({Name, _} = Ref, PKey, Opts, Timeout) when is_atom(Name) ->
+get({Name, _} = ServerRef, PKey, Opts, Timeout) when is_atom(Name) ->
     %% A call to a remote node
-    partisan_gen_server:call(Ref, {get, PKey, Opts}, Timeout);
+    partisan_gen_server:call(ServerRef, {get, PKey, Opts}, ?CALL_OPTS(Timeout));
 
 get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
     case key_value:get(allow_put, Opts, false) of
@@ -268,7 +271,7 @@ merge({Name, _} = Ref, PKey, Obj, Timeout) when is_atom(Name) ->
     partisan_gen_server:call(Ref, {merge, PKey, Obj}, Timeout);
 
 merge(Name, PKey, Obj, Timeout) ->
-    partisan_gen_server:call(Name, {merge, PKey, Obj}, Timeout).
+    partisan_gen_server:call(Name, {merge, PKey, Obj}, ?CALL_OPTS(Timeout)).
 
 
 %% -----------------------------------------------------------------------------
@@ -756,7 +759,17 @@ handle_call({dirty_put, PKey, Object, Opts}, _From, State) ->
                     Error
             end
         catch
-            _:Reason ->
+            Class:Reason:Stacktrace ->
+                ?LOG_ERROR(#{
+                    description =>
+                        "Error while performing a dirty_put operation",
+                    class => Class,
+                    reason => Reason,
+                    stacktrace => Stacktrace,
+                    pkey => PKey,
+                    object => Object,
+                    options => Opts
+                }),
                 {error, Reason}
         end,
     {reply, Reply, State};

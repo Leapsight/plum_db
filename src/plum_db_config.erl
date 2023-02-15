@@ -208,6 +208,11 @@ setup_env() ->
         shard_by => prefix,
         data_dir => "data",
         data_channel => ?DATA_CHANNEL,
+        data_channel_opts => #{
+            parallelism => 1,
+            monotonic => false,
+            compression => false
+        },
         data_exchange_timeout => 60000,
         hashtree_timer => 10000,
         partitions => max(erlang:system_info(schedulers), 8),
@@ -302,40 +307,38 @@ coerce_partitions() ->
 %% @private
 setup_partisan() ->
     PartisanDefaults = #{
-        partisan_peer_service_manager =>
+        peer_service_manager =>
             partisan_pluggable_peer_service_manager,
         connect_disterl => false,
+        pid_encoding => false,
+        remote_ref_as_uri => true,
         exchange_selection => optimized,
         lazy_tick_period => 1000,
         exchange_tick_period => 60000
     },
 
     PartisanEnv0 = maps:from_list(application:get_all_env(partisan)),
-    Channels0 = maps:get(channels, PartisanEnv0, []),
-    BroadcastMods = maps:get(broadcast_mods, PartisanEnv0, []),
+
+    DataChannel = ?MODULE:get(data_channel, ?DATA_CHANNEL),
+    DataChannelOpts0 = ?MODULE:get(data_channel_opts),
+    DataChannelOpts = DataChannelOpts0#{monotonic => false},
+
+    %% We override the settings
+    set(data_channel, DataChannel),
+    set(data_channel_opts, DataChannelOpts),
+
     Channels =
-        case ?MODULE:get(data_channel) of
-            Name when is_map(Channels0), is_atom(Name) ->
-                maps:put(Name, #{}, Channels0);
+        case maps:get(channels, PartisanEnv0, []) of
+            Channels0 when is_list(Channels0) ->
+                lists:keystore(
+                    DataChannel, 1, Channels0, {DataChannel, DataChannelOpts}
+                );
+            Channels0 when is_map(Channels0) ->
+                maps:put(DataChannel, DataChannelOpts, Channels0)
+        end,
 
-            {monotonic, Name} when is_map(Channels0) ->
-                maps:put(Name, #{monotonic => true}, Channels0);
-
-            {Name, ChannelOpts}
-            when is_map(Channels0), is_atom(Name), is_map(ChannelOpts) ->
-                maps:put(Name, ChannelOpts, Channels0);
-
-            #{name := Name} = Spec when is_map(Channels0) ->
-                ChannelOpts = maps:without([name], Spec),
-                maps:put(Name, ChannelOpts, Channels0);
-
-            Arg when is_list(Channels0) ->
-                [Arg | Channels0]
-    end,
-
-
+    BroadcastMods = maps:get(broadcast_mods, PartisanEnv0, []),
     PartisanOverrides = #{
-        pid_encoding => false,
         channels => Channels,
         broadcast_mods => ordsets:to_list(
             ordsets:union(
