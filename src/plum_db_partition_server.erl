@@ -1382,6 +1382,10 @@ maybe_resolve(Object, Opts) ->
 
 
 %% @private
+maybe_modify(_, Existing, _, _, Existing) ->
+    %% No change
+    ok;
+
 maybe_modify(PKey, Existing, Opts, State, NewObject) ->
     case key_value:get(allow_put, Opts, false) of
         false ->
