@@ -33,7 +33,7 @@
   2},
  {<<"partisan">>,
   {git,"http://github.com/lasp-lang/partisan.git",
-       {ref,"0e011d041fd31a2865b83bef3157d56f2db09ac2"}},
+       {ref,"309e02545b646e66be46f686d292672bee05e2a6"}},
   0},
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"2.0.5">>},2},
  {<<"recon">>,{pkg,<<"recon">>,<<"2.5.3">>},0},
