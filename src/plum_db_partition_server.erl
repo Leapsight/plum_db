@@ -887,18 +887,21 @@ handle_call({merge, PKey, Obj0}, _From, State) ->
     end;
 
 handle_call(byte_size, _From, State) ->
-    DbRef = db_ref(State),
+    _DbRef = db_ref(State),
     Ram = ets:info(ram_tab(State), memory),
     RamDisk = ets:info(ram_disk_tab(State), memory),
     Ets = (Ram + RamDisk) * erlang:system_info(wordsize),
 
-    try eleveldb:status(DbRef, <<"leveldb.total-bytes">>) of
-        {ok, Bin} ->
-            {reply, binary_to_integer(Bin) + Ets, State}
-    catch
-        error:_ ->
-            {reply, Ets, State}
-    end;
+    %% TODO
+    %% try eleveldb:status(DbRef, <<"leveldb.total-bytes">>) of
+    %%     {ok, Bin} ->
+    %%         {reply, binary_to_integer(Bin) + Ets, State}
+    %% catch
+    %%     error:_ ->
+    %%         {reply, Ets, State}
+    %% end;
+
+    {reply, Ets, State};
 
 handle_call(is_empty, _From, State) ->
     DbRef = db_ref(State),
