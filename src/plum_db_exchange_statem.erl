@@ -141,8 +141,6 @@ terminate(Reason, _StateName, State) ->
 
     Summary = maps:map(fun(_, V) -> lists:sort(V) end, State#state.summary),
 
-    ok = release_all_local_locks(State),
-
     ?LOG_NOTICE(#{
         description => "AAE exchange finished",
         peer => Peer,
@@ -414,17 +412,6 @@ release_local_lock(Partition) ->
 %% @private
 release_remote_lock(Partition, Peer) ->
     plum_db_partition_hashtree:release_lock(Peer, Partition).
-
-
-release_all_local_locks(_State) ->
-    %% WARNING: This works since we are not allowing multiple instances of the
-    %% statem to run in parallel.
-    Summary = plum_db_partition_hashtree:release_locks(),
-    ?LOG_DEBUG(#{
-        description => "Request to cleanup all locks",
-        summary => Summary
-    }),
-    ok.
 
 
 %% @private

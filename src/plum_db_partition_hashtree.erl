@@ -328,7 +328,7 @@ release_lock(Node, Partition, Pid) ->
 
 %% -----------------------------------------------------------------------------
 %% @doc Release all local locks regarldes of the owner.
-%% This must only be used for cleanup.
+%% This must only be used for cleanup/testing.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec release_locks() ->
@@ -557,10 +557,9 @@ handle_info(
     {noreply, State1};
 
 handle_info({nodedown, Node}, #state{lock = {Type, _, PidRef}} = State0) ->
-    {partisan_remote_reference, LockNode, _} = PidRef,
-
-    case Node =:= LockNode of
+    case Node =:= partisan:node(PidRef) of
         true ->
+            %% The node for the process holding the lock died or disconnected
             {_, State1} = do_release_lock(Type, PidRef, State0),
             {noreply, State1};
         false ->
