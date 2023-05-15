@@ -72,6 +72,7 @@
 -export([release_lock/1]).
 -export([release_lock/2]).
 -export([release_lock/3]).
+-export([release_locks/0]).
 -export([name/1]).
 -export([prefix_hash/2]).
 -export([start_link/1]).
@@ -157,7 +158,7 @@ delete(PKey) ->
 %% @doc Same as insert(PKey, Hash, false).
 %% @end
 %% -----------------------------------------------------------------------------
--spec delete(pbd:partition(), plum_db_pkey()) -> ok.
+-spec delete(plum_db:partition(), plum_db_pkey()) -> ok.
 
 delete(Partition, PKey) ->
     Name = name(Partition),
@@ -185,7 +186,7 @@ insert(PKey, Hash, IfMissing) ->
     partisan_gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
 
 
--spec insert(pbd:partition(), plum_db_pkey(), binary(), boolean()) -> ok.
+-spec insert(plum_db:partition(), plum_db_pkey(), binary(), boolean()) -> ok.
 insert(Partition, PKey, Hash, IfMissing) ->
     Name = name(Partition),
     partisan_gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
@@ -322,6 +323,38 @@ release_lock(Node, Partition, Pid) ->
     PidRef = partisan_remote_ref:from_term(Pid),
     partisan_gen_server:call(
         {name(Partition), Node}, {release_lock, external, PidRef}, ?CALL_OPTS
+    ).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Release all local locks regarldes of the owner.
+%% This must only be used for cleanup.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec release_locks() ->
+    #{
+        ok => [plum_db:partition()],
+        not_locked => [plum_db:partition()],
+        not_allowed => [plum_db:partition()]
+    }.
+
+release_locks() ->
+    L = plum_db:partitions(),
+
+    lists:foldl(
+        fun(Partition, Acc) ->
+            ServerRef = {name(Partition), node()},
+            Cmd = {release_lock, external, undefined},
+
+            case partisan_gen_server:call(ServerRef, Cmd, ?CALL_OPTS) of
+                ok ->
+                    maps_utils:append(ok, Partition, Acc);
+                {error, Reason} ->
+                    maps_utils:append(Reason, Partition, Acc)
+            end
+        end,
+        #{},
+        L
     ).
 
 
@@ -813,6 +846,12 @@ maybe_external_lock(
     partisan_gen_server:reply(From, ok),
     NewState;
 
+maybe_external_lock(
+    PidRef, From, #state{lock = {_, _, PidRef}, built = true} = State) ->
+    %% Caller has the lock, we make this call idempotent
+    partisan_gen_server:reply(From, ok),
+    State;
+
 maybe_external_lock(_, From, #state{built = true} = State) ->
     partisan_gen_server:reply(From, locked),
     State;
@@ -830,6 +869,11 @@ do_lock(PidRef, Type, State) ->
 
 
 %% @private
+do_release_lock(
+    external, undefined, #state{lock = {external, LockRef, _PidRef}} = State) ->
+    true = partisan:demonitor(LockRef, [flush]),
+    {ok, State#state{lock = undefined}};
+
 do_release_lock(Type, PidRef, #state{lock = {Type, LockRef, PidRef}} = State) ->
     %% This works for PidRef :: pid() and also for Partisan ref
     true = partisan:demonitor(LockRef, [flush]),

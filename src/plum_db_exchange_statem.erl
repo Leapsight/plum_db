@@ -71,7 +71,7 @@
 
 %% -----------------------------------------------------------------------------
 %% @doc Start an exchange of plum_db hashtrees between this node
-%% and `Peer' for a given `Partition'. `Timeout' is the number of milliseconds
+%% and `Peer'. `Timeout' is the number of milliseconds
 %% the process will wait to aqcuire the remote lock or to update both trees.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -140,6 +140,8 @@ terminate(Reason, _StateName, State) ->
     _ = plum_db_events:notify(exchange_finished, {self(), Reason}),
 
     Summary = maps:map(fun(_, V) -> lists:sort(V) end, State#state.summary),
+
+    ok = release_all_local_locks(State),
 
     ?LOG_NOTICE(#{
         description => "AAE exchange finished",
@@ -319,8 +321,6 @@ exchanging_data(timeout, _, #state{partitions = [H|_]} = State) ->
                 }
         end,
 
-        release_locks(H, State#state.peer),
-
         Result
 
     catch
@@ -332,6 +332,9 @@ exchanging_data(timeout, _, #state{partitions = [H|_]} = State) ->
                 reason => nodedown
             }),
             {stop, normal, State}
+    after
+        release_locks(H, State#state.peer)
+
     end;
 
 exchanging_data(Type, Content, State) ->
@@ -360,6 +363,8 @@ handle_other_event(_, cast, {remote_lock_acquired, Partition}, State) ->
     {keep_state, State};
 
 handle_other_event(_, info, {nodedown, Peer}, #state{peer = Peer} = State0) ->
+    %% We received a partisan_monitor signal cause Peer is down or we lost
+    %% connection to it.
     [H|T] = State0#state.partitions,
     ok = release_local_lock(H),
     ?LOG_NOTICE(#{
@@ -396,10 +401,9 @@ async_acquire_remote_lock(Peer, Partition) ->
 
 %% @private
 release_locks(Partition, Peer) ->
-    %% First release local lock as there are mote chances releasing the remote
-    %% could fail
-    ok = release_local_lock(Partition),
-    ok = release_remote_lock(Partition, Peer).
+    _ = catch release_remote_lock(Partition, Peer),
+    _ = catch release_local_lock(Partition),
+    ok.
 
 
 %% @private
@@ -410,6 +414,17 @@ release_local_lock(Partition) ->
 %% @private
 release_remote_lock(Partition, Peer) ->
     plum_db_partition_hashtree:release_lock(Peer, Partition).
+
+
+release_all_local_locks(_State) ->
+    %% WARNING: This works since we are not allowing multiple instances of the
+    %% statem to run in parallel.
+    Summary = plum_db_partition_hashtree:release_locks(),
+    ?LOG_DEBUG(#{
+        description => "Request to cleanup all locks",
+        summary => Summary
+    }),
+    ok.
 
 
 %% @private
