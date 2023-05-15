@@ -46,8 +46,11 @@
 -record(state, {
     remaining_partitions        ::  list(integer()),
     remaining_hashtrees         ::  list(integer()),
+    aex_force_first = false     ::  boolean(),
+    aex_ref                     ::  {reference(), pid()} | undefined,
     partition_watchers = []     ::  list({pid(), any()}),
     hashtree_watchers = []      ::  list({pid(), any()}),
+    aex_watchers = []          ::  list({pid(), any()}),
     failed_partitions = #{}     ::  map(),
     failed_hashtrees = #{}      ::  map()
 }).
@@ -61,9 +64,12 @@
 -export([wait_for_partitions/1]).
 -export([wait_for_hashtrees/0]).
 -export([wait_for_hashtrees/1]).
+-export([wait_for_aae_exchange/1]).
+-export([wait_for_aae_exchange/2]).
 
 %% gen_server callbacks
 -export([init/1]).
+-export([handle_continue/2]).
 -export([handle_call/3]).
 -export([handle_cast/2]).
 -export([handle_info/2]).
@@ -96,6 +102,7 @@ start_link() ->
 
 stop() ->
     gen_server:stop(?MODULE).
+
 
 
 %% -----------------------------------------------------------------------------
@@ -165,6 +172,42 @@ when (is_integer(Timeout) andalso Timeout > 0) orelse Timeout == infinity ->
     end.
 
 
+%% -----------------------------------------------------------------------------
+%% @doc Blocks the caller until all partitions are initialised, hashtrees are
+%% build and an anti-entropy exchange has been performed with a peer.
+%% This is equivalent to calling `wait_for_aae_exchange(infinity)'.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec wait_for_aae_exchange(Opts :: #{force => boolean()}) ->
+    ok | {error, timeout} | {error, FailedPartitions :: map()}.
+
+wait_for_aae_exchange(Opts) ->
+    wait_for_aae_exchange(Opts, infinity).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Blocks the caller until all hastrees are built or the timeout TImeout
+%% is reached.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec wait_for_aae_exchange(
+    Opts :: #{force => boolean()}, Timeout :: timeout()) ->
+    ok
+    | {error, timeout}
+    | {error, FailedPartitionsOrHashtrees :: map()}.
+
+wait_for_aae_exchange(Opts, Timeout)
+when (is_integer(Timeout) andalso Timeout > 0) orelse Timeout == infinity ->
+    {ok, Tag} = gen_server:call(?MODULE, {wait_for_aae_exchange, Opts}),
+
+    receive
+        {plum_db_aae_exchange_finished, Tag, Return} ->
+            Return
+    after
+        Timeout ->
+            {error, timeout}
+    end.
+
 
 %% =============================================================================
 %% GEN_SERVER_ CALLBACKS
@@ -187,7 +230,44 @@ init([]) ->
     },
     _ = plum_db_events:subscribe(partition_init_finished),
     _ = plum_db_events:subscribe(hashtree_build_finished),
+    _ = plum_db_events:subscribe(exchange_finished),
     {ok, State}.
+
+handle_continue(maybe_exchange, #state{aex_watchers = []} = State) ->
+    {noreply, State};
+
+handle_continue(maybe_exchange, #state{aex_ref = undefined} = State) ->
+    case State#state.aex_force_first of
+        true ->
+            %% At least one watcher requested to force the exchange
+            case partisan:nodes() of
+                [] ->
+                    %% No peers, we schedule a retry
+                    ok = schedule_exchange(),
+                    {noreply, State};
+
+                [H|_] ->
+                    %% We start an async exchange
+                    case plum_db:exchange(H) of
+                        {ok, Pid} ->
+                            Ref = erlang:monitor(process, Pid),
+                            NewState = State#state{aex_ref = {Ref, Pid}},
+                            {noreply, NewState};
+
+                        {error, _} ->
+                            ok = schedule_exchange(),
+                            {noreply, State}
+                    end
+
+            end;
+
+        false ->
+            %% WAit till we receive a notification of exchange finished
+            {noreply, State}
+    end;
+
+handle_continue(_, State) ->
+    {noreply, State}.
 
 
 %% @private
@@ -226,6 +306,13 @@ handle_call(
 handle_call(wait_for_hashtrees, {_, Tag} = From, State) ->
     L = [From | State#state.hashtree_watchers],
     {reply, {ok, Tag}, State#state{hashtree_watchers = L}};
+
+
+handle_call({wait_for_aae_exchange, Opts}, {_, Tag} = From, #state{} = State)->
+    Flag = maps:get(force, Opts, false),
+    L = [From | State#state.aex_watchers],
+    NewState = State#state{aex_watchers = L, aex_force_first = Flag},
+    {reply, {ok, Tag}, NewState, {continue, maybe_exchange}};
 
 handle_call(remaining_partitions, _From, State) ->
     Res = State#state.remaining_partitions,
@@ -268,16 +355,37 @@ handle_info({plum_db_event, partition_init_finished, Result}, State) ->
 handle_info({plum_db_event, hashtree_build_finished, Result}, State) ->
     case Result of
         {ok, Partition} ->
-            {noreply, remove_hashtree(Partition, State)};
+            NewState = remove_hashtree(Partition, State),
+            {noreply, NewState, {continue, maybe_exchange}};
+
         {error, Reason, Partition} ->
             Map = maps:put(Partition, Reason, State#state.failed_hashtrees),
             NewState = State#state{failed_partitions = Map},
             {noreply, NewState}
     end;
 
+handle_info({plum_db_event, exchange_finished, {_, normal}}, State) ->
+    NewState = State#state{aex_watchers = []},
+    _ = [
+        send(Watcher, plum_db_aae_exchange_finished, ok)
+        || Watcher <- State#state.aex_watchers
+    ],
+    {noreply, NewState};
+
+handle_info({plum_db_event, exchange_finished, {_, _Reason}}, State) ->
+    %% We'll wait to a successful exchange
+    {noreply, State};
+
+handle_info({timeout, _Ref, maybe_exchange}, State) ->
+    {noreply, State, {continue, maybe_exchange}};
+
+handle_info({'DOWN', Ref, process, Pid, normal}, #state{aex_ref = {Ref, Pid}} = State) ->
+    %% An exchange we started finished, we should have received the event
+    %% exchange_finished, so we do nothing
+    {noreply, State#state{aex_ref = undefined}};
 
 handle_info(Event, State) ->
-    ?LOG_ERROR(#{
+    ?LOG_INFO(#{
         reason => unsupported_event,
         event => Event
     }),
@@ -290,6 +398,7 @@ handle_info(Event, State) ->
 terminate(_Reason, _State) ->
     _ = plum_db_events:unsubscribe(partition_init_finished),
     _ = plum_db_events:unsubscribe(hashtree_build_finished),
+    _ = plum_db_events:unsubscribe(exchange_finished),
     ok.
 
 
@@ -387,3 +496,10 @@ maybe_hashtrees_build_finished(State) ->
 send({Pid, Tag}, Event, Message) ->
     Pid ! {Event, Tag, Message},
     {ok, Tag}.
+
+
+schedule_exchange() ->
+    _ = erlang:start_timer(
+        timer:seconds(2), self(), maybe_exchange
+    ),
+    ok.
