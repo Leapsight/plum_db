@@ -550,10 +550,11 @@ handle_info(
     State1 = build_error(Reason, State),
     {noreply, State1};
 
+
 handle_info(
-    {'DOWN', Ref, process, Pid, _Reason},
-    #state{lock = {Type, Ref, _}} = State) ->
-    {_, State1} = do_release_lock(Type, Pid, State),
+    {'DOWN', Ref, process, _Pid, _Reason},
+    #state{lock = {Type, Ref, PidRef}} = State) ->
+    {_, State1} = do_release_lock(Type, PidRef, State),
     {noreply, State1};
 
 handle_info({nodedown, Node}, #state{lock = {Type, _, PidRef}} = State0) ->
