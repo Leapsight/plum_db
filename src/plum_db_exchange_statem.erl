@@ -30,7 +30,7 @@
     %% count of trees that have been buit
     local_tree_updated = false      ::  boolean(),
     remote_tree_updated = false     ::  boolean(),
-    %% length of time waited to acquire remote lock or update trees
+    %% length of time we will wait to acquire remote lock or update trees
     timeout                         ::  pos_integer()
 }).
 
@@ -136,6 +136,12 @@ terminate(Reason, _StateName, State) ->
     Peer = State#state.peer,
     _ = catch partisan:monitor_node(Peer, false),
 
+    %% We release remaining locks in case Reason =/= normal
+    %% plum_db_partition_hashtree is monitoring us so it should get a DOWN
+    %% signal, but we cleanup just in case as we have remote locks and we are
+    %% using Partisan monitoring,
+    ok = release_locks(State#state.partitions, Peer),
+
     %% We notify subscribers
     _ = plum_db_events:notify(exchange_finished, {self(), Reason}),
 
@@ -182,9 +188,11 @@ acquiring_locks(internal, next, #state{partitions = [H|T]} = State0) ->
             ok = async_acquire_remote_lock(State1#state.peer, H),
             %% We wait for a remote lock event
             {next_state, acquiring_locks, State1, State1#state.timeout};
+
         Reason ->
             ?LOG_INFO(#{
-                description => "Failed to acquire local lock, skipping partition",
+                description =>
+                    "Failed to acquire local lock, skipping partition",
                 reason => Reason,
                 partition => H
             }),
@@ -355,8 +363,9 @@ reset_state(State) ->
 
 
 handle_other_event(_, cast, {remote_lock_acquired, Partition}, State) ->
-    %% We received a late response to an async_acquire_remote_lock
-    %% Unlock it.
+    %% We received a late response to an async_acquire_remote_lock i.e. we got
+    %% a timeout as a result of calling async_acquire_remote_lock/2,
+    %% so we try to release the remote lock.
     ok = release_remote_lock(Partition, State#state.peer),
     {keep_state, State};
 
@@ -398,6 +407,13 @@ async_acquire_remote_lock(Peer, Partition) ->
 
 
 %% @private
+release_locks([H|T], Peer) ->
+    ok = release_locks(H, Peer),
+    release_locks(T, Peer);
+
+release_locks([], _) ->
+    ok;
+
 release_locks(Partition, Peer) ->
     _ = catch release_remote_lock(Partition, Peer),
     _ = catch release_local_lock(Partition),

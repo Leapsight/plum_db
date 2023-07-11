@@ -256,9 +256,14 @@ lock(Partition) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Locks the tree on `Node' for updating on behalf of the calling
-%% process.
-%% @see lock/3
+%% @doc Lock the tree for updating. This function must be called
+%% before updating the tree with {@link update/1} or {@link
+%% update/2}. If the tree is not built or already locked then the call
+%% will fail and the appropriate atom is returned. Otherwise,
+%% aqcuiring the lock succeeds and `ok' is returned.
+%%
+%% This function monitors the calling process so that we can release the lock
+%% when it terminates.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec lock(node(), plum_db:partition()) -> ok | not_built | locked.
@@ -268,11 +273,8 @@ lock(Node, Partition) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Lock the tree for updating. This function must be called
-%% before updating the tree with {@link update/1} or {@link
-%% update/2}. If the tree is not built or already locked then the call
-%% will fail and the appropriate atom is returned. Otherwise,
-%% aqcuiring the lock succeeds and `ok' is returned.
+%% @doc This function is exported for testing and debugging purposes. Use
+%% {@link lock/2} instead.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec lock(node(), plum_db:partition(), pid()) -> ok | not_built | locked.
@@ -292,6 +294,7 @@ lock(Node, Partition, Pid) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec release_lock(plum_db:partition()) -> ok.
+
 release_lock(Partition) ->
     release_lock(partisan:node(), Partition).
 
@@ -327,7 +330,7 @@ release_lock(Node, Partition, Pid) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Release all local locks regarldes of the owner.
+%% @doc Release all local locks regardless of the owner.
 %% This must only be used for cleanup/testing.
 %% @end
 %% -----------------------------------------------------------------------------
@@ -542,11 +545,15 @@ handle_cast(_Msg, State) ->
 
 handle_info(
     {'DOWN', Ref, process, _Pid, normal}, #state{built = Ref} = State) ->
+    %% The helper process we use to build the hashtree asynchronously
+    %% finished normally
     State1 = build_done(State),
     {noreply, State1};
 
 handle_info(
     {'DOWN', Ref, process, _Pid, Reason}, #state{built = Ref} = State) ->
+    %% The helper process we use to build the hashtree asynchronously
+    %% terminated with error
     State1 = build_error(Reason, State),
     {noreply, State1};
 
@@ -554,6 +561,7 @@ handle_info(
 handle_info(
     {'DOWN', Ref, process, _Pid, _Reason},
     #state{lock = {Type, Ref, PidRef}} = State) ->
+    %% The process holding the lock terminated.
     {_, State1} = do_release_lock(Type, PidRef, State),
     {noreply, State1};
 
@@ -561,8 +569,11 @@ handle_info({nodedown, Node}, #state{lock = {Type, _, PidRef}} = State0) ->
     case Node =:= partisan:node(PidRef) of
         true ->
             %% The node for the process holding the lock died or disconnected
+            %% This is a double assurance as we should have recieved the DOWN
+            %% signal for the process monitor (partisan_monitor).
             {_, State1} = do_release_lock(Type, PidRef, State0),
             {noreply, State1};
+
         false ->
             {noreply, State0}
     end;
@@ -589,6 +600,8 @@ handle_info(Event, State) ->
 
 terminate(_Reason, State0) ->
     {_, State1} = do_release_lock(State0),
+    %% TODO Here we should persist the hashtree to disk so that we avoid
+    %% rebuilding next time (unless configured to do so)
     ok = hashtree_tree:destroy(State1#state.tree).
 
 
@@ -605,7 +618,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @private
 do_init(#state{data_root = DataRoot, partition = Partition} = State0) ->
-
+    %% TODO we shoul have persiste the hashtree_tree and restore here if
+    %% existed. See terminate.
     try
         TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
         Tree = hashtree_tree:new(
@@ -715,7 +729,7 @@ update_async(From, Lock, #state{tree = Tree} = State) ->
         true ->
             %% Lock will be released on process `DOWN` message
             %% by handle_info/2
-            do_lock(Pid, internal, State);
+            do_lock(internal, Pid, State);
         false ->
             State
     end,
@@ -840,29 +854,31 @@ build_error(Reason, State) ->
 
 
 %% @private
+
+maybe_external_lock(_, From, #state{built = false} = State) ->
+    partisan_gen_server:reply(From, not_built),
+    State;
+
 maybe_external_lock(
-    PidRef, From, #state{lock = undefined, built = true} = State) ->
-    NewState = do_lock(PidRef, external, State),
+    PidRef, From, #state{built = true, lock = undefined} = State) ->
+    NewState = do_lock(external, PidRef, State),
     partisan_gen_server:reply(From, ok),
     NewState;
 
 maybe_external_lock(
-    PidRef, From, #state{lock = {_, _, PidRef}, built = true} = State) ->
+    PidRef, From, #state{built = true, lock = {_, _, PidRef}} = State) ->
     %% Caller has the lock, we make this call idempotent
     partisan_gen_server:reply(From, ok),
     State;
 
 maybe_external_lock(_, From, #state{built = true} = State) ->
+    %% Somebody else holds the lock
     partisan_gen_server:reply(From, locked),
-    State;
-
-maybe_external_lock(_, From, State) ->
-    partisan_gen_server:reply(From, not_built),
     State.
 
 
 %% @private
-do_lock(PidRef, Type, State) ->
+do_lock(Type, PidRef, State) ->
     %% This works for PidRef :: pid() and also for Partisan ref
     LockRef = partisan:monitor(process, PidRef, ?MONITOR_OPTS),
     State#state{lock = {Type, LockRef, PidRef}}.
@@ -887,13 +903,14 @@ do_release_lock(_, _, State) ->
 
 
 %% @private
-do_release_lock(State) ->
-    do_release_lock(internal, self(), State).
+do_release_lock(#state{lock = {Type, _, PidRef}} = State) ->
+    do_release_lock(Type, PidRef, State).
 
 
 %% @private
 prefix_to_prefix_list(Prefix) when is_binary(Prefix) or is_atom(Prefix) ->
     [Prefix];
+
 prefix_to_prefix_list({Prefix, SubPrefix}) ->
     [Prefix, SubPrefix].
 
