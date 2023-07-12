@@ -38,7 +38,7 @@
     tree            ::  hashtree_tree:tree() | undefined,
     %% whether or not the tree has been built or a monitor ref
     %% if the tree is being built
-    built           ::  boolean() | reference() | undefined,
+    built = false   ::  boolean() | reference(),
     %% a monitor reference for a process that currently holds a
     %% lock on the tree
     lock            ::  undefined
@@ -530,7 +530,7 @@ handle_cast(reset, #state{built = true, lock = {external, _, Pid}} = State) ->
     NewState = schedule_reset(State),
     {noreply, NewState};
 
-handle_cast(reset, #state{built = false} = State) ->
+handle_cast(reset, #state{built = _} = State) ->
     ?LOG_INFO(#{
         description => "Skipping hashtree reset",
         reason => not_built,
@@ -629,11 +629,9 @@ do_init(#state{data_root = DataRoot, partition = Partition} = State0) ->
         TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
         State = State0#state{
             tree = Tree,
-            built = false,
             build_ts_secs = undefined,
             ttl_secs = TTL,
-            lock = undefined,
-            reset = false
+            lock = undefined
         },
         NewState = build_async(State),
         schedule_tick(NewState)
@@ -856,7 +854,8 @@ build_error(Reason, State) ->
 
 %% @private
 
-maybe_external_lock(_, From, #state{built = false} = State) ->
+maybe_external_lock(_, From, #state{built = Value} = State)
+when Value == false orelse is_reference(Value) ->
     partisan_gen_server:reply(From, not_built),
     State;
 
