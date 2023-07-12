@@ -904,6 +904,9 @@ do_release_lock(_, _, State) ->
 
 
 %% @private
+do_release_lock(#state{lock = undefined} = State) ->
+    {ok, State};
+
 do_release_lock(#state{lock = {Type, _, PidRef}} = State) ->
     do_release_lock(Type, PidRef, State).
 
