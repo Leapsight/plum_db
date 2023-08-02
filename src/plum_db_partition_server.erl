@@ -84,7 +84,7 @@
                                     | binary().
 -type iterator_move_result()    ::  {ok,
                                         Key :: binary() | plum_db_pkey(),
-                                        Value :: binary(),
+                                        Value :: plumd_db_object:t(),
                                         iterator()
                                     }
                                     | {ok,
