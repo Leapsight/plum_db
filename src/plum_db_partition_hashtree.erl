@@ -19,6 +19,7 @@
 
 -module(plum_db_partition_hashtree).
 -behaviour(partisan_gen_server).
+
 -include_lib("kernel/include/logger.hrl").
 -include_lib("partisan/include/partisan.hrl").
 -include("plum_db.hrl").
@@ -41,12 +42,7 @@
     built = false   ::  boolean() | reference(),
     %% a monitor reference for a process that currently holds a
     %% lock on the tree
-    lock            ::  undefined
-                        | {
-                            internal | external,
-                            reference(),
-                            partisan_remote_ref:r()
-                        },
+    lock            ::  undefined | lockref(),
     %% Timestamp when the tree was build. To be used together with ttl_secs
     %% to calculate if the hashtree has expired
     build_ts_secs   ::  non_neg_integer() | undefined,
@@ -56,6 +52,13 @@
     timer           ::  reference() | undefined
 }).
 
+-type state()       ::  #state{}.
+-type lockref()     ::  {internal, reference(), pid()}
+                        | {
+                            external,
+                            partisan_remote_ref:r(),
+                            partisan_remote_ref:p()
+                        }.
 
 %% API
 -export([compare/4]).
@@ -127,19 +130,20 @@ start_link(Partition) when is_integer(Partition) ->
 %% number.
 %% @end
 %% -----------------------------------------------------------------------------
-name(Partition) ->
+name(Partition) when is_integer(Partition) ->
     Key = {?MODULE, Partition},
 
     case persistent_term:get(Key, undefined) of
         undefined ->
-            plum_db:is_partition(Partition)
-                orelse error(badarg),
+            plum_db:is_partition(Partition) orelse error(badarg),
+
             Name = list_to_atom(
                 "plum_db_partition_" ++ integer_to_list(Partition) ++
                 "_hashtree"
             ),
             _ = persistent_term:put(Key, Name),
             Name;
+
         Name ->
             Name
     end.
@@ -160,7 +164,7 @@ delete(PKey) ->
 %% -----------------------------------------------------------------------------
 -spec delete(plum_db:partition(), plum_db_pkey()) -> ok.
 
-delete(Partition, PKey) ->
+delete(Partition, PKey) when is_integer(Partition) ->
     Name = name(Partition),
     partisan_gen_server:call(Name, {delete, PKey}, infinity).
 
@@ -170,6 +174,7 @@ delete(Partition, PKey) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec insert(plum_db_pkey(), binary()) -> ok.
+
 insert(PKey, Hash) ->
     insert(PKey, Hash, false).
 
@@ -181,16 +186,26 @@ insert(PKey, Hash) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec insert(plum_db_pkey(), binary(), IfMissing :: boolean()) -> ok.
+
 insert(PKey, Hash, IfMissing) ->
-    Name = name(plum_db:get_partition(PKey)),
-    partisan_gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
+    insert(plum_db:get_partition(PKey), PKey, Hash, IfMissing).
 
 
--spec insert(plum_db:partition(), plum_db_pkey(), binary(), boolean()) -> ok.
-insert(Partition, PKey, Hash, IfMissing) ->
-    Name = name(Partition),
-    partisan_gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec insert(
+    Server :: plum_db:partition() | atom() | pid(),
+    PKey :: plum_db_pkey(),
+    Hash :: binary(),
+    IsMissing :: boolean()) -> ok.
 
+insert(Partition, PKey, Hash, IfMissing) when is_integer(Partition)  ->
+    insert(name(Partition), PKey, Hash, IfMissing);
+
+insert(Server, PKey, Hash, IfMissing) when is_atom(Server); is_pid(Server) ->
+    partisan_gen_server:call(Server, {insert, PKey, Hash, IfMissing}, infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -205,7 +220,7 @@ insert(Partition, PKey, Hash, IfMissing) ->
 prefix_hash(Partition, Prefix) when is_integer(Partition) ->
     prefix_hash(name(Partition), Prefix);
 
-prefix_hash(Server, Prefix) when is_pid(Server) orelse is_atom(Server) ->
+prefix_hash(Server, Prefix) when is_atom(Server); is_pid(Server)->
     partisan_gen_server:call(Server, {prefix_hash, Prefix}, infinity).
 
 
@@ -279,11 +294,9 @@ lock(Node, Partition) ->
 %% -----------------------------------------------------------------------------
 -spec lock(node(), plum_db:partition(), pid()) -> ok | not_built | locked.
 
-lock(Node, Partition, Pid) ->
-    PidRef = partisan_remote_ref:from_term(Pid),
-    partisan_gen_server:call(
-        {name(Partition), Node}, {lock, PidRef}, ?CALL_OPTS
-    ).
+lock(Node, Partition, Pid) when is_pid(Pid), is_integer(Partition)  ->
+    Cmd = {lock, partisan_remote_ref:from_term(Pid)},
+    partisan_gen_server:call({name(Partition), Node}, Cmd, ?CALL_OPTS).
 
 
 
@@ -322,11 +335,11 @@ release_lock(Node, Partition) ->
 -spec release_lock(node(), plum_db:partition(), pid()) ->
     ok | {error, not_locked | not_allowed}.
 
-release_lock(Node, Partition, Pid) ->
-    PidRef = partisan_remote_ref:from_term(Pid),
-    partisan_gen_server:call(
-        {name(Partition), Node}, {release_lock, external, PidRef}, ?CALL_OPTS
-    ).
+release_lock(Node, Partition, Pid)
+when is_atom(Node), is_integer(Partition), is_pid(Pid) ->
+    Server = {name(Partition), Node},
+    Cmd = {release_lock, external, partisan_remote_ref:from_term(Pid)},
+    partisan_gen_server:call(Server, Cmd, ?CALL_OPTS).
 
 
 %% -----------------------------------------------------------------------------
@@ -560,18 +573,18 @@ handle_info(
 
 handle_info(
     {'DOWN', Ref, process, _Pid, _Reason},
-    #state{lock = {Type, Ref, PidRef}} = State) ->
+    #state{lock = {_, Ref, _}} = State) ->
     %% The process holding the lock terminated.
-    {_, State1} = do_release_lock(Type, PidRef, State),
+    {_, State1} = do_release_lock(State),
     {noreply, State1};
 
-handle_info({nodedown, Node}, #state{lock = {Type, _, PidRef}} = State0) ->
+handle_info({nodedown, Node}, #state{lock = {_, _, PidRef}} = State0) ->
     case Node =:= partisan:node(PidRef) of
         true ->
             %% The node for the process holding the lock died or disconnected
             %% This is a double assurance as we should have recieved the DOWN
             %% signal for the process monitor (partisan_monitor).
-            {_, State1} = do_release_lock(Type, PidRef, State0),
+            {_, State1} = do_release_lock(State0),
             {noreply, State1};
 
         false ->
@@ -732,7 +745,7 @@ update_async(From, Lock, #state{tree = Tree} = State) ->
         false ->
             State
     end,
-    State1#state{tree=Tree2}.
+    State1#state{tree = Tree2}.
 
 
 %% @private
@@ -877,21 +890,31 @@ maybe_external_lock(_, From, #state{built = true} = State) ->
 
 
 %% @private
-do_lock(Type, PidRef, State) ->
-    %% This works for PidRef :: pid() and also for Partisan ref
-    LockRef = partisan:monitor(process, PidRef, ?MONITOR_OPTS),
-    State#state{lock = {Type, LockRef, PidRef}}.
+-spec do_lock(internal|external, pid() | partisan_remote_ref:p(), state()) ->
+    state().
+
+do_lock(Type, Process, State) ->
+    %% This works for Process :: pid() and also for Partisan ref
+    Mref = partisan:monitor(process, Process, ?MONITOR_OPTS),
+    State#state{lock = {Type, Mref, Process}}.
+
+
+%% @private
+do_release_lock(#state{lock = undefined} = State) ->
+    {ok, State};
+
+do_release_lock(#state{lock = {Type, _, Process}} = State) ->
+    do_release_lock(Type, Process, State).
 
 
 %% @private
 do_release_lock(
-    external, undefined, #state{lock = {external, LockRef, _PidRef}} = State) ->
-    true = partisan:demonitor(LockRef, [flush]),
+    external, undefined, #state{lock = {external, Mref, _}} = State) ->
+    true = partisan:demonitor(Mref, [flush]),
     {ok, State#state{lock = undefined}};
 
-do_release_lock(Type, PidRef, #state{lock = {Type, LockRef, PidRef}} = State) ->
-    %% This works for PidRef :: pid() and also for Partisan ref
-    true = partisan:demonitor(LockRef, [flush]),
+do_release_lock(Type, Process, #state{lock = {Type, Mref, Process}} = State) ->
+    true = partisan:demonitor(Mref, [flush]),
     {ok, State#state{lock = undefined}};
 
 do_release_lock(_, _, #state{lock = undefined} = State) ->
@@ -901,12 +924,6 @@ do_release_lock(_, _, State) ->
     {{error, not_allowed}, State}.
 
 
-%% @private
-do_release_lock(#state{lock = undefined} = State) ->
-    {ok, State};
-
-do_release_lock(#state{lock = {Type, _, PidRef}} = State) ->
-    do_release_lock(Type, PidRef, State).
 
 
 %% @private
