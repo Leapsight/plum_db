@@ -1090,7 +1090,7 @@ init_state(Name, Partition, DataRoot, Config) ->
     #state {
         name = Name,
         partition = Partition,
-        actor_id = {Partition, node()},
+        actor_id = {Partition, partisan:node()},
         db_info = #db_info{
             ram_tab = RamTab,
             ram_disk_tab = RamDiskTab,
@@ -1141,7 +1141,7 @@ open_db(State, RetriesLeft, _) ->
                     ?LOG_DEBUG(#{
                         description => "Leveldb backend retrying after error",
                         partition => State#state.partition,
-                        node => node(),
+                        node => partisan:node(),
                         data_root => State#state.data_root,
                         timeout => SleepFor,
                         reason => OpenErr
@@ -1154,7 +1154,7 @@ open_db(State, RetriesLeft, _) ->
                             ?LOG_WARNING(#{
                                 description => "Starting repair of corrupted Leveldb store",
                                 partition => State#state.partition,
-                                node => node(),
+                                node => partisan:node(),
                                 data_root => State#state.data_root,
                                 reason => OpenErr
                             }),
@@ -1164,7 +1164,7 @@ open_db(State, RetriesLeft, _) ->
                             ?LOG_NOTICE(#{
                                 description => "Finished repair of corrupted Leveldb store",
                                 partition => State#state.partition,
-                                node => node(),
+                                node => partisan:node(),
                                 data_root => State#state.data_root,
                                 reason => OpenErr
                             }),
@@ -1192,7 +1192,7 @@ init_ram_disk_prefixes_fun(State) ->
         ?LOG_INFO(#{
             description => "Initialising partition",
             partition => State#state.partition,
-            node => node()
+            node => partisan:node()
         }),
         %% We create the in-memory db copy for ram and ram_disk prefixes
         Tab = ram_disk_tab(State),
@@ -1210,7 +1210,7 @@ init_ram_disk_prefixes_fun(State) ->
                         description => "Loading data from disk to ram",
                         partition => State#state.partition,
                         prefix => Prefix,
-                        node => node()
+                        node => partisan:node()
                     }),
                     First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
                     Next = eleveldb:iterator_move(DbIter, First),
@@ -1224,7 +1224,7 @@ init_ram_disk_prefixes_fun(State) ->
             ?LOG_INFO(#{
                 description => "Finished initialisation of partition",
                 partition => State#state.partition,
-                node => node()
+                node => partisan:node()
             }),
             _ = plum_db_events:notify(
                 partition_init_finished, {ok, State#state.partition}
@@ -1239,7 +1239,7 @@ init_ram_disk_prefixes_fun(State) ->
                     reason => Reason,
                     stacktrace => Stacktrace,
                     partition => State#state.partition,
-                    node => node()
+                    node => partisan:node()
                 }),
                 _ = plum_db_events:notify(
                     partition_init_finished,

@@ -251,7 +251,7 @@ acquiring_locks(Type, Content, State) ->
 updating_hashtrees(timeout, start, State) ->
     Partition = hd(State#state.partitions),
     %% Update local hashtree
-    ok = update_request(node(), Partition),
+    ok = update_request(partisan:node(), Partition),
     %% Update remote hashtree
     ok = update_request(State#state.peer, Partition),
     {next_state, updating_hashtrees, State, State#state.timeout};
@@ -431,23 +431,21 @@ release_remote_lock(Partition, Peer) ->
 
 
 %% @private
-update_request(Node, Partition) when Node =:= node() ->
-    do_async(fun() ->
-        %% acquired lock so we know there is no other update
-        %% and tree is built
-        case plum_db_partition_hashtree:update(Node, Partition) of
-            ok -> local_tree_updated;
-            Error -> {error, {local, Error}}
-        end
-    end);
-
 update_request(Node, Partition) ->
+    IsLocal = Node == partisan:node(),
+
     do_async(fun() ->
         %% acquired lock so we know there is no other update
         %% and tree is built
         case plum_db_partition_hashtree:update(Node, Partition) of
-            ok -> remote_tree_updated;
-            Error -> {error, {remote, Error}}
+            ok when IsLocal == true ->
+                local_tree_updated;
+            ok when IsLocal == false ->
+                remote_tree_updated;
+            Error when IsLocal == true ->
+                {error, {local, Error}};
+            Error when IsLocal == false ->
+                {error, {remote, Error}}
         end
     end).
 

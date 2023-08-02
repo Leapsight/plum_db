@@ -1183,7 +1183,7 @@ send(To, Message) ->
         {RemoteProcess, RemoteNode} ->
             {RemoteNode, RemoteProcess};
         _ ->
-            {node(), To}
+            {partisan:node(), To}
     end,
 
     partisan:forward_message(Node, ServerRef, Message, []),

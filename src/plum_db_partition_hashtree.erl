@@ -252,7 +252,7 @@ key_hashes(Node, Partition, Prefixes, Segment) ->
 -spec lock(plum_db:partition()) -> ok | not_built | locked.
 
 lock(Partition) ->
-    lock(node(), Partition).
+    lock(partisan:node(), Partition).
 
 
 %% -----------------------------------------------------------------------------
@@ -296,7 +296,7 @@ lock(Node, Partition, Pid) ->
 -spec release_lock(plum_db:partition()) -> ok.
 
 release_lock(Partition) ->
-    release_lock(node(), Partition).
+    release_lock(partisan:node(), Partition).
 
 
 %% -----------------------------------------------------------------------------
@@ -346,10 +346,10 @@ release_locks() ->
 
     lists:foldl(
         fun(Partition, Acc) ->
-            ServerRef = {name(Partition), node()},
+            Server = {name(Partition), partisan:node()},
             Cmd = {release_lock, external, undefined},
 
-            case partisan_gen_server:call(ServerRef, Cmd, ?CALL_OPTS) of
+            case partisan_gen_server:call(Server, Cmd, ?CALL_OPTS) of
                 ok ->
                     maps_utils:append(ok, Partition, Acc);
                 {error, Reason} ->
@@ -370,7 +370,7 @@ release_locks() ->
     ok | not_locked | not_built | ongoing_update.
 
 update(Partition) ->
-    update(node(), Partition).
+    update(partisan:node(), Partition).
 
 
 %% -----------------------------------------------------------------------------
@@ -399,7 +399,7 @@ update(Node, Partition) ->
 -spec reset(plum_db:partition()) -> ok.
 
 reset(Partition) ->
-    reset(node(), Partition).
+    reset(partisan:node(), Partition).
 
 
 %% -----------------------------------------------------------------------------
@@ -514,7 +514,7 @@ handle_cast(reset, #state{built = true, lock = {internal, _, Pid}} = State) ->
         reason => ongoing_update,
         lock_owner => Pid,
         partition => State#state.partition,
-        node => node()
+        node => partisan:node()
     }),
     NewState = schedule_reset(State),
     {noreply, NewState};
@@ -525,7 +525,7 @@ handle_cast(reset, #state{built = true, lock = {external, _, Pid}} = State) ->
         reason => locked,
         lock_owner => Pid,
         partition => State#state.partition,
-        node => node()
+        node => partisan:node()
     }),
     NewState = schedule_reset(State),
     {noreply, NewState};
@@ -535,7 +535,7 @@ handle_cast(reset, #state{built = _} = State) ->
         description => "Skipping hashtree reset",
         reason => not_built,
         partition => State#state.partition,
-        node => node()
+        node => partisan:node()
     }),
     {noreply, State#state{reset = false}};
 
@@ -647,7 +647,7 @@ do_reset(#state{lock = undefined} = State) ->
     ?LOG_INFO(#{
         description => "Resetting hashtree",
         partition => State#state.partition,
-        node => node()
+        node => partisan:node()
     }),
     do_init(State).
 
@@ -772,7 +772,7 @@ build_async(State) ->
                 ?LOG_INFO(#{
                     description => "Starting hashtree build",
                     partition => Partition,
-                    node => node()
+                    node => partisan:node()
                 }),
 
 
@@ -791,7 +791,7 @@ build_async(State) ->
                             class => Class,
                             reason => Reason,
                             stacktrace => Stacktrace,
-                            node => node()
+                            node => partisan:node()
                         }),
                         exit(Reason)
                 after
@@ -829,7 +829,7 @@ build_done(State) ->
     ?LOG_INFO(#{
         description => "Finished hashtree build",
         partition => Partition,
-        node => node()
+        node => partisan:node()
     }),
 
     _ = plum_db_events:notify(hashtree_build_finished, {ok, Partition}),
@@ -844,7 +844,7 @@ build_error(Reason, State) ->
         description => "Building tree failed",
         reason => Reason,
         partition => Partition,
-        node => node()
+        node => partisan:node()
     }),
 
     _ = plum_db_events:notify(hashtree_build_finished, {ok, Partition}),
@@ -853,7 +853,6 @@ build_error(Reason, State) ->
 
 
 %% @private
-
 maybe_external_lock(_, From, #state{built = Value} = State)
 when Value == false orelse is_reference(Value) ->
     partisan_gen_server:reply(From, not_built),
