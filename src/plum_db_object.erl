@@ -20,7 +20,11 @@
 -module(plum_db_object).
 -include("plum_db.hrl").
 
--type t() :: {object, plum_db_dvvset:clock()}.
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
+-type t() :: {object, Clock :: plum_db_dvvset:clock()}.
 
 -export_type([t/0]).
 
@@ -41,24 +45,24 @@
 %% @doc returns a single value. if the object holds more than one value an error is generated
 %% @see values/2
 -spec value(plum_db_object()) -> plum_db_value().
-value(Obj) ->
+value({object, _} = Obj) ->
     [Value] = values(Obj),
     Value.
 
 %% @doc returns a list of values held in the object
 -spec values(plum_db_object()) -> [plum_db_value()].
-values({object, Object}) ->
-    [Value || {Value, _Ts} <- plum_db_dvvset:values(Object)].
+values({object, Clock}) ->
+    [Value || {Value, _Ts} <- plum_db_dvvset:values(Clock)].
 
 %% @doc returns the number of siblings in the given object
 -spec value_count(plum_db_object()) -> non_neg_integer().
-value_count({object, Object}) ->
-    plum_db_dvvset:size(Object).
+value_count({object, Clock}) ->
+    plum_db_dvvset:size(Clock).
 
 %% @doc returns the context (opaque causal history) for the given object
 -spec context(plum_db_object()) -> plum_db_context().
-context({object, Object}) ->
-    plum_db_dvvset:join(Object).
+context({object, Clock}) ->
+    plum_db_dvvset:join(Clock).
 
 %% @doc returns the representation for an empty context (opaque causal history)
 -spec empty_context() -> plum_db_context().
@@ -66,8 +70,8 @@ empty_context() -> [].
 
 %% @doc returns a hash representing the objects contents
 -spec hash(plum_db_object()) -> binary().
-hash({object, Object}) ->
-    crypto:hash(sha, term_to_binary(Object)).
+hash({object, Clock}) ->
+    crypto:hash(sha, term_to_binary(Clock)).
 
 %% @doc modifies a potentially existing object, setting its value and updating
 %% the causual history. If a function is provided as the third argument
@@ -102,13 +106,13 @@ reconcile(undefined, _LocalObj) ->
     false;
 reconcile(RemoteObj, undefined) ->
     {true, RemoteObj};
-reconcile({object, RemoteObj}, {object, LocalObj}) ->
-    Less  = plum_db_dvvset:less(RemoteObj, LocalObj),
-    Equal = plum_db_dvvset:equal(RemoteObj, LocalObj),
+reconcile({object, RemoteClock}, {object, LocalClock}) ->
+    Less  = plum_db_dvvset:less(RemoteClock, LocalClock),
+    Equal = plum_db_dvvset:equal(RemoteClock, LocalClock),
     case not (Equal or Less) of
         false -> false;
         true ->
-            {true, {object, plum_db_dvvset:sync([LocalObj, RemoteObj])}}
+            {true, {object, plum_db_dvvset:sync([LocalClock, RemoteClock])}}
     end.
 
 %% @doc Resolves siblings using either last-write-wins or the provided function and returns
@@ -118,13 +122,13 @@ reconcile({object, RemoteObj}, {object, LocalObj}) ->
     lww | fww | fun(([plum_db_value()]) -> plum_db_value())) ->
     plum_db_object().
 
-resolve({object, Object}, lww) ->
+resolve({object, Clock}, lww) ->
     LWW = fun ({_,TS1}, {_,TS2}) -> TS1 =< TS2 end,
-    {object, plum_db_dvvset:lww(LWW, Object)};
+    {object, plum_db_dvvset:lww(LWW, Clock)};
 
-resolve({object, Object}, fww) ->
+resolve({object, Clock}, fww) ->
     LWW = fun ({_,TS1}, {_,TS2}) -> TS1 >= TS2 end,
-    {object, plum_db_dvvset:lww(LWW, Object)};
+    {object, plum_db_dvvset:lww(LWW, Clock)};
 
 resolve({object, Existing}, Reconcile) when is_function(Reconcile) ->
     ResolveFun = fun({A, _}, {B, _}) -> timestamped_value(Reconcile(A, B)) end,
@@ -139,8 +143,8 @@ resolve({object, Existing}, Reconcile) when is_function(Reconcile) ->
 -spec is_stale(plum_db_context(), plum_db_object()) -> boolean().
 is_stale(_, undefined) ->
     false;
-is_stale(RemoteContext, {object, Obj}) ->
-    LocalContext = plum_db_dvvset:join(Obj),
+is_stale(RemoteContext, {object, Clock}) ->
+    LocalContext = plum_db_dvvset:join(Clock),
     %% returns true (stale) when local context is causally newer or equal to remote context
     descends(LocalContext, RemoteContext).
 
@@ -156,8 +160,16 @@ descends(Ca, Cb) ->
 
 %% @doc Returns true if the given context and the context of the existing object are equal
 -spec equal_context(plum_db_context(), plum_db_object()) -> boolean().
-equal_context(Context, {object, Obj}) ->
-    Context =:= plum_db_dvvset:join(Obj).
+equal_context(Context, {object, Clock}) ->
+    Context =:= plum_db_dvvset:join(Clock).
 
 timestamped_value(Value) ->
     {Value, os:timestamp()}.
+
+
+%% ===================================================================
+%% EUnit tests
+%% ===================================================================
+-ifdef(TEST).
+
+-endif.
