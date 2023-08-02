@@ -1459,7 +1459,7 @@ do_get(PKey, State) ->
 do_get(PKey, State, Default) ->
     case do_get(PKey, State) of
         {error, not_found} ->
-            Default;
+            {ok, Default};
         Other ->
             Other
     end.

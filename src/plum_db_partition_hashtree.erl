@@ -611,11 +611,13 @@ handle_info(Event, State) ->
     {noreply, State}.
 
 
-terminate(_Reason, State0) ->
-    {_, State1} = do_release_lock(State0),
+terminate(_Reason, State) ->
     %% TODO Here we should persist the hashtree to disk so that we avoid
     %% rebuilding next time (unless configured to do so)
-    hashtree_tree:destroy(State1#state.tree),
+    %% We do this first as anything else below that crashes might leave the
+    %% store backend locked e.g. leveldb
+    ok = hashtree_tree:destroy(State#state.tree),
+    _ = do_release_lock(State),
     ok.
 
 
