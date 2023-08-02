@@ -210,14 +210,19 @@ get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
         true ->
             partisan_gen_server:call(Name, {get, PKey, Opts}, Timeout);
         false ->
-            DBInfo = plum_db_partitions_sup:get_db_info(Name),
-
-            case do_get(PKey, DBInfo) of
-                {ok, Object} ->
-                    maybe_resolve(Object, Opts);
-                {error, _} = Error ->
-                    Error
+            try plum_db_partitions_sup:get_db_info(Name) of
+                DBInfo ->
+                    case do_get(PKey, DBInfo) of
+                        {ok, Object} ->
+                            maybe_resolve(Object, Opts);
+                        {error, _} = Error ->
+                            Error
+                    end
+            catch
+                _Class:Reason ->
+                    {error, Reason}
             end
+
     end.
 
 
