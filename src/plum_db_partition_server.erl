@@ -52,7 +52,7 @@
 }).
 
 -record(partition_iterator, {
-    owner_ref               ::  reference(),
+    owner_mref              ::  reference(),
     partition               ::  non_neg_integer(),
     disk                    ::  eleveldb:itr_ref() | undefined,
     ram_tab                 ::  ets:tab() | undefined,
@@ -62,7 +62,9 @@
     bin_prefix              ::  binary(),
     match_spec              ::  ets:comp_match_spec() | undefined,
     keys_only = false       ::  boolean(),
-    prev_key                ::  plum_db_pkey() | undefined,
+    %% plum_db_pkey() when iterating over ets, but binary() when iterating over
+    %% eleveldb
+    prev_key                ::  plum_db_pkey() | binary() | undefined,
     disk_done = true        ::  boolean(),
     ram_disk_done = true    ::  boolean(),
     ram_done = true         ::  boolean(),
@@ -270,8 +272,8 @@ merge(Name, PKey, Obj) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-merge({Name, _} = Ref, PKey, Obj, Timeout) when is_atom(Name) ->
-    partisan_gen_server:call(Ref, {merge, PKey, Obj}, Timeout);
+merge({Name, _} = ServerRef, PKey, Obj, Timeout) when is_atom(Name) ->
+    partisan_gen_server:call(ServerRef, {merge, PKey, Obj}, Timeout);
 
 merge(Name, PKey, Obj, Timeout) ->
     partisan_gen_server:call(Name, {merge, PKey, Obj}, ?CALL_OPTS(Timeout)).
@@ -741,13 +743,8 @@ handle_call({put, PKey, ValueOrFun, Opts}, _From, State) ->
 
 
 handle_call({dirty_put, PKey, Object, Opts}, _From, State) ->
-    Existing =
-        case do_get(PKey, State) of
-            {ok, Obj} ->
-                Obj;
-            {error, not_found} ->
-                undefined
-        end,
+    %% This will crash if error when reason =/= not_found
+    {ok, Existing} = do_get(PKey, State, undefined),
 
     Reply =
         try
@@ -799,12 +796,8 @@ handle_call({erase, PKey}, _From, State) ->
     DbRef = db_ref(State),
     Opts = write_opts(State),
 
-    Existing = case do_get(PKey, State) of
-        {ok, O} ->
-            O;
-        {error, not_found} ->
-            undefined
-    end,
+    %% This will crash if error when reason =/= not_found
+    {ok, Existing} = do_get(PKey, State, undefined),
 
     ok = maybe_hashtree_delete(PKey, Existing, State),
 
@@ -831,15 +824,11 @@ handle_call({erase, PKey}, _From, State) ->
 
     {reply, Result, State};
 
-handle_call({merge, PKey, Obj0}, _From, State) ->
+handle_call({merge, PKey0, Obj0}, _From, State) ->
 
     %% We need to do a read followed by a write atomically
-    Existing = case do_get(PKey, State) of
-        {ok, Val} ->
-            Val;
-        {error, not_found} ->
-            undefined
-    end,
+    %% This will crash if error when reason =/= not_found
+    {ok, Existing} = do_get(PKey0, State, undefined),
 
     case plum_db_object:reconcile(Obj0, Existing) of
         false ->
@@ -847,18 +836,21 @@ handle_call({merge, PKey, Obj0}, _From, State) ->
             {reply, false, State};
 
         {true, Obj1} ->
+            %% Harmonize result
             Result =
-                case callback(will_merge, PKey, [Obj1, Existing]) of
+                case callback(will_merge, PKey0, [Obj1, Existing]) of
                     true ->
-                        {true, Obj1};
-                    {true, _} = R ->
+                        {true, PKey0, Obj1};
+                    {true, Obj2} ->
+                        {true, PKey0, Obj2};
+                    {true, _, _} = R ->
                         R;
                     false ->
                         false
                 end,
 
             case Result of
-                {true, Obj} ->
+                {true, PKey, Obj} ->
                     case do_put(PKey, Obj, State) of
                         ok when Obj =/= Obj1 ->
                             %% The case then the callback modified the object,
@@ -910,15 +902,15 @@ handle_call(is_empty, _From, State) ->
     {reply, Result, State};
 
 handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
-    Ref = erlang:monitor(process, Pid),
+    Mref = erlang:monitor(process, Pid),
     {Prefix, _} = FullPrefix,
 
     KeyPattern = proplists:get_value(match, Opts, undefined),
 
-    MS = case KeyPattern of
-        undefined ->
+    MS = case KeyPattern == undefined of
+        true ->
             undefined;
-        KeyPattern ->
+        false ->
             ets:match_spec_compile([{
                 {FullPrefix, KeyPattern}, [], [true]
             }])
@@ -926,7 +918,7 @@ handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
 
     PartIter0 = #partition_iterator{
         partition = State#state.partition,
-        owner_ref = Ref,
+        owner_mref = Mref,
         full_prefix = FullPrefix,
         keys_only = proplists:get_value(keys_only, Opts, false),
         match_pattern = KeyPattern,
@@ -1280,6 +1272,15 @@ init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab) ->
 
 
 
+%% =============================================================================
+%% PRIVATE: Call handling
+%% =============================================================================
+
+
+
+
+
+
 
 %% =============================================================================
 %% PRIVATE
@@ -1340,12 +1341,6 @@ table_name(#partition_iterator{ram_tab = Tab}, ram) ->
 table_name(#partition_iterator{ram_disk_tab = Tab}, ram_disk) ->
     Tab;
 
-table_name(Name, ram) when is_atom(Name) ->
-    list_to_atom(atom_to_list(Name) ++ "_ram");
-
-table_name(Name, ram_disk) when is_atom(Name) ->
-    list_to_atom(atom_to_list(Name) ++ "_ram_disk");
-
 table_name(N, ram) when is_integer(N) ->
     list_to_atom(
         "plum_db_partition_" ++ integer_to_list(N) ++ "_server_ram");
@@ -1362,12 +1357,9 @@ prefix_type({{Prefix, _}, _}) ->
 
 %% @private
 modify(PKey, ValueOrFun, Opts, State) ->
-    {Existing, Ctxt} = case do_get(PKey, State) of
-        {ok, Object} ->
-            {Object, plum_db_object:context(Object)};
-        {error, not_found} ->
-            {undefined, plum_db_object:empty_context()}
-    end,
+    %% This will crash if error when reason =/= not_found
+    {ok, Existing} = do_get(PKey, State, undefined),
+    Ctxt = context(Existing),
     modify(PKey, ValueOrFun, Opts, State, Existing, Ctxt).
 
 
@@ -1460,17 +1452,35 @@ broadcast(PKey, Obj) ->
 
 %% @private
 do_get(PKey, State) ->
-    do_get(PKey, State, prefix_type(PKey)).
+    do_get_from(PKey, State, prefix_type(PKey)).
 
 
 %% @private
-do_get(PKey, State, Type)
+do_get(PKey, State, Default) ->
+    case do_get(PKey, State) of
+        {error, not_found} ->
+            Default;
+        Other ->
+            Other
+    end.
+
+
+%% @private
+context(undefined) ->
+    plum_db_object:empty_context();
+
+context(Object) ->
+    plum_db_object:context(Object).
+
+
+%% @private
+do_get_from(PKey, State, Type)
 when (Type == disk) orelse (Type == undefined) ->
     DbRef = db_ref(State),
     ReadOpts = read_opts(State),
     result(eleveldb:get(DbRef, encode_key(PKey), ReadOpts));
 
-do_get(PKey, State, ram) ->
+do_get_from(PKey, State, ram) ->
     case ets:lookup(ram_tab(State), PKey) of
         [] ->
             {error, not_found};
@@ -1478,14 +1488,14 @@ do_get(PKey, State, ram) ->
             {ok, Obj}
     end;
 
-do_get(PKey, State, ram_disk) ->
+do_get_from(PKey, State, ram_disk) ->
     case ets:lookup(ram_disk_tab(State), PKey) of
         [] ->
             %% During init we would be restoring the ram_disk prefixes
             %% asynchronously.
             %% So we need to fallback to disk until the restore is
             %% done.
-            do_get(PKey, State, disk);
+            do_get_from(PKey, State, disk);
         [{_, Obj}] ->
             {ok, Obj}
     end.
@@ -1511,14 +1521,7 @@ maybe_hashtree_delete(PKey, Existing, State) ->
             Partition = State#state.partition,
             ActorId = State#state.actor_id,
             Hash = plum_db_object:hash(Existing),
-            Ctxt =
-                case Existing == undefined of
-                    true ->
-                        plum_db_object:empty_context();
-                    false ->
-                        plum_db_object:context(Existing)
-                end,
-
+            Ctxt = context(Existing),
             %% We create and insert the Erased object, this will be actually
             %% removed the next time we rebuild the tree, but until
             %% then we needed as a tombstone to avoid this becoming a
@@ -1607,10 +1610,7 @@ prev_iterator(ram_disk, Iter) ->
     Iter#partition_iterator{
         disk_done = false,
         ram_disk_done = false
-    };
-
-prev_iterator(disk, _) ->
-    undefined.
+    }.
 
 
 %% @private
@@ -1768,19 +1768,16 @@ update_iterator(ram_disk, Iter, Key, Cont) ->
 
 
 %% @private
-add_iterator(#partition_iterator{owner_ref = OwnerRef} = Iter, State)
-when is_reference(OwnerRef) ->
-    Iterators1 = lists:keystore(OwnerRef, 2, State#state.iterators, Iter),
+add_iterator(#partition_iterator{} = Iter, State) ->
+    Mref = Iter#partition_iterator.owner_mref,
+    Iterators1 = lists:keystore(Mref, 2, State#state.iterators, Iter),
     State#state{iterators = Iterators1}.
 
 
 %% @private
-take_iterator(#partition_iterator{owner_ref = OwnerRef}, State) ->
-    take_iterator(OwnerRef, State);
-
-take_iterator(OwnerRef, State) ->
-    Pos = #partition_iterator.owner_ref,
-    case lists:keytake(OwnerRef, Pos, State#state.iterators) of
+take_iterator(Mref, State) when is_reference(Mref) ->
+    Pos = #partition_iterator.owner_mref,
+    case lists:keytake(Mref, Pos, State#state.iterators) of
         {value, Iter, Iterators1} ->
             {Iter, State#state{iterators = Iterators1}};
         false ->
@@ -1789,17 +1786,17 @@ take_iterator(OwnerRef, State) ->
 
 
 %% @private
-close_iterator(#partition_iterator{owner_ref = OwnerRef}, State) ->
-    close_iterator(OwnerRef, State);
+close_iterator(#partition_iterator{owner_mref = Mref}, State) ->
+    close_iterator(Mref, State);
 
-close_iterator(Ref, State0) when is_reference(Ref) ->
-    case take_iterator(Ref, State0) of
+close_iterator(Mref, State0) when is_reference(Mref) ->
+    case take_iterator(Mref, State0) of
         {#partition_iterator{disk = undefined}, State1} ->
-            _ = erlang:demonitor(Ref, [flush]),
+            _ = erlang:demonitor(Mref, [flush]),
             State1;
 
         {#partition_iterator{disk = DbIter}, State1} ->
-            _ = erlang:demonitor(Ref, [flush]),
+            _ = erlang:demonitor(Mref, [flush]),
             _ = catch eleveldb:iterator_close(DbIter),
             State1;
 
@@ -1930,15 +1927,26 @@ callback(Name, {{Prefix, _}, _} = PKey, Args) when is_list(Args) ->
                         true;
                     true when Name == will_merge ->
                         true;
-                    {true, _} = Result when Name == will_merge ->
+                    {true, {object, _}} = Result when Name == will_merge ->
                         Result;
-                    {true, _, _} = Result when Name == will_merge ->
+                    {true, _, {object, _}} = Result when Name == will_merge ->
                         Result;
                     false when Name == will_merge ->
-                        false
+                        false;
+                    Other ->
+                        throw({badreturn, Other})
                 end
         end
     catch
+        throw:Reason ->
+            ?LOG_ERROR(#{
+                description => "Prefix callback return is invalid. Ignored",
+                callback => Name,
+                class => throw,
+                reason => Reason
+            }),
+            Default;
+
         Class:Reason:Stacktrace ->
             ?LOG_ERROR(#{
                 description => "Error while invoking prefix callback. Ignored",
