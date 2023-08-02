@@ -284,8 +284,8 @@ get_partition({_, _} = FP) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec get_partition
-        (prefix | key, Arg :: plum_db_pkey()) -> partition();
-        (prefix, Arg :: plum_db_pkey() | plum_db_prefix()) -> partition().
+        (key, Arg :: plum_db_pkey()) -> partition();
+        (prefix, Arg :: plum_db_prefix()) -> partition().
 
 get_partition(prefix, {{_, _} = FP, _}) ->
     get_partition(FP);
@@ -990,8 +990,9 @@ iterate(#iterator{ref = Ref} = I) ->
 
 
 %% @private
--spec iterate(plum_db_partition_server:iterator_move_result(), iterator()) ->
-    iterator().
+-spec iterate(
+    plum_db_partition_server:iterator_move_result() | {break, any()},
+    iterator()) -> iterator().
 
 iterate({error, no_match, Ref1}, I0) ->
     %% We carry on trying to match the remaining keys
