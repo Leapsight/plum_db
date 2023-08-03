@@ -200,7 +200,7 @@ destroy(Tree) ->
     ok.
 
 %% @doc an alias for insert(Prefixes, Key, Hash, [], Tree)
--spec insert(prefixes(), binary(), binary(), tree()) -> tree() | {error, term()}.
+-spec insert(prefixes(), binary(), binary(), tree()) -> {ok, tree()} | {error, term()}.
 insert(Prefixes, Key, Hash, Tree) ->
     insert(Prefixes, Key, Hash, [], Tree).
 
@@ -220,24 +220,25 @@ insert(Prefixes, Key, Hash, Tree) ->
 -type insert_opt_if_missing() :: {if_missing, boolean()}.
 -type insert_opt()            :: insert_opt_if_missing().
 -type insert_opts()           :: [insert_opt()].
--spec insert(prefixes(), binary(), binary(), insert_opts(), tree()) -> tree() | {error, term()}.
+-spec insert(prefixes(), binary(), binary(), insert_opts(), tree()) ->
+    {ok, tree()} | {error, term()}.
 insert(Prefixes, Key, Hash, Opts, Tree) ->
     NodeName = prefixes_to_node_name(Prefixes),
     case valid_prefixes(NodeName, Tree) of
         true ->
-            insert_hash(Key, Hash, Opts, NodeName, Tree);
+            {ok, insert_hash(Key, Hash, Opts, NodeName, Tree)};
         false ->
             {error, bad_prefixes}
     end.
 
 
--spec delete(prefixes(), binary(), tree()) -> tree() | {error, term()}.
+-spec delete(prefixes(), binary(), tree()) -> {ok, tree()} | {error, term()}.
 
 delete(Prefixes, Key, Tree) ->
     NodeName = prefixes_to_node_name(Prefixes),
     case valid_prefixes(NodeName, Tree) of
         true ->
-            delete_hash(Key, NodeName, Tree);
+            {ok, delete_hash(Key, NodeName, Tree)};
         false ->
             {error, bad_prefixes}
     end.

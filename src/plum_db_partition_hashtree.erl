@@ -36,7 +36,7 @@
     %% the plum_db partition this hashtree represents
     partition       ::  non_neg_integer(),
     %% the tree managed by this process
-    tree            ::  hashtree_tree:tree() | undefined,
+    tree            ::  hashtree_tree:tree(),
     %% whether or not the tree has been built or a monitor ref
     %% if the tree is being built
     built = false   ::  boolean() | reference(),
@@ -306,7 +306,8 @@ lock(Node, Partition, Pid) when is_pid(Pid), is_integer(Partition)  ->
 %% @see lock/3
 %% @end
 %% -----------------------------------------------------------------------------
--spec release_lock(plum_db:partition()) -> ok.
+-spec release_lock(plum_db:partition()) ->
+    ok | {error, not_locked | not_allowed}.
 
 release_lock(Partition) ->
     release_lock(partisan:node(), Partition).
@@ -318,7 +319,8 @@ release_lock(Partition) ->
 %% @see lock/3
 %% @end
 %% -----------------------------------------------------------------------------
--spec release_lock(node(), plum_db:partition()) -> ok.
+-spec release_lock(node(), plum_db:partition()) ->
+    ok | {error, not_locked | not_allowed}.
 
 release_lock(Node, Partition) ->
     release_lock(Node, Partition, self()).
@@ -460,14 +462,13 @@ compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
 
 
 init([Partition, DataRoot]) ->
-    Id = name(Partition),
-    State0 = #state{
-        id = Id,
-        data_root = DataRoot,
-        partition = Partition
-    },
-    State = do_init(State0),
-    {ok, State}.
+    try
+        {ok, do_init(Partition, DataRoot)}
+    catch
+        _:Reason ->
+            {stop, Reason}
+    end.
+
 
 handle_call({compare, RemoteFun, HandlerFun, HandlerAcc}, From, State) ->
     maybe_compare_async(From, RemoteFun, HandlerFun, HandlerAcc, State),
@@ -504,14 +505,26 @@ handle_call({prefix_hash, Prefix}, _From, #state{tree = Tree} = State) ->
 handle_call(
     {insert, PKey, Hash, IfMissing}, _From, #state{tree = Tree} = State) ->
     {Prefixes, Key} = prepare_pkey(PKey),
-    Tree1 = hashtree_tree:insert(Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree),
-    {reply, ok, State#state{tree=Tree1}};
+    Result = hashtree_tree:insert(
+        Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree
+    ),
+    case Result of
+        {ok, Tree1} ->
+            {reply, ok, State#state{tree = Tree1}};
+
+        {error, bad_prefixes} = Error ->
+            {reply, Error, State}
+    end;
 
 handle_call(
     {delete, PKey}, _From, #state{tree = Tree} = State) ->
     {Prefixes, Key} = prepare_pkey(PKey),
-    Tree1 = hashtree_tree:delete(Prefixes, Key, Tree),
-    {reply, ok, State#state{tree=Tree1}};
+    case hashtree_tree:delete(Prefixes, Key, Tree) of
+        {ok, Tree1} ->
+            {reply, ok, State#state{tree = Tree1}};
+        {error, bad_prefixes} = Error ->
+            {reply, Error, State}
+    end;
 
 handle_call(_Message, _From, State) ->
     {reply, {error, unsupported_call}, State}.
@@ -633,38 +646,41 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
-do_init(#state{data_root = DataRoot, partition = Partition} = State0) ->
-    %% TODO we shoul have persiste the hashtree_tree and restore here if
-    %% existed. See terminate.
-    try
-        TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
-        Tree = hashtree_tree:new(
-            TreeId, [{data_dir, DataRoot}, {num_levels, 2}]
-        ),
-        TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
-        State = State0#state{
-            tree = Tree,
-            build_ts_secs = undefined,
-            ttl_secs = TTL,
-            lock = undefined
-        },
-        NewState = build_async(State),
-        schedule_tick(NewState)
-    catch
-        _:Reason ->
-            {stop, Reason}
-    end.
+do_init(Partition, DataRoot) ->
+
+    %% TODO we should have persisted the hashtree_tree and restore here if
+%% existed. See terminate.
+    TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
+    Tree = hashtree_tree:new(
+        TreeId, [{data_dir, DataRoot}, {num_levels, 2}]
+    ),
+    TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
+
+
+    State0 = #state{
+        id = name(Partition),
+        data_root = DataRoot,
+        partition = Partition,
+        tree = Tree,
+        build_ts_secs = undefined,
+        %% eqwalizer:ignore TTL
+        ttl_secs = TTL,
+        lock = undefined
+    },
+
+    State1 = build_async(State0),
+    schedule_tick(State1).
 
 
 %% @private
-do_reset(#state{lock = undefined} = State) ->
+do_reset(#state{data_root = DataRoot, partition = Partition, lock = undefined} = State) ->
     _ = hashtree_tree:destroy(State#state.tree),
     ?LOG_INFO(#{
         description => "Resetting hashtree",
         partition => State#state.partition,
         node => partisan:node()
     }),
-    do_init(State).
+    do_init(Partition, DataRoot).
 
 
 %% @private
@@ -895,10 +911,14 @@ maybe_external_lock(_, From, #state{built = true} = State) ->
 -spec do_lock(internal|external, pid() | partisan_remote_ref:p(), state()) ->
     state().
 
-do_lock(Type, Process, State) ->
-    %% This works for Process :: pid() and also for Partisan ref
+do_lock(internal, Pid, State) when is_pid(Pid) ->
+    Mref = erlang:monitor(process, Pid),
+    State#state{lock = {internal, Mref, Pid}};
+
+do_lock(external, Process, State) ->
     Mref = partisan:monitor(process, Process, ?MONITOR_OPTS),
-    State#state{lock = {Type, Mref, Process}}.
+    %% eqwalizer:ignore Mref
+    State#state{lock = {external, Mref, Process}}.
 
 
 %% @private
@@ -964,5 +984,6 @@ cancel_timer(#state{timer = undefined} = State) ->
     State;
 
 cancel_timer(#state{timer = Ref} = State) ->
+    %% eqwalizer:ignore Ref
     _ = erlang:cancel_timer(Ref),
     State#state{timer = undefined}.
