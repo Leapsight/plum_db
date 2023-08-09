@@ -393,7 +393,11 @@ handle_other_event(StateLabel, Type, Event, State) ->
     {keep_state, State}.
 
 
+%% -----------------------------------------------------------------------------
 %% @private
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
 async_acquire_remote_lock(Peer, Partition) ->
     Self = self(),
     do_async(fun() ->
@@ -450,7 +454,12 @@ update_request(Node, Partition) ->
     end).
 
 
+%% -----------------------------------------------------------------------------
 %% @private
+%% @doc Executes the function `F' in a newly spawned linked process and
+%% immediately returns `ok'.
+%% @end
+%% -----------------------------------------------------------------------------
 do_async(F) ->
     Statem = self(),
 
