@@ -1908,10 +1908,15 @@ new_remote_iterator(PidRef, FullPrefix, Opts, #state{iterators = Iterators}) ->
 
 %% @private
 close_remote_iterator(Ref, #state{iterators = Iterators} = State) ->
-    from_remote_iterator(fun iterator_close/1, Ref, State),
-    true = partisan:demonitor(Ref, [flush]),
-    _ = ets:take(Iterators, Ref),
-    ok.
+    case partisan:is_reference(Ref) of
+        true ->
+            from_remote_iterator(fun iterator_close/1, Ref, State),
+            _ = ets:take(Iterators, Ref),
+            true = partisan:demonitor(Ref, [flush]),
+            ok;
+        false ->
+            ok
+    end.
 
 
 %% -----------------------------------------------------------------------------
