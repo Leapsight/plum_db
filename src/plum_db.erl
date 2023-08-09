@@ -492,6 +492,9 @@ when is_atom(Node) andalso
         _ ->
             %% This assumes all nodes have the same number of plum_db
             %% partitions.
+            %% TODO We could implement a protocol that validates this by taking
+            %% the merkle tree of the configuration of each node and verify they
+            %% all match - maybe something we can ask Partisan to provide
             Name = plum_db_partition_server:name(get_partition(PKey)),
             ServerRef = {Name, Node},
 
