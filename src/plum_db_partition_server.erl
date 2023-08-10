@@ -24,6 +24,7 @@
 -behaviour(partisan_gen_server).
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
+-include("utils.hrl").
 
 %% leveldb uses $\0 but since external term format will contain nulls
 %% we need an additional separator. We use the ASCII unit separator
@@ -33,17 +34,17 @@
 -record(state, {
     name                                ::  atom(),
     partition                           ::  non_neg_integer(),
-    actor_id                            ::  {integer(), node()} | undefined,
-    db_info                             ::  db_info() | undefined,
+    actor_id                            ::  optional({integer(), node()}),
+    db_info                             ::  optional(db_info()),
 	config = []							::	opts(),
 	data_root							::	file:filename(),
 	open_opts = []						::	opts(),
     iterators = []                      ::  iterators(),
-    helper = undefined                  ::  pid() | undefined
+    helper = undefined                  ::  optional(pid())
 }).
 
 -record(db_info, {
-    db_ref 								::	eleveldb:db_ref() | undefined,
+    db_ref 								::	optional(eleveldb:db_ref()),
     ram_tab                             ::  atom(),
     ram_disk_tab                        ::  atom(),
 	read_opts = []						::	opts(),
@@ -54,22 +55,22 @@
 -record(partition_iterator, {
     owner_mref              ::  reference(),
     partition               ::  non_neg_integer(),
-    disk                    ::  eleveldb:itr_ref() | undefined,
-    ram_tab                 ::  ets:tab() | undefined,
-    ram_disk_tab            ::  ets:tab() | undefined,
+    disk                    ::  optional(eleveldb:itr_ref()),
+    ram_tab                 ::  optional(ets:tab()),
+    ram_disk_tab            ::  optional(ets:tab()),
     full_prefix             ::  plum_db_prefix_pattern(),
     match_pattern           ::  term(),
     bin_prefix              ::  binary(),
-    match_spec              ::  ets:comp_match_spec() | undefined,
+    match_spec              ::  optional(ets:comp_match_spec()),
     keys_only = false       ::  boolean(),
     %% plum_db_pkey() when iterating over ets, but binary() when iterating over
     %% eleveldb
-    prev_key                ::  plum_db_pkey() | binary() | undefined,
+    prev_key                ::  optional(plum_db_pkey() | binary()),
     disk_done = true        ::  boolean(),
     ram_disk_done = true    ::  boolean(),
     ram_done = true         ::  boolean(),
-    ram                     ::  key | {cont, any()} | undefined,
-    ram_disk                ::  key | {cont, any()} | undefined
+    ram                     ::  optional(key | {cont, any()}),
+    ram_disk                ::  optional(key | {cont, any()})
 }).
 
 -type opts()                    :: 	[{atom(), term()}].
@@ -78,13 +79,14 @@
 -type iterators()               ::  [iterator()].
 -type iterator_action()         ::  first
                                     | last | next | prev
-                                    | prefetch | prefetch_stop
+                                    | prefetch | prefetch_stop.
+-type iterator_action_ext()     ::  iterator_action()
                                     | plum_db_prefix()
                                     | plum_db_pkey()
                                     | binary().
 -type iterator_move_result()    ::  {ok,
                                         Key :: binary() | plum_db_pkey(),
-                                        Value :: plumd_db_object:t(),
+                                        Value :: plum_db_object:t(),
                                         iterator()
                                     }
                                     | {ok,
@@ -97,6 +99,8 @@
 
 -export_type([db_info/0]).
 -export_type([iterator/0]).
+-export_type([iterator_action/0]).
+-export_type([iterator_action_ext/0]).
 -export_type([iterator_move_result/0]).
 
 -export([byte_size/1]).
@@ -409,7 +413,7 @@ iterator_close(Store, #partition_iterator{} = Iter) when is_atom(Store) ->
 %% @doc Iterates over the storage stack in order (disk -> ram_disk -> ram).
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator_move(iterator(), iterator_action()) -> iterator_move_result().
+-spec iterator_move(iterator(), iterator_action_ext()) -> iterator_move_result().
 
 iterator_move(
     #partition_iterator{disk_done = true} = Iter, {undefined, undefined}) ->
@@ -424,11 +428,11 @@ iterator_move(#partition_iterator{disk_done = true} = Iter, prefetch_stop) ->
     %% We continue with ets so we translate the action
     iterator_move(Iter, next);
 
-iterator_move(#partition_iterator{disk_done = false} = Iter, Action) ->
+iterator_move(#partition_iterator{disk_done = false} = Iter, Term) ->
 
     DbIter = Iter#partition_iterator.disk,
 
-    case eleveldb:iterator_move(DbIter, eleveldb_action(Action)) of
+    case eleveldb:iterator_move(DbIter, eleveldb_action(Term)) of
         {ok, K} ->
             NewIter = Iter#partition_iterator{prev_key = K},
             case matches_key(K, Iter) of
@@ -1614,6 +1618,8 @@ prev_iterator(ram_disk, Iter) ->
 
 
 %% @private
+-spec eleveldb_action(iterator_action()) -> iterator_action() | binary().
+
 eleveldb_action({?WILDCARD, _}) ->
     first;
 

@@ -288,44 +288,48 @@
 -type meta_bin()    :: <<_:8, _:_*8>>.
 
 -type proplist() :: proplists:proplist().
--type orddict() :: orddict:orddict().
+-type orddict() :: orddict(integer(), binary()).
+-type orddict(K, V) :: orddict:orddict(K, V).
 -type index() :: non_neg_integer().
 
 -type keydiff() :: {missing | remote_missing | different, binary()}.
 
 -type remote_fun() :: fun((get_bucket | key_hashes | init | final,
-                           {integer(), integer()} | integer() | term()) -> any()).
+                           {integer(), integer()} | integer() | term()) -> any()
+                        ).
 
 -type acc_fun(Acc) :: fun(([keydiff()], Acc) -> Acc).
 
--type select_fun(T) :: fun((orddict()) -> T).
+-type select_fun(T) :: fun((orddict(binary(), binary())) -> T).
 
--record(state, {id             ::   tree_id_bin() | undefined,
-                index          ::   index() | undefined,
-                levels         ::   pos_integer() | undefined,
-                segments       ::   pos_integer() | undefined,
-                width          ::    pos_integer() | undefined,
-                mem_levels     ::   integer() | undefined,
-                tree           ::   dict:dict() | undefined,
-                ref            ::   term(),
-                path           ::   string() | undefined,
-                itr            ::   term(),
-                write_buffer   ::   [{put, binary(), binary()}
-                                    | {delete, binary()}]
-                                    | undefined,
-                write_buffer_count  :: integer() | undefined,
-                dirty_segments :: array:array() | undefined
-               }).
+-type segment_store() :: {eleveldb:db_ref(), string()}.
 
--record(itr_state, {itr                :: term(),
-                    id                 :: tree_id_bin(),
-                    current_segment    :: '*' | integer(),
-                    remaining_segments :: ['*' | integer()],
-                    acc_fun            :: fun(([{binary(),binary()}]) -> any()),
-                    segment_acc        :: [{binary(), binary()}],
-                    final_acc          :: [{integer(), any()}],
-                    prefetch=false     :: boolean()
-                   }).
+-record(state, {
+    id                  ::  tree_id_bin(),
+    index               ::  index(),
+    levels              ::  pos_integer(),
+    segments            ::  pos_integer(),
+    width               ::  pos_integer(),
+    mem_levels          ::  integer(),
+    tree                ::  dict:dict(),
+    ref                 ::  eleveldb:db_ref(),
+    path                ::  string(),
+    itr                 ::  term(),
+    write_buffer        ::  [{put, binary(), binary()} | {delete, binary()}],
+    write_buffer_count  ::  integer(),
+    dirty_segments      ::  array:array()
+}).
+
+-record(itr_state, {
+    itr                 ::   term(),
+    id                  ::   tree_id_bin(),
+    current_segment     ::   '*' | integer(),
+    remaining_segments  ::   ['*' | integer()],
+    acc_fun             ::   fun(([{binary(),binary()}]) -> any()),
+    segment_acc         ::   [{binary(), binary()}],
+    final_acc           ::   [{integer(), any()}],
+    prefetch=false      ::   boolean()
+}).
 
 -opaque hashtree() :: #state{}.
 -export_type([hashtree/0,
@@ -347,41 +351,57 @@ new() ->
 
 -spec new({index(), tree_id_bin() | non_neg_integer()}) ->
     hashtree() | no_return().
+
 new(TreeId) ->
-    State = new_segment_store([], #state{}),
-    new(TreeId, State, []).
+    RefDir = new_segment_store([]),
+    new(TreeId, RefDir, []).
 
 -spec new({index(), tree_id_bin() | non_neg_integer()}, proplist()) ->
     hashtree()  | no_return();
     ({index(), tree_id_bin() | non_neg_integer()}, hashtree()) ->
         hashtree() | no_return().
 new(TreeId, Options) when is_list(Options) ->
-    State = new_segment_store(Options, #state{}),
-    new(TreeId, State, Options);
-new(TreeId, LinkedStore = #state{}) ->
-    new(TreeId, LinkedStore, []).
+    RefDir = new_segment_store(Options),
+    new(TreeId, RefDir, Options);
+new(TreeId, #state{ref = Ref, path = DataDir}) ->
+    new(TreeId, {Ref, DataDir}, []).
 
 -spec new({index(), tree_id_bin() | non_neg_integer()},
-          hashtree(),
+          segment_store(),
           proplist()) -> hashtree() | no_return().
-new({Index,TreeId}, LinkedStore, Options) ->
+
+new({Index,TreeId}, {Ref, DataDir}, Options) ->
     NumSegments = proplists:get_value(segments, Options, ?NUM_SEGMENTS),
     Width = proplists:get_value(width, Options, ?WIDTH),
     MemLevels = proplists:get_value(mem_levels, Options, ?MEM_LEVELS),
+
+    is_integer(NumSegments)
+        orelse error({invalid_option, {segments, NumSegments}}),
+
+    is_integer(Width)
+        orelse error({invalid_option, {width, Width}}),
+
+    is_integer(MemLevels)
+        orelse error({invalid_option, {mem_levels, MemLevels}}),
+
     NumLevels = erlang:trunc(math:log(NumSegments) / math:log(Width)) + 1,
-    State = #state{id=encode_id(TreeId),
-                   index=Index,
-                   levels=NumLevels,
-                   segments=NumSegments,
-                   width=Width,
-                   mem_levels=MemLevels,
-                   %% dirty_segments=gb_sets:new(),
-                   dirty_segments=bitarray_new(NumSegments),
-                   write_buffer=[],
-                   write_buffer_count=0,
-                   tree=dict:new()},
-    State2 = share_segment_store(State, LinkedStore),
-    State2.
+
+
+    #state{
+        ref= Ref,
+        path= DataDir,
+        id=encode_id(TreeId),
+        index=Index,
+        levels=NumLevels,
+        segments=NumSegments,
+        width=Width,
+        mem_levels=MemLevels,
+        %% dirty_segments=gb_sets:new(),
+        dirty_segments=bitarray_new(NumSegments),
+        write_buffer=[],
+        write_buffer_count=0,
+        tree=dict:new()
+}.
 
 -spec close(hashtree()) -> hashtree().
 
@@ -402,10 +422,10 @@ close_iterator(Itr) ->
 -spec destroy(string() | hashtree()) -> ok | hashtree().
 destroy(Path) when is_list(Path) ->
     ok = eleveldb:destroy(Path, []);
-destroy(State) ->
+destroy(#state{path = Path} = State) when is_list(Path)->
     %% Assumption: close was already called on all hashtrees that
     %%             use this LevelDB instance,
-    ok = eleveldb:destroy(State#state.path, []),
+    ok = eleveldb:destroy(Path, []),
     State.
 
 -spec insert(binary(), binary(), hashtree()) -> hashtree().
@@ -527,7 +547,7 @@ rehash_perform(State) ->
             NewState
     end.
 
--spec top_hash(hashtree()) -> [] | [{0, binary()}].
+-spec top_hash(hashtree()) -> orddict().
 top_hash(State) ->
     get_bucket(1, 0, State).
 
@@ -569,11 +589,13 @@ read_meta(Key, State) when is_binary(Key) ->
             undefined
     end.
 
--spec key_hashes(hashtree(), integer()) -> [{integer(), orddict()}].
+-spec key_hashes(hashtree(), integer()) -> [{'*'|integer(), orddict()}].
+
 key_hashes(State, Segment) ->
     multi_select_segment(State, [Segment], fun(X) -> X end).
 
 -spec get_bucket(integer(), integer(), hashtree()) -> orddict().
+
 get_bucket(Level, Bucket, State) ->
     case Level =< State#state.mem_levels of
         true ->
@@ -622,7 +644,7 @@ esha_final(Ctx) ->
     crypto:sha_final(Ctx).
 -endif.
 
--spec set_bucket(integer(), integer(), any(), hashtree()) -> hashtree().
+-spec set_bucket(integer(), integer(), orddict(), hashtree()) -> hashtree().
 set_bucket(Level, Bucket, Val, State) ->
     case Level =< State#state.mem_levels of
         true ->
@@ -631,16 +653,19 @@ set_bucket(Level, Bucket, Val, State) ->
             set_disk_bucket(Level, Bucket, Val, State)
     end.
 
--spec new_segment_store(proplist(), hashtree()) -> hashtree().
-new_segment_store(Opts, State) ->
-    DataDir = case proplists:get_value(segment_path, Opts) of
-                  undefined ->
-                      Root = "/tmp/anti/level",
-                      <<P:128/integer>> = md5(term_to_binary({erlang:timestamp(), make_ref()})),
-                      filename:join(Root, integer_to_list(P));
-                  SegmentPath ->
-                      SegmentPath
-              end,
+-spec new_segment_store(proplist()) -> segment_store().
+
+new_segment_store(Opts) when is_list(Opts) ->
+    DataDir =
+        case proplists:get_value(segment_path, Opts) of
+            undefined ->
+                Root = "/tmp/anti/level",
+                <<P:128/integer>> =
+                    md5(term_to_binary({erlang:timestamp(), make_ref()})),
+                filename:join(Root, integer_to_list(P));
+            SegmentPath when is_list(SegmentPath) ->
+                SegmentPath
+        end,
 
     DefaultWriteBufferMin = 30 * 1024 * 1024,
     DefaultWriteBufferMax = 60 * 1024 * 1024,
@@ -649,6 +674,11 @@ new_segment_store(Opts, State) ->
         {write_buffer_size_max, DefaultWriteBufferMax}
     ],
     ConfigVars = plum_db_config:get(aae_leveldb_opts, Default),
+
+    is_list(ConfigVars)
+        orelse error({invalid_option, {aae_leveldb_opts, ConfigVars}}),
+
+    %% eqwalizer:ignore ConfigVars
     Config = orddict:from_list(ConfigVars),
 
     %% Use a variable write buffer size to prevent against all buffers being
@@ -663,15 +693,12 @@ new_segment_store(Opts, State) ->
     Config4 = orddict:erase(write_buffer_size_max, Config3),
     Config5 = orddict:store(is_internal_db, true, Config4),
     Config6 = orddict:store(use_bloomfilter, true, Config5),
-    Options = orddict:store(create_if_missing, true, Config6),
+    Options = orddict:to_list(orddict:store(create_if_missing, true, Config6)),
 
     ok = filelib:ensure_dir(DataDir),
+    %% eqwalizer:ignore Options
     {ok, Ref} = eleveldb:open(DataDir, Options),
-    State#state{ref=Ref, path=DataDir}.
-
--spec share_segment_store(hashtree(), hashtree()) -> hashtree().
-share_segment_store(State, #state{ref=Ref, path=Path}) ->
-    State#state{ref=Ref, path=Path}.
+    {Ref, DataDir}.
 
 -spec hash(term()) -> binary().
 hash(X) ->
@@ -745,21 +772,24 @@ group(L, Width) ->
                     end, {FirstBucket, [], []}, L),
     [{LastBucket, LastGroup} | Groups].
 
--spec get_memory_bucket(integer(), integer(), hashtree()) -> any().
+-spec get_memory_bucket(integer(), integer(), hashtree()) -> orddict().
+
 get_memory_bucket(Level, Bucket, #state{tree=Tree}) ->
     case dict:find({Level, Bucket}, Tree) of
         error ->
             orddict:new();
-        {ok, Val} ->
+        {ok, Val} when is_list(Val) ->
+            %% eqwalizer:ignore Val
             Val
     end.
 
--spec set_memory_bucket(integer(), integer(), any(), hashtree()) -> hashtree().
+-spec set_memory_bucket(integer(), integer(), orddict(), hashtree()) ->
+    hashtree().
 set_memory_bucket(Level, Bucket, Val, State) ->
     Tree = dict:store({Level, Bucket}, Val, State#state.tree),
     State#state{tree=Tree}.
 
--spec get_disk_bucket(integer(), integer(), hashtree()) -> any().
+-spec get_disk_bucket(integer(), integer(), hashtree()) -> orddict().
 get_disk_bucket(Level, Bucket, #state{id=Id, ref=Ref}) ->
     HKey = encode_bucket(Id, Level, Bucket),
     case eleveldb:get(Ref, HKey, []) of
@@ -769,7 +799,7 @@ get_disk_bucket(Level, Bucket, #state{id=Id, ref=Ref}) ->
             orddict:new()
     end.
 
--spec set_disk_bucket(integer(), integer(), any(), hashtree()) -> hashtree().
+-spec set_disk_bucket(integer(), integer(), orddict(), hashtree()) -> hashtree().
 set_disk_bucket(Level, Bucket, Val, State=#state{id=Id, ref=Ref}) ->
     HKey = encode_bucket(Id, Level, Bucket),
     Bin = term_to_binary(Val),
@@ -827,7 +857,8 @@ snapshot(State) ->
     State#state{itr=Itr}.
 
 -spec multi_select_segment(hashtree(), list('*'|integer()), select_fun(T))
-                          -> [{integer(), T}].
+                          -> orddict('*'|integer(), T).
+
 multi_select_segment(#state{id=Id, itr=Itr}, Segments, F) ->
     [First | Rest] = Segments,
     IS1 = #itr_state{itr=Itr,
@@ -848,6 +879,7 @@ multi_select_segment(#state{id=Id, itr=Itr}, Segments, F) ->
                segment_acc=LastAcc,
                final_acc=FA} = IS2,
     Result = [{LastSegment, F(LastAcc)} | FA],
+
     case Result of
         [{'*', _}] ->
             %% Handle wildcard select when all segments are empty

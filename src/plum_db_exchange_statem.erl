@@ -20,6 +20,7 @@
 -behaviour(partisan_gen_statem).
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
+-include("utils.hrl").
 
 -record(state, {
     %% node the exchange is taking place with

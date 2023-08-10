@@ -238,6 +238,7 @@ delete_single(Scope, Event) when Scope==l; Scope==g ->
 %% The return value indicates the previous status.
 %% @end
 disable_single(Scope, Event) when Scope==l; Scope==g ->
+	%% eqwalizer:ignore
     gproc:update_counter({c,Scope,{?ETag,Event}}, {-1, 0, 0}).
 
 -spec enable_single(scope(), event()) -> integer().
@@ -255,6 +256,7 @@ disable_single(Scope, Event) when Scope==l; Scope==g ->
 %% The return value indicates the previous status.
 %% @end
 enable_single(Scope, Event) when Scope==l; Scope==g ->
+	%% eqwalizer:ignore
     gproc:update_counter({c,Scope,{?ETag,Event}}, {1, 1, 1}).
 
 -spec tell_singles(scope(), event(), msg()) -> [pid()].

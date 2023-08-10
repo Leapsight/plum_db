@@ -28,6 +28,7 @@
 
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
+-include("utils.hrl").
 
 -record(state, {
     %% an ets table to hold iterators opened
@@ -38,13 +39,13 @@
 -record(iterator, {
     %% The query
     match_prefix            ::  plum_db_prefix_pattern(),
-    first                   ::  plum_db_pkey() | undefined,
+    first                   ::  plum_db_partition_server:iterator_action_ext(),
     %% The actual partition iterator
-    ref                     ::  plum_db_partition_server:iterator() | undefined,
+    ref                     ::  optional(plum_db_partition_server:iterator()),
     %% Pointers :: The current position decomposed into prefix, key and object
-    prefix                  ::  plum_db_prefix() | undefined,
-    key                     ::  plum_db_pkey() | undefined,
-    object                  ::  plum_db_object() | undefined,
+    prefix                  ::  optional(plum_db_prefix()),
+    key                     ::  optional(plum_db_key()),
+    object                  ::  optional(plum_db_object()),
     %% Options
     keys_only = false       ::  boolean(),
     partitions              ::  [partition()],
@@ -61,11 +62,11 @@
 -record(continuation, {
     %% The query
     match_prefix            ::  plum_db_prefix_pattern(),
-    first                   ::  plum_db_pkey() | undefined,
+    first                   ::  plum_db_partition_server:iterator_action_ext(),
     %% Pointers :: The current position decomposed into prefix, key and object
-    prefix                  ::  plum_db_prefix() | undefined,
-    key                     ::  plum_db_pkey() | undefined,
-    object                  ::  plum_db_object() | undefined,
+    prefix                  ::  optional(plum_db_prefix()),
+    key                     ::  optional(plum_db_key()),
+    object                  ::  optional(plum_db_object()),
     %% Options
     keys_only = false       ::  boolean(),
     partitions              ::  [partition()],
@@ -112,7 +113,7 @@
 -type it_opt_default()      ::  {default,
                                     plum_db_value() | it_opt_default_fun()}.
 -type it_opt_keymatch()     ::  {match, term()}.
--type it_opt_first()        ::  {first, term()}.
+-type it_opt_first()        ::  {first, plum_db_key()}.
 -type it_opt_keys_only()    ::  {keys_only, boolean()}.
 -type it_opt_partitions()   ::  {partitions, [partition()]}.
 -type match_opt_limit()     ::  pos_integer() | infinity.
@@ -229,6 +230,14 @@
 -export([is_stale/1]).
 -export([merge/2]).
 
+-eqwalizer({nowarn_function, match/2}).
+-eqwalizer({nowarn_function, match/3}).
+-eqwalizer({nowarn_function, prefixes/0}).
+-eqwalizer({nowarn_function, prefix_type/1}).
+-eqwalizer({nowarn_function, to_list/2}).
+-eqwalizer({nowarn_function, broadcast_channel/0}).
+
+
 
 
 %% =============================================================================
@@ -266,6 +275,7 @@ get_partition({{_, '_'}, _}) ->
 
 get_partition({{Prefix, _}, _} = Key) ->
     ShardBy = plum_db_config:get([prefixes, Prefix, shard_by], prefix),
+    %% eqwalizer:ignore ShardBy
     get_partition(ShardBy, Key);
 
 get_partition({_, _} = FP) ->
@@ -330,6 +340,7 @@ partitions() ->
 -spec partition_count() -> non_neg_integer().
 
 partition_count() ->
+    %% eqwalizer:ignore
     plum_db_config:get(partitions).
 
 
@@ -800,11 +811,11 @@ match(#continuation{} = Cont, Opts) ->
     | {[{plum_db_key(), value_or_values()}], continuation()}
     | ?EOT.
 
-match(FullPrefix0, KeyPattern, Opts0) ->
+match(FullPrefix0, KeyPattern, Opts0) when is_list(Opts0) ->
     FullPrefix = normalise_prefix(FullPrefix0),
+    Fun = fun(KV, Acc) -> [KV | Acc] end,
     %% KeyPattern overrides any match option present in Opts0
     Opts = [{match, KeyPattern} | lists:keydelete(match, 1, Opts0)],
-    Fun = fun(KV, Acc) -> [KV | Acc] end,
     fold(Fun, [], FullPrefix, Opts).
 
 
@@ -974,16 +985,17 @@ iterate(#iterator{ref = undefined, partitions = []} = I) ->
 
 iterate(#iterator{ref = undefined, partitions = [H|_]} = I0) ->
     %% We finished with the previous partition and we still have
-    %% more partitions to cover
+    %% at least one more partition to cover
     Name = plum_db_partition_server:name(H),
     FullPrefix = I0#iterator.match_prefix,
     Opts = I0#iterator.opts,
-    Ref = case I0#iterator.keys_only of
-        true ->
-            plum_db_partition_server:key_iterator(Name, FullPrefix, Opts);
-        false ->
-            plum_db_partition_server:iterator(Name, FullPrefix, Opts)
-    end,
+    Ref =
+        case I0#iterator.keys_only of
+            true ->
+                plum_db_partition_server:key_iterator(Name, FullPrefix, Opts);
+            false ->
+                plum_db_partition_server:iterator(Name, FullPrefix, Opts)
+        end,
 
     Res = plum_db_partition_server:iterator_move(Ref, I0#iterator.first),
     iterate(Res, I0#iterator{ref = Ref});
@@ -997,8 +1009,9 @@ iterate(#iterator{ref = Ref} = I) ->
     plum_db_partition_server:iterator_move_result() | {break, any()},
     iterator()) -> iterator().
 
-iterate({error, no_match, Ref1}, I0) ->
+iterate({error, no_match, Ref1}, #iterator{} = I0) ->
     %% We carry on trying to match the remaining keys
+    %% eqwalizer:ignore
     iterate(I0#iterator{ref = Ref1});
 
 iterate({error, _, Ref1}, #iterator{partitions = [H|T]} = I) ->
@@ -1008,6 +1021,7 @@ iterate({error, _, Ref1}, #iterator{partitions = [H|T]} = I) ->
     I1 = iterator_reset_pointers(
         I#iterator{ref = undefined, partitions = T}
     ),
+    %% eqwalizer:ignore
     iterate(I1);
 
 iterate({break, Result}, #iterator{ref = Ref1, partitions = [H]}) ->
@@ -1023,6 +1037,7 @@ iterate({break, _}, #iterator{ref = Ref1, partitions = [H|T]} = I) ->
     I1 = iterator_reset_pointers(
         I#iterator{ref = undefined, partitions = T}
     ),
+    %% eqwalizer:ignore
     iterate(I1);
 
 iterate({ok, {{_, _} = Pref, K}, Ref1}, #iterator{keys_only = true} = I0) ->
@@ -1086,7 +1101,8 @@ iterator_done(#iterator{}) ->
 %% @doc Returns the full-prefix being iterated by this iterator.
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator_prefix(iterator() | remote_iterator()) -> plum_db_prefix().
+-spec iterator_prefix(iterator() | remote_iterator()) ->
+    optional(plum_db_prefix()).
 
 iterator_prefix(#remote_iterator{ref = Ref, node = Node}) ->
     partisan_gen_server:call(
@@ -1095,8 +1111,6 @@ iterator_prefix(#remote_iterator{ref = Ref, node = Node}) ->
 
 iterator_prefix(#iterator{prefix = Prefix}) ->
     Prefix.
-
-
 
 
 %% -----------------------------------------------------------------------------
@@ -1129,12 +1143,13 @@ iterator_key(#iterator{key = Key}) ->
 -spec iterator_key_value(iterator() | remote_iterator() | iterator()) ->
     {plum_db_key() , plum_db_value()} | {error, conflict}.
 
-iterator_key_value(#iterator{opts = Opts} = I) ->
+iterator_key_value(#iterator{opts = Opts, object = Obj} = I)
+when Obj =/= undefined ->
     Default = iterator_default(I),
     Key = I#iterator.key,
     PKey = {I#iterator.prefix, Key},
-    Obj = I#iterator.object,
     AllowPut = get_option(allow_put, Opts, true),
+
     case get_option(resolver, Opts, undefined) of
         undefined ->
             case plum_db_object:value_count(Obj) of
@@ -1183,10 +1198,10 @@ iterator_key_value(#remote_iterator{ref = Ref, node = Node}) ->
 %% -----------------------------------------------------------------------------
 -spec iterator_key_values(iterator()) -> {plum_db_key(), value_or_values()}.
 
-iterator_key_values(#iterator{opts = Opts} = I) ->
+iterator_key_values(#iterator{opts = Opts, object = Obj} = I)
+when Obj =/= undefined ->
     Default = iterator_default(I),
     Key = I#iterator.key,
-    Obj = I#iterator.object,
     AllowPut = get_option(allow_put, Opts, true),
 
     case get_option(resolver, Opts, undefined) of
@@ -1215,7 +1230,8 @@ iterator_element(#remote_iterator{ref = Ref, node = Node}) ->
         {?MODULE, Node}, {iterator_element, Ref}, ?CALL_OPTS
     );
 
-iterator_element(#iterator{prefix = P, key = K, object = Obj}) ->
+iterator_element(#iterator{prefix = P, key = K, object = Obj})
+when P =/= undefined, K =/= undefined, Obj =/= undefined ->
     {{P, K}, Obj}.
 
 
@@ -1274,6 +1290,9 @@ prefixes() ->
 %% -----------------------------------------------------------------------------
 -spec prefix_type(term()) -> prefix_type() | undefined.
 
+prefix_type(undefined) ->
+    undefined;
+
 prefix_type(Prefix) when is_atom(Prefix) orelse is_binary(Prefix) ->
     plum_db_config:get([prefixes, Prefix, type], undefined).
 
@@ -1284,7 +1303,7 @@ prefix_type(Prefix) when is_atom(Prefix) orelse is_binary(Prefix) ->
 %% -----------------------------------------------------------------------------
 -spec put(
     plum_db_prefix(), plum_db_key(), plum_db_value() | plum_db_modifier()) ->
-    ok.
+    ok | {error, Reason :: any()}.
 
 put(FullPrefix, Key, ValueOrFun) ->
     put(FullPrefix, Key, ValueOrFun, []).
@@ -1366,7 +1385,8 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% @doc Same as delete(FullPrefix, Key, [])
 %% @end
 %% -----------------------------------------------------------------------------
--spec delete(plum_db_prefix(), plum_db_key()) -> ok.
+-spec delete(plum_db_prefix(), plum_db_key()) ->
+    ok | {error, Reason :: any()}.
 
 delete(FullPrefix, Key) ->
     delete(FullPrefix, Key, []).
@@ -1380,7 +1400,8 @@ delete(FullPrefix, Key) ->
 %% NOTE: currently deletion is logical and no GC is performed.
 %% @end
 %% -----------------------------------------------------------------------------
--spec delete(plum_db_prefix(), plum_db_key(), delete_opts()) -> ok.
+-spec delete(plum_db_prefix(), plum_db_key(), delete_opts()) ->
+    ok | {error, Reason :: any()}.
 
 delete(FullPrefix, Key, _Opts) ->
     put(FullPrefix, Key, ?TOMBSTONE, []).
@@ -1407,7 +1428,7 @@ erase(FullPrefix, Key) ->
 %%
 %% @end
 %% -----------------------------------------------------------------------------
--spec erase(plum_db_prefix(), plum_db_key(), erase_opts()) -> ok.
+-spec erase(plum_db_prefix(), plum_db_key(), erase_opts()) -> ok | no_return().
 
 erase({?WILDCARD, _} = PKey, _, _) ->
     error(badarg, [PKey]);
@@ -1758,8 +1779,10 @@ exchange(Peer, Opts) ->
             NewOpts = maps:merge(#{timeout => 60000}, Opts),
 
             case plum_db_exchanges_sup:start_exchange(Peer, NewOpts) of
-                {ok, Pid} ->
+                {ok, Pid} when is_pid(Pid) ->
                     {ok, Pid};
+                {ok, undefined} ->
+                    {error, noproc};
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -1978,10 +2001,12 @@ new_iterator(#continuation{} = Cont, Opts0) ->
     %% We fetch the first key
     iterate(I);
 
-new_iterator(FullPrefix, Opts) ->
-    FirstKey = case key_value:get(first, Opts, undefined) of
-        undefined -> FullPrefix;
-        Key -> {FullPrefix, Key}
+new_iterator({_, _} = FullPrefix, Opts) ->
+    First = case key_value:get(first, Opts, undefined) of
+        undefined ->
+            FullPrefix;
+        Key ->
+            {FullPrefix, Key}
     end,
     KeysOnly = key_value:get(keys_only, Opts, false),
     Partitions = case get_option(partitions, Opts, undefined) of
@@ -1990,12 +2015,13 @@ new_iterator(FullPrefix, Opts) ->
         L ->
             All = sets:from_list(plum_db:partitions()),
             sets:is_subset(sets:from_list(L), All) orelse
-            error(badarg, partitions),
+            error(invalid_partitions, [L]),
             L
     end,
     I = #iterator{
         match_prefix = FullPrefix,
-        first = FirstKey,
+        first = First,
+        %% eqwalizer:ignore KeysOnly
         keys_only = KeysOnly,
         partitions = Partitions,
         opts = Opts
@@ -2006,11 +2032,10 @@ new_iterator(FullPrefix, Opts) ->
 
 %% @private
 new_continuation(#iterator{} = I) ->
-    MatchPrefix = I#iterator.match_prefix,
-    First = {I#iterator.prefix, I#iterator.key},
     #continuation{
-        match_prefix = MatchPrefix,
-        first = First,
+        match_prefix = I#iterator.match_prefix,
+        %% eqwalizer:ignore
+        first = {I#iterator.prefix, I#iterator.key},
         prefix = I#iterator.prefix,
         key = I#iterator.key,
         object = I#iterator.object,

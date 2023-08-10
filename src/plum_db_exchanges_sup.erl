@@ -56,7 +56,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -spec start_exchange(node(), list() | map()) ->
-    {ok, pid()} | {error, any()}.
+    supervisor:startchild_ret() | {error, Reason :: any()}.
 
 start_exchange(Peer, Opts) ->
     case partisan:node() of
@@ -65,6 +65,7 @@ start_exchange(Peer, Opts) ->
         _ ->
             Children = supervisor:count_children(?MODULE),
             {active, Count} = lists:keyfind(active, 1, Children),
+
             case plum_db_config:get(aae_concurrency) > Count of
                 true ->
                     supervisor:start_child(?MODULE, [Peer, Opts]);

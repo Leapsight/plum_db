@@ -113,6 +113,7 @@
 
 start_link(Partition) when is_integer(Partition) ->
     Dir = plum_db_config:get(hashtrees_dir),
+    %% eqwalizer:ignore
     DataRoot = filename:join([Dir, integer_to_list(Partition)]),
     Name = name(Partition),
     StartOpts = [{channel, plum_db_config:get(data_channel)}],
@@ -775,20 +776,24 @@ maybe_build_async(State) ->
 
 
 %% @private
+
+maybe_reset(#state{built = false} = State) ->
+    State#state{reset = false};
+
 maybe_reset(#state{built = true, reset = true, lock = undefined} = State) ->
     do_reset(State);
 
-maybe_reset(#state{built = true, reset = false, lock = undefined} = State) ->
-    Diff = erlang:system_time(second) - State#state.build_ts_secs,
+maybe_reset(#state{
+    built = true, reset = false, lock = undefined, build_ts_secs = Ts
+    } = State) when is_integer(Ts) ->
+
+    Diff = erlang:system_time(second) - Ts,
     case Diff >= State#state.ttl_secs of
         true ->
             do_reset(State);
         false ->
             State
     end;
-
-maybe_reset(#state{built = false} = State) ->
-    State#state{reset = false};
 
 maybe_reset(State) ->
     State.
@@ -971,12 +976,14 @@ schedule_reset(State) ->
 schedule_tick(State0) ->
     State1 = cancel_timer(State0),
     Ms = case State1#state.reset of
-        true -> 1000;
-        false -> plum_db_config:get(hashtree_timer)
+        true ->
+            1000;
+        false ->
+            plum_db_config:get(hashtree_timer)
     end,
-    State1#state{
-        timer = erlang:start_timer(Ms, State1#state.id, tick)
-    }.
+    %% eqwalizer:ignore
+    Timer = erlang:start_timer(Ms, State1#state.id, tick),
+    State1#state{timer = Timer}.
 
 
 %% @private
