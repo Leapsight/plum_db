@@ -70,13 +70,16 @@
 %%      * each counter() also includes the number of values in that id()
 %%      * the values in each triple of entries() are causally ordered and each new value goes to the head of the list
 
--type clock() :: {entries(), values()}.
+-type clock() :: {entries(), values()} | {}.
 -type vector() :: [{id(), counter()}].
 -type entries() :: [{id(), counter(), values()}].
 -type id() :: any().
 -type values() :: [value()].
 -type value() :: any().
 -type counter() :: non_neg_integer().
+
+-eqwalizer({nowarn_function, equal/2}).
+-eqwalizer({nowarn_function, less/2}).
 
 
 %% @doc Constructs a new clock set without causal history,

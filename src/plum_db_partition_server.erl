@@ -24,6 +24,7 @@
 -behaviour(partisan_gen_server).
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
+-include("utils.hrl").
 
 %% leveldb uses $\0 but since external term format will contain nulls
 %% we need an additional separator. We use the ASCII unit separator
@@ -33,17 +34,17 @@
 -record(state, {
     name                                ::  atom(),
     partition                           ::  non_neg_integer(),
-    actor_id                            ::  {integer(), node()} | undefined,
-    db_info                             ::  db_info() | undefined,
+    actor_id                            ::  optional({integer(), node()}),
+    db_info                             ::  db_info(),
 	config = []							::	opts(),
 	data_root							::	file:filename(),
 	open_opts = []						::	opts(),
     iterators = []                      ::  iterators(),
-    helper = undefined                  ::  pid() | undefined
+    helper = undefined                  ::  optional(pid())
 }).
 
 -record(db_info, {
-    db_ref 								::	eleveldb:db_ref() | undefined,
+    db_ref 								::	optional(eleveldb:db_ref()),
     ram_tab                             ::  atom(),
     ram_disk_tab                        ::  atom(),
 	read_opts = []						::	opts(),
@@ -52,22 +53,24 @@
 }).
 
 -record(partition_iterator, {
-    owner_ref               ::  reference(),
+    owner_mref              ::  reference(),
     partition               ::  non_neg_integer(),
-    disk                    ::  eleveldb:itr_ref() | undefined,
-    ram_tab                 ::  ets:tab() | undefined,
-    ram_disk_tab            ::  ets:tab() | undefined,
+    disk                    ::  optional(eleveldb:itr_ref()),
+    ram_tab                 ::  optional(ets:tab()),
+    ram_disk_tab            ::  optional(ets:tab()),
     full_prefix             ::  plum_db_prefix_pattern(),
     match_pattern           ::  term(),
     bin_prefix              ::  binary(),
-    match_spec              ::  ets:comp_match_spec() | undefined,
+    match_spec              ::  optional(ets:comp_match_spec()),
     keys_only = false       ::  boolean(),
-    prev_key                ::  plum_db_pkey() | undefined,
+    %% plum_db_pkey() when iterating over ets, but binary() when iterating over
+    %% eleveldb
+    prev_key                ::  optional(plum_db_pkey() | binary()),
     disk_done = true        ::  boolean(),
     ram_disk_done = true    ::  boolean(),
     ram_done = true         ::  boolean(),
-    ram                     ::  key | {cont, any()} | undefined,
-    ram_disk                ::  key | {cont, any()} | undefined
+    ram                     ::  optional(key | {cont, any()}),
+    ram_disk                ::  optional(key | {cont, any()})
 }).
 
 -type opts()                    :: 	[{atom(), term()}].
@@ -76,13 +79,14 @@
 -type iterators()               ::  [iterator()].
 -type iterator_action()         ::  first
                                     | last | next | prev
-                                    | prefetch | prefetch_stop
+                                    | prefetch | prefetch_stop.
+-type iterator_action_ext()     ::  iterator_action()
                                     | plum_db_prefix()
                                     | plum_db_pkey()
                                     | binary().
 -type iterator_move_result()    ::  {ok,
                                         Key :: binary() | plum_db_pkey(),
-                                        Value :: binary(),
+                                        Value :: plum_db_object:t(),
                                         iterator()
                                     }
                                     | {ok,
@@ -95,6 +99,8 @@
 
 -export_type([db_info/0]).
 -export_type([iterator/0]).
+-export_type([iterator_action/0]).
+-export_type([iterator_action_ext/0]).
 -export_type([iterator_move_result/0]).
 
 -export([byte_size/1]).
@@ -210,14 +216,19 @@ get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
         true ->
             partisan_gen_server:call(Name, {get, PKey, Opts}, Timeout);
         false ->
-            DBInfo = plum_db_partitions_sup:get_db_info(Name),
-
-            case do_get(PKey, DBInfo) of
-                {ok, Object} ->
-                    maybe_resolve(Object, Opts);
-                {error, _} = Error ->
-                    Error
+            try plum_db_partitions_sup:get_db_info(Name) of
+                DBInfo ->
+                    case do_get(PKey, DBInfo) of
+                        {ok, Object} ->
+                            maybe_resolve(Object, Opts);
+                        {error, _} = Error ->
+                            Error
+                    end
+            catch
+                _Class:Reason ->
+                    {error, Reason}
             end
+
     end.
 
 
@@ -265,8 +276,8 @@ merge(Name, PKey, Obj) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-merge({Name, _} = Ref, PKey, Obj, Timeout) when is_atom(Name) ->
-    partisan_gen_server:call(Ref, {merge, PKey, Obj}, Timeout);
+merge({Name, _} = ServerRef, PKey, Obj, Timeout) when is_atom(Name) ->
+    partisan_gen_server:call(ServerRef, {merge, PKey, Obj}, Timeout);
 
 merge(Name, PKey, Obj, Timeout) ->
     partisan_gen_server:call(Name, {merge, PKey, Obj}, ?CALL_OPTS(Timeout)).
@@ -402,7 +413,7 @@ iterator_close(Store, #partition_iterator{} = Iter) when is_atom(Store) ->
 %% @doc Iterates over the storage stack in order (disk -> ram_disk -> ram).
 %% @end
 %% -----------------------------------------------------------------------------
--spec iterator_move(iterator(), iterator_action()) -> iterator_move_result().
+-spec iterator_move(iterator(), iterator_action_ext()) -> iterator_move_result().
 
 iterator_move(
     #partition_iterator{disk_done = true} = Iter, {undefined, undefined}) ->
@@ -417,11 +428,11 @@ iterator_move(#partition_iterator{disk_done = true} = Iter, prefetch_stop) ->
     %% We continue with ets so we translate the action
     iterator_move(Iter, next);
 
-iterator_move(#partition_iterator{disk_done = false} = Iter, Action) ->
+iterator_move(#partition_iterator{disk_done = false} = Iter, Term) ->
 
     DbIter = Iter#partition_iterator.disk,
 
-    case eleveldb:iterator_move(DbIter, eleveldb_action(Action)) of
+    case disk_iterator_move(DbIter, eleveldb_action(Term)) of
         {ok, K} ->
             NewIter = Iter#partition_iterator{prev_key = K},
             case matches_key(K, Iter) of
@@ -469,6 +480,14 @@ iterator_move(
     {error, invalid_iterator, Iter}.
 
 
+
+disk_iterator_move(undefined, _) ->
+    {error, invalid_iterator};
+
+disk_iterator_move(DbIter, Term) ->
+    eleveldb:iterator_move(DbIter, Term).
+
+
 %% @private
 ets_iterator_move(Type, _, Iter, first) ->
     KeysOnly = Iter#partition_iterator.keys_only,
@@ -499,6 +518,14 @@ ets_iterator_move(Type, _, Iter, first) ->
                     {error, invalid_iterator, NewIter}
             end
     end;
+
+ets_iterator_move(Type, key, #partition_iterator{} = Iter, next)
+when Iter#partition_iterator.prev_key == undefined ->
+    ets_iterator_move(Type, key, Iter, first);
+
+ets_iterator_move(Type, key, #partition_iterator{} = Iter, prev)
+when Iter#partition_iterator.prev_key == undefined ->
+    ets_iterator_move(Type, key, Iter, last);
 
 ets_iterator_move(Type, key, Iter, next) ->
     KeysOnly = Iter#partition_iterator.keys_only,
@@ -565,8 +592,10 @@ ets_iterator_move(Type, key, Iter, prev) ->
                 NewIter ->
                     iterator_move(NewIter, prev)
             end;
+
         K when KeysOnly ->
             NewIter = update_iterator(Type, Iter, K, key),
+            %% eqwalizer:ignore K
             case matches_key(K, Iter) of
                 {true, K} ->
                     {ok, K, NewIter};
@@ -575,6 +604,7 @@ ets_iterator_move(Type, key, Iter, prev) ->
                 ?EOT ->
                     {error, invalid_iterator, NewIter}
             end;
+
         K ->
             [{K, V}] = ets:lookup(Tab, K),
             NewIter = update_iterator(Type, Iter, K, key),
@@ -684,6 +714,7 @@ init([Name, Partition, Opts]) ->
 
     process_flag(trap_exit, true),
 
+    %% eqwalizer:ignore
     DataRoot = filename:join([
         plum_db_config:get(db_dir),
         integer_to_list(Partition)
@@ -736,13 +767,8 @@ handle_call({put, PKey, ValueOrFun, Opts}, _From, State) ->
 
 
 handle_call({dirty_put, PKey, Object, Opts}, _From, State) ->
-    Existing =
-        case do_get(PKey, State) of
-            {ok, Obj} ->
-                Obj;
-            {error, not_found} ->
-                undefined
-        end,
+    %% This will crash if error when reason =/= not_found
+    {ok, Existing} = do_get(PKey, State, undefined),
 
     Reply =
         try
@@ -794,12 +820,8 @@ handle_call({erase, PKey}, _From, State) ->
     DbRef = db_ref(State),
     Opts = write_opts(State),
 
-    Existing = case do_get(PKey, State) of
-        {ok, O} ->
-            O;
-        {error, not_found} ->
-            undefined
-    end,
+    %% This will crash if error when reason =/= not_found
+    {ok, Existing} = do_get(PKey, State, undefined),
 
     ok = maybe_hashtree_delete(PKey, Existing, State),
 
@@ -826,15 +848,11 @@ handle_call({erase, PKey}, _From, State) ->
 
     {reply, Result, State};
 
-handle_call({merge, PKey, Obj0}, _From, State) ->
+handle_call({merge, PKey0, Obj0}, _From, State) ->
 
     %% We need to do a read followed by a write atomically
-    Existing = case do_get(PKey, State) of
-        {ok, Val} ->
-            Val;
-        {error, not_found} ->
-            undefined
-    end,
+    %% This will crash if error when reason =/= not_found
+    {ok, Existing} = do_get(PKey0, State, undefined),
 
     case plum_db_object:reconcile(Obj0, Existing) of
         false ->
@@ -842,18 +860,21 @@ handle_call({merge, PKey, Obj0}, _From, State) ->
             {reply, false, State};
 
         {true, Obj1} ->
+            %% Harmonize result
             Result =
-                case callback(will_merge, PKey, [Obj1, Existing]) of
+                case callback(will_merge, PKey0, [Obj1, Existing]) of
                     true ->
-                        {true, Obj1};
-                    {true, _} = R ->
+                        {true, PKey0, Obj1};
+                    {true, Obj2} ->
+                        {true, PKey0, Obj2};
+                    {true, _, _} = R ->
                         R;
                     false ->
                         false
                 end,
 
             case Result of
-                {true, Obj} ->
+                {true, PKey, Obj} ->
                     case do_put(PKey, Obj, State) of
                         ok when Obj =/= Obj1 ->
                             %% The case then the callback modified the object,
@@ -905,15 +926,15 @@ handle_call(is_empty, _From, State) ->
     {reply, Result, State};
 
 handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
-    Ref = erlang:monitor(process, Pid),
+    Mref = erlang:monitor(process, Pid),
     {Prefix, _} = FullPrefix,
 
     KeyPattern = proplists:get_value(match, Opts, undefined),
 
-    MS = case KeyPattern of
-        undefined ->
+    MS = case KeyPattern == undefined of
+        true ->
             undefined;
-        KeyPattern ->
+        false ->
             ets:match_spec_compile([{
                 {FullPrefix, KeyPattern}, [], [true]
             }])
@@ -921,7 +942,7 @@ handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
 
     PartIter0 = #partition_iterator{
         partition = State#state.partition,
-        owner_ref = Ref,
+        owner_mref = Mref,
         full_prefix = FullPrefix,
         keys_only = proplists:get_value(keys_only, Opts, false),
         match_pattern = KeyPattern,
@@ -1090,12 +1111,13 @@ init_state(Name, Partition, DataRoot, Config) ->
     #state {
         name = Name,
         partition = Partition,
-        actor_id = {Partition, node()},
+        actor_id = {Partition, partisan:node()},
         db_info = #db_info{
             ram_tab = RamTab,
             ram_disk_tab = RamDiskTab,
             read_opts = ReadOpts,
             write_opts = WriteOpts,
+            %% eqwalizer:ignore FoldOpts
             fold_opts = FoldOpts
         },
 		config = FinalConfig,
@@ -1116,7 +1138,7 @@ config_value(Key, Config, Default) ->
 
 %% @private
 open_db(State) ->
-    RetriesLeft = plum_db_config:get(store_open_retry_Limit),
+    RetriesLeft = plum_db_config:get(store_open_retry_Limit, 30),
     open_db(State, max(1, RetriesLeft), undefined).
 
 
@@ -1125,36 +1147,44 @@ open_db(_State, 0, LastError) ->
     {error, LastError};
 
 open_db(State, RetriesLeft, _) ->
-    case eleveldb:open(State#state.data_root, State#state.open_opts) of
+    OpenOpts = State#state.open_opts,
+
+    %% eqwalizer:ignore open opts
+    case eleveldb:open(State#state.data_root, OpenOpts) of
         {ok, Ref} ->
             DBInfo0 = State#state.db_info,
             DBInfo = DBInfo0#db_info{db_ref = Ref},
             {ok, State#state{db_info = DBInfo}};
-        %% Check specifically for lock error, this can be caused if
-        %% a crashed vnode takes some time to flush leveldb information
-        %% out to disk.  The process is gone, but the NIF resource cleanup
-        %% may not have completed.
-    	{error, {db_open, OpenErr} = Reason} ->
+
+    	{error, {db_open, OpenErr} = Reason} when is_list(OpenErr) ->
+            %% Check specifically for lock error, this can be caused if
+            %% a crashed vnode takes some time to flush leveldb information
+            %% out to disk.  The process is gone, but the NIF resource cleanup
+            %% may not have completed.
             case lists:prefix("IO error: lock ", OpenErr) of
                 true ->
                     SleepFor = plum_db_config:get(store_open_retries_delay),
+
                     ?LOG_DEBUG(#{
                         description => "Leveldb backend retrying after error",
                         partition => State#state.partition,
-                        node => node(),
+                        node => partisan:node(),
                         data_root => State#state.data_root,
                         timeout => SleepFor,
                         reason => OpenErr
                     }),
+                    %% eqwalizer:ignore SleepFor
                     timer:sleep(SleepFor),
                     open_db(State, RetriesLeft - 1, Reason);
+
                 false ->
                     case lists:prefix("Corruption", OpenErr) of
                         true ->
                             ?LOG_WARNING(#{
-                                description => "Starting repair of corrupted Leveldb store",
+                                description =>
+                                    "Starting repair of corrupted Leveldb store",
                                 partition => State#state.partition,
-                                node => node(),
+                                node => partisan:node(),
                                 data_root => State#state.data_root,
                                 reason => OpenErr
                             }),
@@ -1162,9 +1192,10 @@ open_db(State, RetriesLeft, _) ->
                                 State#state.data_root, State#state.open_opts
                             ),
                             ?LOG_NOTICE(#{
-                                description => "Finished repair of corrupted Leveldb store",
+                                description =>
+                                    "Finished repair of corrupted Leveldb store",
                                 partition => State#state.partition,
-                                node => node(),
+                                node => partisan:node(),
                                 data_root => State#state.data_root,
                                 reason => OpenErr
                             }),
@@ -1192,7 +1223,7 @@ init_ram_disk_prefixes_fun(State) ->
         ?LOG_INFO(#{
             description => "Initialising partition",
             partition => State#state.partition,
-            node => node()
+            node => partisan:node()
         }),
         %% We create the in-memory db copy for ram and ram_disk prefixes
         Tab = ram_disk_tab(State),
@@ -1210,10 +1241,10 @@ init_ram_disk_prefixes_fun(State) ->
                         description => "Loading data from disk to ram",
                         partition => State#state.partition,
                         prefix => Prefix,
-                        node => node()
+                        node => partisan:node()
                     }),
                     First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
-                    Next = eleveldb:iterator_move(DbIter, First),
+                    Next = disk_iterator_move(DbIter, First),
                     init_prefix_iterate(
                         Next, DbIter, First, erlang:byte_size(First), Tab
                     );
@@ -1224,7 +1255,7 @@ init_ram_disk_prefixes_fun(State) ->
             ?LOG_INFO(#{
                 description => "Finished initialisation of partition",
                 partition => State#state.partition,
-                node => node()
+                node => partisan:node()
             }),
             _ = plum_db_events:notify(
                 partition_init_finished, {ok, State#state.partition}
@@ -1239,7 +1270,7 @@ init_ram_disk_prefixes_fun(State) ->
                     reason => Reason,
                     stacktrace => Stacktrace,
                     partition => State#state.partition,
-                    node => node()
+                    node => partisan:node()
                 }),
                 _ = plum_db_events:notify(
                     partition_init_finished,
@@ -1266,12 +1297,21 @@ init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab) ->
             %% Element is {{P, K}, MetadataObj}
             PKey = decode_key(K),
             true = ets:insert(Tab, {PKey, binary_to_term(V)}),
-            Next = eleveldb:iterator_move(DbIter, prefetch),
+            Next = disk_iterator_move(DbIter, prefetch),
             init_prefix_iterate(Next, DbIter, BinPrefix, BPSize, Tab);
         _ ->
             %% We have no more matches in this Prefix
             ok
     end.
+
+
+
+%% =============================================================================
+%% PRIVATE: Call handling
+%% =============================================================================
+
+
+
 
 
 
@@ -1335,12 +1375,6 @@ table_name(#partition_iterator{ram_tab = Tab}, ram) ->
 table_name(#partition_iterator{ram_disk_tab = Tab}, ram_disk) ->
     Tab;
 
-table_name(Name, ram) when is_atom(Name) ->
-    list_to_atom(atom_to_list(Name) ++ "_ram");
-
-table_name(Name, ram_disk) when is_atom(Name) ->
-    list_to_atom(atom_to_list(Name) ++ "_ram_disk");
-
 table_name(N, ram) when is_integer(N) ->
     list_to_atom(
         "plum_db_partition_" ++ integer_to_list(N) ++ "_server_ram");
@@ -1357,12 +1391,9 @@ prefix_type({{Prefix, _}, _}) ->
 
 %% @private
 modify(PKey, ValueOrFun, Opts, State) ->
-    {Existing, Ctxt} = case do_get(PKey, State) of
-        {ok, Object} ->
-            {Object, plum_db_object:context(Object)};
-        {error, not_found} ->
-            {undefined, plum_db_object:empty_context()}
-    end,
+    %% This will crash if error when reason =/= not_found
+    {ok, Existing} = do_get(PKey, State, undefined),
+    Ctxt = context(Existing),
     modify(PKey, ValueOrFun, Opts, State, Existing, Ctxt).
 
 
@@ -1400,6 +1431,7 @@ maybe_resolve(Object, Opts) ->
         false ->
             Resolver = key_value:get(resolver, Opts, lww),
             try
+                %% eqwalizer:ignore Resolver
                 {ok, plum_db_object:resolve(Object, Resolver)}
             catch
                 Class:Reason:Stacktrace ->
@@ -1455,17 +1487,35 @@ broadcast(PKey, Obj) ->
 
 %% @private
 do_get(PKey, State) ->
-    do_get(PKey, State, prefix_type(PKey)).
+    do_get_from(PKey, State, prefix_type(PKey)).
 
 
 %% @private
-do_get(PKey, State, Type)
+do_get(PKey, State, Default) ->
+    case do_get(PKey, State) of
+        {error, not_found} ->
+            {ok, Default};
+        Other ->
+            Other
+    end.
+
+
+%% @private
+context(undefined) ->
+    plum_db_object:empty_context();
+
+context(Object) ->
+    plum_db_object:context(Object).
+
+
+%% @private
+do_get_from(PKey, State, Type)
 when (Type == disk) orelse (Type == undefined) ->
     DbRef = db_ref(State),
     ReadOpts = read_opts(State),
     result(eleveldb:get(DbRef, encode_key(PKey), ReadOpts));
 
-do_get(PKey, State, ram) ->
+do_get_from(PKey, State, ram) ->
     case ets:lookup(ram_tab(State), PKey) of
         [] ->
             {error, not_found};
@@ -1473,14 +1523,14 @@ do_get(PKey, State, ram) ->
             {ok, Obj}
     end;
 
-do_get(PKey, State, ram_disk) ->
+do_get_from(PKey, State, ram_disk) ->
     case ets:lookup(ram_disk_tab(State), PKey) of
         [] ->
             %% During init we would be restoring the ram_disk prefixes
             %% asynchronously.
             %% So we need to fallback to disk until the restore is
             %% done.
-            do_get(PKey, State, disk);
+            do_get_from(PKey, State, disk);
         [{_, Obj}] ->
             {ok, Obj}
     end.
@@ -1506,14 +1556,7 @@ maybe_hashtree_delete(PKey, Existing, State) ->
             Partition = State#state.partition,
             ActorId = State#state.actor_id,
             Hash = plum_db_object:hash(Existing),
-            Ctxt =
-                case Existing == undefined of
-                    true ->
-                        plum_db_object:empty_context();
-                    false ->
-                        plum_db_object:context(Existing)
-                end,
-
+            Ctxt = context(Existing),
             %% We create and insert the Erased object, this will be actually
             %% removed the next time we rebuild the tree, but until
             %% then we needed as a tombstone to avoid this becoming a
@@ -1602,13 +1645,13 @@ prev_iterator(ram_disk, Iter) ->
     Iter#partition_iterator{
         disk_done = false,
         ram_disk_done = false
-    };
-
-prev_iterator(disk, _) ->
-    undefined.
+    }.
 
 
 %% @private
+-spec eleveldb_action(iterator_action_ext() | plum_db_prefix_pattern() | plum_db_pkey_pattern()) ->
+    iterator_action() | binary().
+
 eleveldb_action({?WILDCARD, _}) ->
     first;
 
@@ -1619,7 +1662,9 @@ eleveldb_action({{_, _}, _} = PKey) ->
     sext:prefix(PKey);
 
 eleveldb_action({_, _} = FullPrefix) ->
-    eleveldb_action({{_, _} = FullPrefix, ?WILDCARD});
+    %% A PKey with wildcard key
+    %% eqwalizer:ignore
+    eleveldb_action({FullPrefix, ?WILDCARD});
 
 eleveldb_action(first) ->
     first;
@@ -1674,6 +1719,7 @@ matches_key(PKey, #partition_iterator{match_spec = undefined} = Iter) ->
         true when is_binary(PKey) ->
             {true, decode_key(PKey)};
         true ->
+            %% eqwalizer:ignore
             {true, PKey};
         false ->
             ?EOT
@@ -1763,19 +1809,16 @@ update_iterator(ram_disk, Iter, Key, Cont) ->
 
 
 %% @private
-add_iterator(#partition_iterator{owner_ref = OwnerRef} = Iter, State)
-when is_reference(OwnerRef) ->
-    Iterators1 = lists:keystore(OwnerRef, 2, State#state.iterators, Iter),
+add_iterator(#partition_iterator{} = Iter, State) ->
+    Mref = Iter#partition_iterator.owner_mref,
+    Iterators1 = lists:keystore(Mref, 2, State#state.iterators, Iter),
     State#state{iterators = Iterators1}.
 
 
 %% @private
-take_iterator(#partition_iterator{owner_ref = OwnerRef}, State) ->
-    take_iterator(OwnerRef, State);
-
-take_iterator(OwnerRef, State) ->
-    Pos = #partition_iterator.owner_ref,
-    case lists:keytake(OwnerRef, Pos, State#state.iterators) of
+take_iterator(Mref, State) when is_reference(Mref) ->
+    Pos = #partition_iterator.owner_mref,
+    case lists:keytake(Mref, Pos, State#state.iterators) of
         {value, Iter, Iterators1} ->
             {Iter, State#state{iterators = Iterators1}};
         false ->
@@ -1784,17 +1827,17 @@ take_iterator(OwnerRef, State) ->
 
 
 %% @private
-close_iterator(#partition_iterator{owner_ref = OwnerRef}, State) ->
-    close_iterator(OwnerRef, State);
+close_iterator(#partition_iterator{owner_mref = Mref}, State) ->
+    close_iterator(Mref, State);
 
-close_iterator(Ref, State0) when is_reference(Ref) ->
-    case take_iterator(Ref, State0) of
+close_iterator(Mref, State0) when is_reference(Mref) ->
+    case take_iterator(Mref, State0) of
         {#partition_iterator{disk = undefined}, State1} ->
-            _ = erlang:demonitor(Ref, [flush]),
+            _ = erlang:demonitor(Mref, [flush]),
             State1;
 
         {#partition_iterator{disk = DbIter}, State1} ->
-            _ = erlang:demonitor(Ref, [flush]),
+            _ = erlang:demonitor(Mref, [flush]),
             _ = catch eleveldb:iterator_close(DbIter),
             State1;
 
@@ -1916,8 +1959,8 @@ callback(Name, {{Prefix, _}, _} = PKey, Args) when is_list(Args) ->
             undefined ->
                 Default;
 
-            {Mod, Fun} ->
-                case erlang:apply(Mod, Fun, [PKey | Args]) of
+            {Mod, FunName} when is_atom(Mod), is_atom(FunName) ->
+                case erlang:apply(Mod, FunName, [PKey | Args]) of
                     ok when Name == on_update;
                             Name == on_merge;
                             Name == on_delete;
@@ -1925,15 +1968,26 @@ callback(Name, {{Prefix, _}, _} = PKey, Args) when is_list(Args) ->
                         true;
                     true when Name == will_merge ->
                         true;
-                    {true, _} = Result when Name == will_merge ->
+                    {true, {object, _}} = Result when Name == will_merge ->
                         Result;
-                    {true, _, _} = Result when Name == will_merge ->
+                    {true, _, {object, _}} = Result when Name == will_merge ->
                         Result;
                     false when Name == will_merge ->
-                        false
+                        false;
+                    Other ->
+                        throw({badreturn, Other})
                 end
         end
     catch
+        throw:Reason ->
+            ?LOG_ERROR(#{
+                description => "Prefix callback return is invalid. Ignored",
+                callback => Name,
+                class => throw,
+                reason => Reason
+            }),
+            Default;
+
         Class:Reason:Stacktrace ->
             ?LOG_ERROR(#{
                 description => "Error while invoking prefix callback. Ignored",

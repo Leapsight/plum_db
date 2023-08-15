@@ -19,6 +19,7 @@
 
 -module(plum_db_partition_hashtree).
 -behaviour(partisan_gen_server).
+
 -include_lib("kernel/include/logger.hrl").
 -include_lib("partisan/include/partisan.hrl").
 -include("plum_db.hrl").
@@ -35,18 +36,13 @@
     %% the plum_db partition this hashtree represents
     partition       ::  non_neg_integer(),
     %% the tree managed by this process
-    tree            ::  hashtree_tree:tree() | undefined,
+    tree            ::  hashtree_tree:tree(),
     %% whether or not the tree has been built or a monitor ref
     %% if the tree is being built
     built = false   ::  boolean() | reference(),
     %% a monitor reference for a process that currently holds a
     %% lock on the tree
-    lock            ::  undefined
-                        | {
-                            internal | external,
-                            reference(),
-                            partisan_remote_ref:r()
-                        },
+    lock            ::  undefined | lockref(),
     %% Timestamp when the tree was build. To be used together with ttl_secs
     %% to calculate if the hashtree has expired
     build_ts_secs   ::  non_neg_integer() | undefined,
@@ -56,6 +52,13 @@
     timer           ::  reference() | undefined
 }).
 
+-type state()       ::  #state{}.
+-type lockref()     ::  {internal, reference(), pid()}
+                        | {
+                            external,
+                            partisan_remote_ref:r(),
+                            partisan_remote_ref:p()
+                        }.
 
 %% API
 -export([compare/4]).
@@ -110,6 +113,7 @@
 
 start_link(Partition) when is_integer(Partition) ->
     Dir = plum_db_config:get(hashtrees_dir),
+    %% eqwalizer:ignore
     DataRoot = filename:join([Dir, integer_to_list(Partition)]),
     Name = name(Partition),
     StartOpts = [{channel, plum_db_config:get(data_channel)}],
@@ -127,19 +131,20 @@ start_link(Partition) when is_integer(Partition) ->
 %% number.
 %% @end
 %% -----------------------------------------------------------------------------
-name(Partition) ->
+name(Partition) when is_integer(Partition) ->
     Key = {?MODULE, Partition},
 
     case persistent_term:get(Key, undefined) of
         undefined ->
-            plum_db:is_partition(Partition)
-                orelse error(badarg),
+            plum_db:is_partition(Partition) orelse error(badarg),
+
             Name = list_to_atom(
                 "plum_db_partition_" ++ integer_to_list(Partition) ++
                 "_hashtree"
             ),
             _ = persistent_term:put(Key, Name),
             Name;
+
         Name ->
             Name
     end.
@@ -160,7 +165,7 @@ delete(PKey) ->
 %% -----------------------------------------------------------------------------
 -spec delete(plum_db:partition(), plum_db_pkey()) -> ok.
 
-delete(Partition, PKey) ->
+delete(Partition, PKey) when is_integer(Partition) ->
     Name = name(Partition),
     partisan_gen_server:call(Name, {delete, PKey}, infinity).
 
@@ -170,6 +175,7 @@ delete(Partition, PKey) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec insert(plum_db_pkey(), binary()) -> ok.
+
 insert(PKey, Hash) ->
     insert(PKey, Hash, false).
 
@@ -181,16 +187,26 @@ insert(PKey, Hash) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec insert(plum_db_pkey(), binary(), IfMissing :: boolean()) -> ok.
+
 insert(PKey, Hash, IfMissing) ->
-    Name = name(plum_db:get_partition(PKey)),
-    partisan_gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
+    insert(plum_db:get_partition(PKey), PKey, Hash, IfMissing).
 
 
--spec insert(plum_db:partition(), plum_db_pkey(), binary(), boolean()) -> ok.
-insert(Partition, PKey, Hash, IfMissing) ->
-    Name = name(Partition),
-    partisan_gen_server:call(Name, {insert, PKey, Hash, IfMissing}, infinity).
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec insert(
+    Server :: plum_db:partition() | atom() | pid(),
+    PKey :: plum_db_pkey(),
+    Hash :: binary(),
+    IsMissing :: boolean()) -> ok.
 
+insert(Partition, PKey, Hash, IfMissing) when is_integer(Partition)  ->
+    insert(name(Partition), PKey, Hash, IfMissing);
+
+insert(Server, PKey, Hash, IfMissing) when is_atom(Server); is_pid(Server) ->
+    partisan_gen_server:call(Server, {insert, PKey, Hash, IfMissing}, infinity).
 
 
 %% -----------------------------------------------------------------------------
@@ -205,7 +221,7 @@ insert(Partition, PKey, Hash, IfMissing) ->
 prefix_hash(Partition, Prefix) when is_integer(Partition) ->
     prefix_hash(name(Partition), Prefix);
 
-prefix_hash(Server, Prefix) when is_pid(Server) orelse is_atom(Server) ->
+prefix_hash(Server, Prefix) when is_atom(Server); is_pid(Server)->
     partisan_gen_server:call(Server, {prefix_hash, Prefix}, infinity).
 
 
@@ -252,7 +268,7 @@ key_hashes(Node, Partition, Prefixes, Segment) ->
 -spec lock(plum_db:partition()) -> ok | not_built | locked.
 
 lock(Partition) ->
-    lock(node(), Partition).
+    lock(partisan:node(), Partition).
 
 
 %% -----------------------------------------------------------------------------
@@ -279,11 +295,9 @@ lock(Node, Partition) ->
 %% -----------------------------------------------------------------------------
 -spec lock(node(), plum_db:partition(), pid()) -> ok | not_built | locked.
 
-lock(Node, Partition, Pid) ->
-    PidRef = partisan_remote_ref:from_term(Pid),
-    partisan_gen_server:call(
-        {name(Partition), Node}, {lock, PidRef}, ?CALL_OPTS
-    ).
+lock(Node, Partition, Pid) when is_pid(Pid), is_integer(Partition)  ->
+    Cmd = {lock, partisan_remote_ref:from_term(Pid)},
+    partisan_gen_server:call({name(Partition), Node}, Cmd, ?CALL_OPTS).
 
 
 
@@ -293,10 +307,11 @@ lock(Node, Partition, Pid) ->
 %% @see lock/3
 %% @end
 %% -----------------------------------------------------------------------------
--spec release_lock(plum_db:partition()) -> ok.
+-spec release_lock(plum_db:partition()) ->
+    ok | {error, not_locked | not_allowed}.
 
 release_lock(Partition) ->
-    release_lock(node(), Partition).
+    release_lock(partisan:node(), Partition).
 
 
 %% -----------------------------------------------------------------------------
@@ -305,7 +320,8 @@ release_lock(Partition) ->
 %% @see lock/3
 %% @end
 %% -----------------------------------------------------------------------------
--spec release_lock(node(), plum_db:partition()) -> ok.
+-spec release_lock(node(), plum_db:partition()) ->
+    ok | {error, not_locked | not_allowed}.
 
 release_lock(Node, Partition) ->
     release_lock(Node, Partition, self()).
@@ -322,11 +338,11 @@ release_lock(Node, Partition) ->
 -spec release_lock(node(), plum_db:partition(), pid()) ->
     ok | {error, not_locked | not_allowed}.
 
-release_lock(Node, Partition, Pid) ->
-    PidRef = partisan_remote_ref:from_term(Pid),
-    partisan_gen_server:call(
-        {name(Partition), Node}, {release_lock, external, PidRef}, ?CALL_OPTS
-    ).
+release_lock(Node, Partition, Pid)
+when is_atom(Node), is_integer(Partition), is_pid(Pid) ->
+    Server = {name(Partition), Node},
+    Cmd = {release_lock, external, partisan_remote_ref:from_term(Pid)},
+    partisan_gen_server:call(Server, Cmd, ?CALL_OPTS).
 
 
 %% -----------------------------------------------------------------------------
@@ -346,10 +362,10 @@ release_locks() ->
 
     lists:foldl(
         fun(Partition, Acc) ->
-            ServerRef = {name(Partition), node()},
+            Server = {name(Partition), partisan:node()},
             Cmd = {release_lock, external, undefined},
 
-            case partisan_gen_server:call(ServerRef, Cmd, ?CALL_OPTS) of
+            case partisan_gen_server:call(Server, Cmd, ?CALL_OPTS) of
                 ok ->
                     maps_utils:append(ok, Partition, Acc);
                 {error, Reason} ->
@@ -370,7 +386,7 @@ release_locks() ->
     ok | not_locked | not_built | ongoing_update.
 
 update(Partition) ->
-    update(node(), Partition).
+    update(partisan:node(), Partition).
 
 
 %% -----------------------------------------------------------------------------
@@ -399,7 +415,7 @@ update(Node, Partition) ->
 -spec reset(plum_db:partition()) -> ok.
 
 reset(Partition) ->
-    reset(node(), Partition).
+    reset(partisan:node(), Partition).
 
 
 %% -----------------------------------------------------------------------------
@@ -447,14 +463,13 @@ compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
 
 
 init([Partition, DataRoot]) ->
-    Id = name(Partition),
-    State0 = #state{
-        id = Id,
-        data_root = DataRoot,
-        partition = Partition
-    },
-    State = do_init(State0),
-    {ok, State}.
+    try
+        {ok, do_init(Partition, DataRoot)}
+    catch
+        _:Reason ->
+            {stop, Reason}
+    end.
+
 
 handle_call({compare, RemoteFun, HandlerFun, HandlerAcc}, From, State) ->
     maybe_compare_async(From, RemoteFun, HandlerFun, HandlerAcc, State),
@@ -491,14 +506,26 @@ handle_call({prefix_hash, Prefix}, _From, #state{tree = Tree} = State) ->
 handle_call(
     {insert, PKey, Hash, IfMissing}, _From, #state{tree = Tree} = State) ->
     {Prefixes, Key} = prepare_pkey(PKey),
-    Tree1 = hashtree_tree:insert(Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree),
-    {reply, ok, State#state{tree=Tree1}};
+    Result = hashtree_tree:insert(
+        Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree
+    ),
+    case Result of
+        {ok, Tree1} ->
+            {reply, ok, State#state{tree = Tree1}};
+
+        {error, bad_prefixes} = Error ->
+            {reply, Error, State}
+    end;
 
 handle_call(
     {delete, PKey}, _From, #state{tree = Tree} = State) ->
     {Prefixes, Key} = prepare_pkey(PKey),
-    Tree1 = hashtree_tree:delete(Prefixes, Key, Tree),
-    {reply, ok, State#state{tree=Tree1}};
+    case hashtree_tree:delete(Prefixes, Key, Tree) of
+        {ok, Tree1} ->
+            {reply, ok, State#state{tree = Tree1}};
+        {error, bad_prefixes} = Error ->
+            {reply, Error, State}
+    end;
 
 handle_call(_Message, _From, State) ->
     {reply, {error, unsupported_call}, State}.
@@ -514,7 +541,7 @@ handle_cast(reset, #state{built = true, lock = {internal, _, Pid}} = State) ->
         reason => ongoing_update,
         lock_owner => Pid,
         partition => State#state.partition,
-        node => node()
+        node => partisan:node()
     }),
     NewState = schedule_reset(State),
     {noreply, NewState};
@@ -525,7 +552,7 @@ handle_cast(reset, #state{built = true, lock = {external, _, Pid}} = State) ->
         reason => locked,
         lock_owner => Pid,
         partition => State#state.partition,
-        node => node()
+        node => partisan:node()
     }),
     NewState = schedule_reset(State),
     {noreply, NewState};
@@ -535,7 +562,7 @@ handle_cast(reset, #state{built = _} = State) ->
         description => "Skipping hashtree reset",
         reason => not_built,
         partition => State#state.partition,
-        node => node()
+        node => partisan:node()
     }),
     {noreply, State#state{reset = false}};
 
@@ -560,18 +587,18 @@ handle_info(
 
 handle_info(
     {'DOWN', Ref, process, _Pid, _Reason},
-    #state{lock = {Type, Ref, PidRef}} = State) ->
+    #state{lock = {_, Ref, _}} = State) ->
     %% The process holding the lock terminated.
-    {_, State1} = do_release_lock(Type, PidRef, State),
+    {_, State1} = do_release_lock(State),
     {noreply, State1};
 
-handle_info({nodedown, Node}, #state{lock = {Type, _, PidRef}} = State0) ->
+handle_info({nodedown, Node}, #state{lock = {_, _, PidRef}} = State0) ->
     case Node =:= partisan:node(PidRef) of
         true ->
             %% The node for the process holding the lock died or disconnected
             %% This is a double assurance as we should have recieved the DOWN
             %% signal for the process monitor (partisan_monitor).
-            {_, State1} = do_release_lock(Type, PidRef, State0),
+            {_, State1} = do_release_lock(State0),
             {noreply, State1};
 
         false ->
@@ -598,11 +625,13 @@ handle_info(Event, State) ->
     {noreply, State}.
 
 
-terminate(_Reason, State0) ->
-    {_, State1} = do_release_lock(State0),
+terminate(_Reason, State) ->
     %% TODO Here we should persist the hashtree to disk so that we avoid
     %% rebuilding next time (unless configured to do so)
-    hashtree_tree:destroy(State1#state.tree),
+    %% We do this first as anything else below that crashes might leave the
+    %% store backend locked e.g. leveldb
+    ok = hashtree_tree:destroy(State#state.tree),
+    _ = do_release_lock(State),
     ok.
 
 
@@ -618,38 +647,41 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
-do_init(#state{data_root = DataRoot, partition = Partition} = State0) ->
-    %% TODO we shoul have persiste the hashtree_tree and restore here if
-    %% existed. See terminate.
-    try
-        TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
-        Tree = hashtree_tree:new(
-            TreeId, [{data_dir, DataRoot}, {num_levels, 2}]
-        ),
-        TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
-        State = State0#state{
-            tree = Tree,
-            build_ts_secs = undefined,
-            ttl_secs = TTL,
-            lock = undefined
-        },
-        NewState = build_async(State),
-        schedule_tick(NewState)
-    catch
-        _:Reason ->
-            {stop, Reason}
-    end.
+do_init(Partition, DataRoot) ->
+
+    %% TODO we should have persisted the hashtree_tree and restore here if
+%% existed. See terminate.
+    TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
+    Tree = hashtree_tree:new(
+        TreeId, [{data_dir, DataRoot}, {num_levels, 2}]
+    ),
+    TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
+
+
+    State0 = #state{
+        id = name(Partition),
+        data_root = DataRoot,
+        partition = Partition,
+        tree = Tree,
+        build_ts_secs = undefined,
+        %% eqwalizer:ignore TTL
+        ttl_secs = TTL,
+        lock = undefined
+    },
+
+    State1 = build_async(State0),
+    schedule_tick(State1).
 
 
 %% @private
-do_reset(#state{lock = undefined} = State) ->
+do_reset(#state{data_root = DataRoot, partition = Partition, lock = undefined} = State) ->
     _ = hashtree_tree:destroy(State#state.tree),
     ?LOG_INFO(#{
         description => "Resetting hashtree",
         partition => State#state.partition,
-        node => node()
+        node => partisan:node()
     }),
-    do_init(State).
+    do_init(Partition, DataRoot).
 
 
 %% @private
@@ -732,7 +764,7 @@ update_async(From, Lock, #state{tree = Tree} = State) ->
         false ->
             State
     end,
-    State1#state{tree=Tree2}.
+    State1#state{tree = Tree2}.
 
 
 %% @private
@@ -744,20 +776,24 @@ maybe_build_async(State) ->
 
 
 %% @private
+
+maybe_reset(#state{built = false} = State) ->
+    State#state{reset = false};
+
 maybe_reset(#state{built = true, reset = true, lock = undefined} = State) ->
     do_reset(State);
 
-maybe_reset(#state{built = true, reset = false, lock = undefined} = State) ->
-    Diff = erlang:system_time(second) - State#state.build_ts_secs,
+maybe_reset(#state{
+    built = true, reset = false, lock = undefined, build_ts_secs = Ts
+    } = State) when is_integer(Ts) ->
+
+    Diff = erlang:system_time(second) - Ts,
     case Diff >= State#state.ttl_secs of
         true ->
             do_reset(State);
         false ->
             State
     end;
-
-maybe_reset(#state{built = false} = State) ->
-    State#state{reset = false};
 
 maybe_reset(State) ->
     State.
@@ -772,7 +808,7 @@ build_async(State) ->
                 ?LOG_INFO(#{
                     description => "Starting hashtree build",
                     partition => Partition,
-                    node => node()
+                    node => partisan:node()
                 }),
 
 
@@ -791,7 +827,7 @@ build_async(State) ->
                             class => Class,
                             reason => Reason,
                             stacktrace => Stacktrace,
-                            node => node()
+                            node => partisan:node()
                         }),
                         exit(Reason)
                 after
@@ -829,7 +865,7 @@ build_done(State) ->
     ?LOG_INFO(#{
         description => "Finished hashtree build",
         partition => Partition,
-        node => node()
+        node => partisan:node()
     }),
 
     _ = plum_db_events:notify(hashtree_build_finished, {ok, Partition}),
@@ -844,7 +880,7 @@ build_error(Reason, State) ->
         description => "Building tree failed",
         reason => Reason,
         partition => Partition,
-        node => node()
+        node => partisan:node()
     }),
 
     _ = plum_db_events:notify(hashtree_build_finished, {ok, Partition}),
@@ -853,7 +889,6 @@ build_error(Reason, State) ->
 
 
 %% @private
-
 maybe_external_lock(_, From, #state{built = Value} = State)
 when Value == false orelse is_reference(Value) ->
     partisan_gen_server:reply(From, not_built),
@@ -878,21 +913,35 @@ maybe_external_lock(_, From, #state{built = true} = State) ->
 
 
 %% @private
-do_lock(Type, PidRef, State) ->
-    %% This works for PidRef :: pid() and also for Partisan ref
-    LockRef = partisan:monitor(process, PidRef, ?MONITOR_OPTS),
-    State#state{lock = {Type, LockRef, PidRef}}.
+-spec do_lock(internal|external, pid() | partisan_remote_ref:p(), state()) ->
+    state().
+
+do_lock(internal, Pid, State) when is_pid(Pid) ->
+    Mref = erlang:monitor(process, Pid),
+    State#state{lock = {internal, Mref, Pid}};
+
+do_lock(external, Process, State) ->
+    Mref = partisan:monitor(process, Process, ?MONITOR_OPTS),
+    %% eqwalizer:ignore Mref
+    State#state{lock = {external, Mref, Process}}.
+
+
+%% @private
+do_release_lock(#state{lock = undefined} = State) ->
+    {ok, State};
+
+do_release_lock(#state{lock = {Type, _, Process}} = State) ->
+    do_release_lock(Type, Process, State).
 
 
 %% @private
 do_release_lock(
-    external, undefined, #state{lock = {external, LockRef, _PidRef}} = State) ->
-    true = partisan:demonitor(LockRef, [flush]),
+    external, undefined, #state{lock = {external, Mref, _}} = State) ->
+    true = partisan:demonitor(Mref, [flush]),
     {ok, State#state{lock = undefined}};
 
-do_release_lock(Type, PidRef, #state{lock = {Type, LockRef, PidRef}} = State) ->
-    %% This works for PidRef :: pid() and also for Partisan ref
-    true = partisan:demonitor(LockRef, [flush]),
+do_release_lock(Type, Process, #state{lock = {Type, Mref, Process}} = State) ->
+    true = partisan:demonitor(Mref, [flush]),
     {ok, State#state{lock = undefined}};
 
 do_release_lock(_, _, #state{lock = undefined} = State) ->
@@ -902,12 +951,6 @@ do_release_lock(_, _, State) ->
     {{error, not_allowed}, State}.
 
 
-%% @private
-do_release_lock(#state{lock = undefined} = State) ->
-    {ok, State};
-
-do_release_lock(#state{lock = {Type, _, PidRef}} = State) ->
-    do_release_lock(Type, PidRef, State).
 
 
 %% @private
@@ -933,12 +976,14 @@ schedule_reset(State) ->
 schedule_tick(State0) ->
     State1 = cancel_timer(State0),
     Ms = case State1#state.reset of
-        true -> 1000;
-        false -> plum_db_config:get(hashtree_timer)
+        true ->
+            1000;
+        false ->
+            plum_db_config:get(hashtree_timer)
     end,
-    State1#state{
-        timer = erlang:start_timer(Ms, State1#state.id, tick)
-    }.
+    %% eqwalizer:ignore
+    Timer = erlang:start_timer(Ms, State1#state.id, tick),
+    State1#state{timer = Timer}.
 
 
 %% @private
@@ -946,5 +991,6 @@ cancel_timer(#state{timer = undefined} = State) ->
     State;
 
 cancel_timer(#state{timer = Ref} = State) ->
+    %% eqwalizer:ignore Ref
     _ = erlang:cancel_timer(Ref),
     State#state{timer = undefined}.

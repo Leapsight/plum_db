@@ -20,6 +20,7 @@
 -behaviour(partisan_gen_statem).
 -include_lib("kernel/include/logger.hrl").
 -include("plum_db.hrl").
+-include("utils.hrl").
 
 -record(state, {
     %% node the exchange is taking place with
@@ -82,6 +83,7 @@ start(Peer, Opts) when is_list(Opts) ->
 
 start(Peer, Opts) when is_map(Opts) ->
     StartOpts = [{channel, plum_db_config:get(data_channel)}],
+    %% eqwalizer:ignore StartOpts
     partisan_gen_statem:start(?MODULE, [Peer, Opts], StartOpts).
 
 
@@ -93,6 +95,7 @@ start_link(Peer, Opts) when is_list(Opts) ->
 
 start_link(Peer, Opts) when is_map(Opts) ->
     StartOpts = [{channel, plum_db_config:get(data_channel)}],
+    %% eqwalizer:ignore StartOpts
     partisan_gen_statem:start_link(?MODULE, [Peer, Opts], StartOpts).
 
 
@@ -251,7 +254,7 @@ acquiring_locks(Type, Content, State) ->
 updating_hashtrees(timeout, start, State) ->
     Partition = hd(State#state.partitions),
     %% Update local hashtree
-    ok = update_request(node(), Partition),
+    ok = update_request(partisan:node(), Partition),
     %% Update remote hashtree
     ok = update_request(State#state.peer, Partition),
     {next_state, updating_hashtrees, State, State#state.timeout};
@@ -264,7 +267,7 @@ updating_hashtrees(
         partition => H,
         node => Peer
     }),
-    _ = catch release_locks(H, Peer),
+    ok = release_locks(H, Peer),
     %% We try again with the remaining partitions
     State = add_summary(H, skipped, State0#state{partitions = T}),
     {next_state, acquiring_locks, State, [{next_event, internal, next}]};
@@ -289,7 +292,7 @@ updating_hashtrees(cast, remote_tree_updated, State0) ->
 
 updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
     [H|T] = State#state.partitions,
-    _ = catch release_locks(H, State#state.peer),
+    ok = release_locks(H, State#state.peer),
     ?LOG_ERROR(#{
         description => "Error while updating hashtree",
         hashtree => LocOrRemote,
@@ -393,7 +396,11 @@ handle_other_event(StateLabel, Type, Event, State) ->
     {keep_state, State}.
 
 
+%% -----------------------------------------------------------------------------
 %% @private
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
 async_acquire_remote_lock(Peer, Partition) ->
     Self = self(),
     do_async(fun() ->
@@ -431,28 +438,31 @@ release_remote_lock(Partition, Peer) ->
 
 
 %% @private
-update_request(Node, Partition) when Node =:= node() ->
-    do_async(fun() ->
-        %% acquired lock so we know there is no other update
-        %% and tree is built
-        case plum_db_partition_hashtree:update(Node, Partition) of
-            ok -> local_tree_updated;
-            Error -> {error, {local, Error}}
-        end
-    end);
-
 update_request(Node, Partition) ->
+    IsLocal = Node == partisan:node(),
+
     do_async(fun() ->
         %% acquired lock so we know there is no other update
         %% and tree is built
         case plum_db_partition_hashtree:update(Node, Partition) of
-            ok -> remote_tree_updated;
-            Error -> {error, {remote, Error}}
+            ok when IsLocal == true ->
+                local_tree_updated;
+            ok when IsLocal == false ->
+                remote_tree_updated;
+            Error when IsLocal == true ->
+                {error, {local, Error}};
+            Error when IsLocal == false ->
+                {error, {remote, Error}}
         end
     end).
 
 
+%% -----------------------------------------------------------------------------
 %% @private
+%% @doc Executes the function `F' in a newly spawned linked process and
+%% immediately returns `ok'.
+%% @end
+%% -----------------------------------------------------------------------------
 do_async(F) ->
     Statem = self(),
 
