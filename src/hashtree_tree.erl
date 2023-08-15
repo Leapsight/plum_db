@@ -335,7 +335,9 @@ get_bucket(Prefixes, Level, Bucket, Tree) ->
 %% @doc Returns the {@link hashtree} segment hashes for a given node
 %% in the tree.  This is used primarily for accessing key hashes of a
 %% remote tree during compare.
--spec key_hashes(tree_node(), integer(), tree()) -> [{integer(), orddict:orddict()}].
+-spec key_hashes(tree_node(), integer(), tree()) ->
+    [{'*' |integer(), orddict:orddict()}].
+
 key_hashes(Prefixes, Segment, Tree) ->
     case lookup_node(prefixes_to_node_name(Prefixes), Tree) of
         undefined -> [{Segment, orddict:new()}];

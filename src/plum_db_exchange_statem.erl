@@ -83,6 +83,7 @@ start(Peer, Opts) when is_list(Opts) ->
 
 start(Peer, Opts) when is_map(Opts) ->
     StartOpts = [{channel, plum_db_config:get(data_channel)}],
+    %% eqwalizer:ignore StartOpts
     partisan_gen_statem:start(?MODULE, [Peer, Opts], StartOpts).
 
 
@@ -94,6 +95,7 @@ start_link(Peer, Opts) when is_list(Opts) ->
 
 start_link(Peer, Opts) when is_map(Opts) ->
     StartOpts = [{channel, plum_db_config:get(data_channel)}],
+    %% eqwalizer:ignore StartOpts
     partisan_gen_statem:start_link(?MODULE, [Peer, Opts], StartOpts).
 
 

@@ -35,7 +35,7 @@
     name                                ::  atom(),
     partition                           ::  non_neg_integer(),
     actor_id                            ::  optional({integer(), node()}),
-    db_info                             ::  optional(db_info()),
+    db_info                             ::  db_info(),
 	config = []							::	opts(),
 	data_root							::	file:filename(),
 	open_opts = []						::	opts(),
@@ -432,7 +432,7 @@ iterator_move(#partition_iterator{disk_done = false} = Iter, Term) ->
 
     DbIter = Iter#partition_iterator.disk,
 
-    case eleveldb:iterator_move(DbIter, eleveldb_action(Term)) of
+    case disk_iterator_move(DbIter, eleveldb_action(Term)) of
         {ok, K} ->
             NewIter = Iter#partition_iterator{prev_key = K},
             case matches_key(K, Iter) of
@@ -480,6 +480,14 @@ iterator_move(
     {error, invalid_iterator, Iter}.
 
 
+
+disk_iterator_move(undefined, _) ->
+    {error, invalid_iterator};
+
+disk_iterator_move(DbIter, Term) ->
+    eleveldb:iterator_move(DbIter, eleveldb_action(Term)).
+
+
 %% @private
 ets_iterator_move(Type, _, Iter, first) ->
     KeysOnly = Iter#partition_iterator.keys_only,
@@ -510,6 +518,14 @@ ets_iterator_move(Type, _, Iter, first) ->
                     {error, invalid_iterator, NewIter}
             end
     end;
+
+ets_iterator_move(Type, key, #partition_iterator{} = Iter, next)
+when Iter#partition_iterator.prev_key == undefined ->
+    ets_iterator_move(Type, key, Iter, first);
+
+ets_iterator_move(Type, key, #partition_iterator{} = Iter, prev)
+when Iter#partition_iterator.prev_key == undefined ->
+    ets_iterator_move(Type, key, Iter, last);
 
 ets_iterator_move(Type, key, Iter, next) ->
     KeysOnly = Iter#partition_iterator.keys_only,
@@ -576,8 +592,10 @@ ets_iterator_move(Type, key, Iter, prev) ->
                 NewIter ->
                     iterator_move(NewIter, prev)
             end;
+
         K when KeysOnly ->
             NewIter = update_iterator(Type, Iter, K, key),
+            %% eqwalizer:ignore K
             case matches_key(K, Iter) of
                 {true, K} ->
                     {ok, K, NewIter};
@@ -586,6 +604,7 @@ ets_iterator_move(Type, key, Iter, prev) ->
                 ?EOT ->
                     {error, invalid_iterator, NewIter}
             end;
+
         K ->
             [{K, V}] = ets:lookup(Tab, K),
             NewIter = update_iterator(Type, Iter, K, key),
@@ -695,6 +714,7 @@ init([Name, Partition, Opts]) ->
 
     process_flag(trap_exit, true),
 
+    %% eqwalizer:ignore
     DataRoot = filename:join([
         plum_db_config:get(db_dir),
         integer_to_list(Partition)
@@ -1097,6 +1117,7 @@ init_state(Name, Partition, DataRoot, Config) ->
             ram_disk_tab = RamDiskTab,
             read_opts = ReadOpts,
             write_opts = WriteOpts,
+            %% eqwalizer:ignore FoldOpts
             fold_opts = FoldOpts
         },
 		config = FinalConfig,
@@ -1117,7 +1138,7 @@ config_value(Key, Config, Default) ->
 
 %% @private
 open_db(State) ->
-    RetriesLeft = plum_db_config:get(store_open_retry_Limit),
+    RetriesLeft = plum_db_config:get(store_open_retry_Limit, 30),
     open_db(State, max(1, RetriesLeft), undefined).
 
 
@@ -1126,19 +1147,24 @@ open_db(_State, 0, LastError) ->
     {error, LastError};
 
 open_db(State, RetriesLeft, _) ->
-    case eleveldb:open(State#state.data_root, State#state.open_opts) of
+    OpenOpts = State#state.open_opts,
+
+    %% eqwalizer:ignore open opts
+    case eleveldb:open(State#state.data_root, OpenOpts) of
         {ok, Ref} ->
             DBInfo0 = State#state.db_info,
             DBInfo = DBInfo0#db_info{db_ref = Ref},
             {ok, State#state{db_info = DBInfo}};
-        %% Check specifically for lock error, this can be caused if
-        %% a crashed vnode takes some time to flush leveldb information
-        %% out to disk.  The process is gone, but the NIF resource cleanup
-        %% may not have completed.
-    	{error, {db_open, OpenErr} = Reason} ->
+
+    	{error, {db_open, OpenErr} = Reason} when is_list(OpenErr) ->
+            %% Check specifically for lock error, this can be caused if
+            %% a crashed vnode takes some time to flush leveldb information
+            %% out to disk.  The process is gone, but the NIF resource cleanup
+            %% may not have completed.
             case lists:prefix("IO error: lock ", OpenErr) of
                 true ->
                     SleepFor = plum_db_config:get(store_open_retries_delay),
+
                     ?LOG_DEBUG(#{
                         description => "Leveldb backend retrying after error",
                         partition => State#state.partition,
@@ -1147,13 +1173,16 @@ open_db(State, RetriesLeft, _) ->
                         timeout => SleepFor,
                         reason => OpenErr
                     }),
+                    %% eqwalizer:ignore SleepFor
                     timer:sleep(SleepFor),
                     open_db(State, RetriesLeft - 1, Reason);
+
                 false ->
                     case lists:prefix("Corruption", OpenErr) of
                         true ->
                             ?LOG_WARNING(#{
-                                description => "Starting repair of corrupted Leveldb store",
+                                description =>
+                                    "Starting repair of corrupted Leveldb store",
                                 partition => State#state.partition,
                                 node => partisan:node(),
                                 data_root => State#state.data_root,
@@ -1163,7 +1192,8 @@ open_db(State, RetriesLeft, _) ->
                                 State#state.data_root, State#state.open_opts
                             ),
                             ?LOG_NOTICE(#{
-                                description => "Finished repair of corrupted Leveldb store",
+                                description =>
+                                    "Finished repair of corrupted Leveldb store",
                                 partition => State#state.partition,
                                 node => partisan:node(),
                                 data_root => State#state.data_root,
@@ -1214,7 +1244,7 @@ init_ram_disk_prefixes_fun(State) ->
                         node => partisan:node()
                     }),
                     First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
-                    Next = eleveldb:iterator_move(DbIter, First),
+                    Next = disk_iterator_move(DbIter, First),
                     init_prefix_iterate(
                         Next, DbIter, First, erlang:byte_size(First), Tab
                     );
@@ -1267,7 +1297,7 @@ init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab) ->
             %% Element is {{P, K}, MetadataObj}
             PKey = decode_key(K),
             true = ets:insert(Tab, {PKey, binary_to_term(V)}),
-            Next = eleveldb:iterator_move(DbIter, prefetch),
+            Next = disk_iterator_move(DbIter, prefetch),
             init_prefix_iterate(Next, DbIter, BinPrefix, BPSize, Tab);
         _ ->
             %% We have no more matches in this Prefix
@@ -1401,6 +1431,7 @@ maybe_resolve(Object, Opts) ->
         false ->
             Resolver = key_value:get(resolver, Opts, lww),
             try
+                %% eqwalizer:ignore Resolver
                 {ok, plum_db_object:resolve(Object, Resolver)}
             catch
                 Class:Reason:Stacktrace ->
@@ -1618,7 +1649,8 @@ prev_iterator(ram_disk, Iter) ->
 
 
 %% @private
--spec eleveldb_action(iterator_action()) -> iterator_action() | binary().
+-spec eleveldb_action(iterator_action_ext() | plum_db_prefix_pattern() | plum_db_pkey_pattern()) ->
+    iterator_action() | binary().
 
 eleveldb_action({?WILDCARD, _}) ->
     first;
@@ -1630,7 +1662,9 @@ eleveldb_action({{_, _}, _} = PKey) ->
     sext:prefix(PKey);
 
 eleveldb_action({_, _} = FullPrefix) ->
-    eleveldb_action({{_, _} = FullPrefix, ?WILDCARD});
+    %% A PKey with wildcard key
+    %% eqwalizer:ignore
+    eleveldb_action({FullPrefix, ?WILDCARD});
 
 eleveldb_action(first) ->
     first;
@@ -1685,6 +1719,7 @@ matches_key(PKey, #partition_iterator{match_spec = undefined} = Iter) ->
         true when is_binary(PKey) ->
             {true, decode_key(PKey)};
         true ->
+            %% eqwalizer:ignore
             {true, PKey};
         false ->
             ?EOT
@@ -1924,8 +1959,8 @@ callback(Name, {{Prefix, _}, _} = PKey, Args) when is_list(Args) ->
             undefined ->
                 Default;
 
-            {Mod, Fun} ->
-                case erlang:apply(Mod, Fun, [PKey | Args]) of
+            {Mod, FunName} when is_atom(Mod), is_atom(FunName) ->
+                case erlang:apply(Mod, FunName, [PKey | Args]) of
                     ok when Name == on_update;
                             Name == on_merge;
                             Name == on_delete;
