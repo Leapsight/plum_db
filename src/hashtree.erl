@@ -1300,6 +1300,7 @@ compare(Tree, Remote, AccFun) ->
 %% LevelDB store that is used by `compare', therefore isolating the
 %% compare from newer/concurrent insertions into the tree.
 snapshot_test() ->
+    partisan_config:init(),
     A0 = insert(<<"10">>, <<"42">>, new()),
     B0 = insert(<<"10">>, <<"52">>, new()),
     A1 = update_tree(A0),
@@ -1314,6 +1315,7 @@ snapshot_test() ->
     ok.
 
 delta_test() ->
+    partisan_config:init(),
     T1 = update_tree(insert(<<"1">>, esha(term_to_binary(make_ref())),
                             new())),
     T2 = update_tree(insert(<<"2">>, esha(term_to_binary(make_ref())),
