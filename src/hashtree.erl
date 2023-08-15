@@ -353,22 +353,27 @@ new() ->
     hashtree() | no_return().
 
 new(TreeId) ->
-    RefDir = new_segment_store([]),
-    new(TreeId, RefDir, []).
+    SegmentStore = new_segment_store([]),
+    new(TreeId, SegmentStore, []).
 
 -spec new({index(), tree_id_bin() | non_neg_integer()}, proplist()) ->
     hashtree()  | no_return();
     ({index(), tree_id_bin() | non_neg_integer()}, hashtree()) ->
         hashtree() | no_return().
 new(TreeId, Options) when is_list(Options) ->
-    RefDir = new_segment_store(Options),
-    new(TreeId, RefDir, Options);
+    SegmentStore = new_segment_store(Options),
+    new(TreeId, SegmentStore, Options);
 new(TreeId, #state{ref = Ref, path = DataDir}) ->
-    new(TreeId, {Ref, DataDir}, []).
+    SegmentStore = {Ref, DataDir},
+    new(TreeId, SegmentStore, []).
 
 -spec new({index(), tree_id_bin() | non_neg_integer()},
-          segment_store(),
+          segment_store() | hashtree(),
           proplist()) -> hashtree() | no_return().
+
+new(TreeId, #state{ref = Ref, path = DataDir}, Options) ->
+    SegmentStore = {Ref, DataDir},
+    new(TreeId, SegmentStore, Options);
 
 new({Index,TreeId}, {Ref, DataDir}, Options) ->
     NumSegments = proplists:get_value(segments, Options, ?NUM_SEGMENTS),
