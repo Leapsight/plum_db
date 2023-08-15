@@ -265,7 +265,7 @@ updating_hashtrees(
         partition => H,
         node => Peer
     }),
-    _ = catch release_locks(H, Peer),
+    ok = release_locks(H, Peer),
     %% We try again with the remaining partitions
     State = add_summary(H, skipped, State0#state{partitions = T}),
     {next_state, acquiring_locks, State, [{next_event, internal, next}]};
@@ -290,7 +290,7 @@ updating_hashtrees(cast, remote_tree_updated, State0) ->
 
 updating_hashtrees(cast, {error, {LocOrRemote, Reason}}, State) ->
     [H|T] = State#state.partitions,
-    _ = catch release_locks(H, State#state.peer),
+    ok = release_locks(H, State#state.peer),
     ?LOG_ERROR(#{
         description => "Error while updating hashtree",
         hashtree => LocOrRemote,
