@@ -760,8 +760,9 @@ update_levels(Level, Groups, State) ->
 %%   [{1,[{1,H1}, {2,H2}, {3,H3}, {4,H4}]},
 %%    {2,[{5,H5}, {6,H6}, {7,H7}, {8,H8}]}]
 %%
--spec group([{integer(), binary()}], pos_integer())
-           -> [{integer(), [{integer(), binary()}]}].
+-spec group([{integer(), orddict()}], pos_integer()) ->
+    [{integer(), [{integer(), orddict()}]}].
+
 group(L, Width) ->
     {FirstId, _} = hd(L),
     FirstBucket = FirstId div Width,
@@ -850,7 +851,8 @@ encode_bucket(TreeId, Level, Bucket) ->
 encode_meta(Key) ->
     <<$m,Key/binary>>.
 
--spec hashes(hashtree(), list('*'|integer())) -> [{integer(), binary()}].
+-spec hashes(hashtree(), list('*'|integer())) ->
+    orddict('*'|integer(), binary()).
 hashes(State, Segments) ->
     multi_select_segment(State, Segments, fun hash/1).
 
@@ -862,7 +864,7 @@ snapshot(State) ->
     State#state{itr=Itr}.
 
 -spec multi_select_segment(hashtree(), list('*'|integer()), select_fun(T))
-                          -> orddict('*'|integer(), T).
+                          -> [{'*'|integer(), T}].
 
 multi_select_segment(#state{id=Id, itr=Itr}, Segments, F) ->
     [First | Rest] = Segments,
