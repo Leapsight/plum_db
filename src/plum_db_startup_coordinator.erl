@@ -274,8 +274,10 @@ handle_continue(_, State) ->
 -spec handle_call(term(), {pid(), term()}, state()) ->
     {reply, term(), state()}
     | {reply, term(), state(), non_neg_integer()}
+    | {reply, term(), state(), {continue, term()}}
     | {noreply, state()}
     | {noreply, state(), non_neg_integer()}
+    | {noreply, state(), {continue, term()}}
     | {stop, term(), term(), state()}
     | {stop, term(), state()}.
 
@@ -308,9 +310,11 @@ handle_call(wait_for_hashtrees, {_, Tag} = From, State) ->
     {reply, {ok, Tag}, State#state{hashtree_watchers = L}};
 
 
-handle_call({wait_for_aae_exchange, Opts}, {_, Tag} = From, #state{} = State)->
+handle_call({wait_for_aae_exchange, Opts}, {_, Tag} = From, #state{} = State)
+when is_map(Opts) ->
     Flag = maps:get(force, Opts, false),
     L = [From | State#state.aex_watchers],
+    %% eqwalizer:ignore Flag
     NewState = State#state{aex_watchers = L, aex_force_first = Flag},
     {reply, {ok, Tag}, NewState, {continue, maybe_exchange}};
 
@@ -330,6 +334,7 @@ handle_call(_Message, _From, State) ->
 -spec handle_cast(term(), state()) ->
     {noreply, state()}
     | {noreply, state(), non_neg_integer()}
+    | {noreply, state(), {continue, term()}}
     | {stop, term(), state()}.
 
 handle_cast(_Msg, State) ->
@@ -340,6 +345,7 @@ handle_cast(_Msg, State) ->
 -spec handle_info(term(), state()) ->
     {noreply, state()}
     | {noreply, state(), non_neg_integer()}
+    | {noreply, state(), {continue, term()}}
     | {stop, term(), state()}.
 
 handle_info({plum_db_event, partition_init_finished, Result}, State) ->

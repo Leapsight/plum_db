@@ -184,6 +184,7 @@ will_set(_, _) ->
 
 on_set(data_dir, Value) ->
     _ = app_config:set(?APP, db_dir, db_dir(Value)),
+    %% eqwalizer:ignore
     Hashtrees = filename:join([Value, "hashtrees"]),
     app_config:set(?APP, hashtrees_dir, Hashtrees);
 
@@ -246,12 +247,14 @@ validate_prefixes(L) when is_list(L) ->
         lists:map(
             fun
                 ({Prefix, Config0}) when is_map(Config0) ->
+                    %% eqwalizer:ignore CONFIG_SPEC
                     Config = maps_utils:validate(Config0, ?CONFIG_SPEC),
                     {Prefix, Config};
 
                 ({Prefix, Type})
                 when Type == ram; Type == ram_disk; Type == disk ->
                     Config0 = #{type => Type},
+                    %% eqwalizer:ignore CONFIG_SPEC
                     Config = maps_utils:validate(Config0, ?CONFIG_SPEC),
                     {Prefix, Config};
 
@@ -321,6 +324,7 @@ setup_partisan() ->
 
     DataChannel = ?MODULE:get(data_channel, ?DATA_CHANNEL),
     DataChannelOpts0 = ?MODULE:get(data_channel_opts),
+    %% eqwalizer:ignore DataChannelOpts0
     DataChannelOpts = DataChannelOpts0#{monotonic => false},
 
     %% We override the settings

@@ -228,10 +228,11 @@ handle_event({Event, Message}, #state{callback = undefined} = State) ->
     _ = plum_db_pubsub:publish_cond(l, Event, Message),
     {ok, State};
 
-handle_event({Event, Message}, State) ->
+handle_event({Event, Message}, #state{callback = CB} = State)
+when is_function(CB, 1) ->
     %% We notify callback funs
     try
-        (State#state.callback)({Event, Message})
+        (CB)({Event, Message})
     catch
         Class:Reason:Stacktrace ->
             ?LOG_ERROR(#{

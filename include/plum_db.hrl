@@ -32,11 +32,10 @@
     [{channel, Channel}]
 ).
 
-
-
 -type plum_db_prefix()          ::  {binary() | atom(), binary() | atom()}.
 -type plum_db_prefix_pattern()  ::  {
-                                        binary() | atom() | plum_db_wildcard(), binary() | atom() | plum_db_wildcard()
+                                        binary() | atom() | plum_db_wildcard(),
+                                        binary() | atom() | plum_db_wildcard()
                                     }.
 -type plum_db_key()             ::  any().
 -type plum_db_pkey()            ::  {plum_db_prefix(), plum_db_key()}.
