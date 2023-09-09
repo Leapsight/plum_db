@@ -36,20 +36,20 @@
     partition                           ::  non_neg_integer(),
     actor_id                            ::  optional({integer(), node()}),
     db_info                             ::  db_info(),
-	config = []							::	opts(),
-	data_root							::	file:filename(),
-	open_opts = []						::	opts(),
+	  opts = []                           ::  opts(),
+	  data_root                           ::  file:filename(),
+	  open_opts = []                      ::  opts(),
     iterators = []                      ::  iterators(),
     helper = undefined                  ::  optional(pid())
 }).
 
 -record(db_info, {
-    db_ref 								::	optional(rocksdb:db_ref()),
-    ram_tab                             ::  atom(),
-    ram_disk_tab                        ::  atom(),
-	read_opts = []						::	opts(),
-    write_opts = []						::	opts(),
-    fold_opts = [{fill_cache, false}]	::	opts()
+    db_ref                            ::  optional(rocksdb:db_ref()),
+    ram_tab                           ::  atom(),
+    ram_disk_tab                      ::  atom(),
+	  read_opts = []                    ::  opts(),
+    write_opts = []                   ::  opts(),
+    fold_opts = [{fill_cache, false}] ::  opts()
 }).
 
 -record(partition_iterator, {
@@ -433,7 +433,7 @@ iterator_move(#partition_iterator{disk_done = false} = Iter, Term) ->
 
     DbIter = Iter#partition_iterator.disk,
 
-    case disk_iterator_move(DbIter, eleveldb_action(Term)) of
+    case disk_iterator_move(DbIter, rocksdb_action(Term)) of
         {ok, K, _} when Iter#partition_iterator.keys_only ->
             NewIter = Iter#partition_iterator{prev_key = K},
             case matches_key(K, Iter) of
@@ -1103,9 +1103,9 @@ init_state(Name, Partition, DataRoot, Opts0) ->
             %% eqwalizer:ignore FoldOpts
             fold_opts = FoldOpts
         },
-		opts = Opts,
+		    opts = Opts,
         data_root = DataRoot,
-		open_opts = OpenOpts
+		    open_opts = OpenOpts
 	}.
 
 
@@ -1625,7 +1625,7 @@ prev_iterator(disk, _) ->
     undefined.
 
 %% @private
--spec eleveldb_action(iterator_action_ext() | plum_db_prefix_pattern() | plum_db_pkey_pattern()) ->
+-spec rocksdb_action(iterator_action_ext() | plum_db_prefix_pattern() | plum_db_pkey_pattern()) ->
     iterator_action() | binary().
 
 %% @private
