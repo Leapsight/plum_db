@@ -149,7 +149,9 @@
 %% latency but increase overall disk activity.  Option can be
 %% changed at any time, but will not impact data on disk until
 %% next time a file requires compaction.
-{mapping, "db.compression", "eleveldb.compression", [
+{mapping, "db.compression", "eleveldb.compression_enabled", [
+  %% eleveldb.compression_enabled is a temp param not recognised by eleveldb
+  %% we just use it in the translation
   {default, on},
   {datatype, flag}
 ]}.
@@ -159,7 +161,7 @@
 %% algorithm that compresses to similar volume but averages twice
 %% as fast on writes and four times as fast on reads.
 {mapping, "db.compression.algorithm", "eleveldb.compression", [
-  {default, lz4},
+  {new_conf_value, lz4},
   {datatype, {enum, [snappy, lz4]}}
 ]}.
 
@@ -168,9 +170,9 @@
  fun(Conf) ->
   Setting = cuttlefish:conf_get("db.compression", Conf),
     case Setting of
-      false -> false;
+      false ->
+        false;
       true ->
-        exit(Setting),
         cuttlefish:conf_get("db.compression.algorithm", Conf, lz4)
     end
  end}.
