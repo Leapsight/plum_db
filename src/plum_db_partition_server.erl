@@ -39,7 +39,7 @@
 	config = []							::	opts(),
 	data_root							::	file:filename(),
 	open_opts = []						::	opts(),
-    iterators = []                      ::  iterators(),
+    iterators = #{}                     ::  iterators(),
     helper = undefined                  ::  optional(pid())
 }).
 
@@ -76,7 +76,7 @@
 -type opts()                    :: 	[{atom(), term()}].
 -type db_info()                 ::  #db_info{}.
 -type iterator()                ::  #partition_iterator{}.
--type iterators()               ::  [iterator()].
+-type iterators()               ::  #{reference() => iterator()}.
 -type iterator_action()         ::  first
                                     | last | next | prev
                                     | prefetch | prefetch_stop.
@@ -1007,10 +1007,8 @@ handle_info(Event, State) ->
 
 terminate(_Reason, State) ->
     %% Close all iterators
-    _ = lists:foldl(
-        fun(Iter, Acc) ->
-            close_iterator(Iter, Acc)
-        end,
+    _ = maps:fold(
+        fun(Iter, Acc) -> close_iterator(Iter, Acc) end,
         State,
         State#state.iterators
     ),
@@ -1811,17 +1809,16 @@ update_iterator(ram_disk, Iter, Key, Cont) ->
 %% @private
 add_iterator(#partition_iterator{} = Iter, State) ->
     Mref = Iter#partition_iterator.owner_mref,
-    Iterators1 = lists:keystore(Mref, 2, State#state.iterators, Iter),
+    Iterators1 = maps:put(Mref, Iter, State#state.iterators),
     State#state{iterators = Iterators1}.
 
 
 %% @private
 take_iterator(Mref, State) when is_reference(Mref) ->
-    Pos = #partition_iterator.owner_mref,
-    case lists:keytake(Mref, Pos, State#state.iterators) of
-        {value, Iter, Iterators1} ->
+    case maps:take(Mref, State#state.iterators) of
+        {Iter, Iterators1} ->
             {Iter, State#state{iterators = Iterators1}};
-        false ->
+        error ->
             error
     end.
 
