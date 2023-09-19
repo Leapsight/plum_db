@@ -856,6 +856,12 @@ encode_meta(Key) ->
 hashes(State, Segments) ->
     multi_select_segment(State, Segments, fun hash/1).
 
+
+%% -----------------------------------------------------------------------------
+%% @doc Abuses eleveldb iterators as snapshots. #state.itr will keep the
+%% iterator open until this function is called again.
+%% @end
+%% -----------------------------------------------------------------------------
 -spec snapshot(hashtree()) -> hashtree().
 snapshot(State) ->
     %% Abuse eleveldb iterators as snapshots
