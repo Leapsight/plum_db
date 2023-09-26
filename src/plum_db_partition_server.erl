@@ -1008,7 +1008,7 @@ handle_info(Event, State) ->
 terminate(_Reason, State) ->
     %% Close all iterators
     _ = maps:fold(
-        fun(Iter, Acc) -> close_iterator(Iter, Acc) end,
+        fun(Mref, _, Acc) -> close_iterator(Mref, Acc) end,
         State,
         State#state.iterators
     ),
