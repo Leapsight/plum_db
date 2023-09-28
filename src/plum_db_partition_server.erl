@@ -23,8 +23,9 @@
 -module(plum_db_partition_server).
 -behaviour(partisan_gen_server).
 -include_lib("kernel/include/logger.hrl").
+-include_lib("partisan/include/partisan.hrl").
 -include("plum_db.hrl").
--include("utils.hrl").
+%% -include("utils.hrl").
 
 %% leveldb uses $\0 but since external term format will contain nulls
 %% we need an additional separator. We use the ASCII unit separator
@@ -152,7 +153,7 @@ start_link(Partition, Opts) ->
     Name = name(Partition),
     StartOpts = [
         {channel,  plum_db_config:get(data_channel)},
-        {spawn_opt, [{min_heap_size, 1598}]}
+        {spawn_opt, ?PARALLEL_SIGNAL_OPTIMISATION([{min_heap_size, 1598}])}
     ],
     partisan_gen_server:start_link(
         {local, Name},

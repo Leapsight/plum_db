@@ -488,9 +488,8 @@ delete(Key, State) ->
 
 -spec should_insert(segment_bin(), proplist(), hashtree()) -> boolean().
 should_insert(HKey, Opts, State) ->
-    IfMissing = proplists:get_value(if_missing, Opts, false),
-    case IfMissing of
-        true ->
+    case lists:keyfind(if_missing, 1, Opts) of
+        {if_missing, true} ->
             %% Only insert if object does not already exist
             %% TODO: Use bloom filter so we don't always call get here
             case eleveldb:get(State#state.ref, HKey, []) of
@@ -500,6 +499,7 @@ should_insert(HKey, Opts, State) ->
                     false
             end;
         _ ->
+            %% false or {if_missing, false}
             true
     end.
 
@@ -672,8 +672,8 @@ new_segment_store(Opts) when is_list(Opts) ->
                 SegmentPath
         end,
 
-    DefaultWriteBufferMin = 30 * 1024 * 1024,
-    DefaultWriteBufferMax = 60 * 1024 * 1024,
+    DefaultWriteBufferMin = 4 * 1024 * 1024,
+    DefaultWriteBufferMax = 14 * 1024 * 1024,
     Default = [
         {write_buffer_size_min, DefaultWriteBufferMin},
         {write_buffer_size_max, DefaultWriteBufferMax}
