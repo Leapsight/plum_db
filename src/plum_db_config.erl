@@ -225,7 +225,8 @@ setup_env() ->
         aae_hashtree_ttl => 7 * 24 * 60 * 60, %% 1 week
         aae_sha_chunk => 4096,
         aae_leveldb_opts => [
-            {write_buffer_size_min, DefaultWriteBufferMin}, {write_buffer_size_max, DefaultWriteBufferMax}
+            {write_buffer_size_min, DefaultWriteBufferMin},
+            {write_buffer_size_max, DefaultWriteBufferMax}
         ]
     },
     Config1 = maps:merge(Defaults, Config0),
