@@ -504,9 +504,7 @@ perform_exchange(Partition, State) ->
         keys = Keys
     } = Res,
 
-    Total = LocalPrefixes + RemotePrefixes + Keys,
-
-    case Total > 0 of
+    case LocalPrefixes + RemotePrefixes + Keys > 0 of
         true ->
             ?LOG_INFO(#{
                 description => "Completed data exchange",
@@ -517,7 +515,7 @@ perform_exchange(Partition, State) ->
                 peer => Peer
             });
         false ->
-            ?LOG_DEBUG(#{
+            ?LOG_INFO(#{
                 description => "Completed data exchange (no changes)",
                 partition => Partition,
                 peer => Peer
