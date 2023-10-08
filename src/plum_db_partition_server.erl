@@ -1599,7 +1599,7 @@ do_put(PKey, Value, State, disk) ->
 
     DbRef = db_ref(State),
     Opts = write_opts(State),
-    Actions = [{put, encode_key(PKey), term_to_binary(Value)}],
+    Actions = [{put, encode_key(PKey), term_to_binary(Value, [deterministic])}],
     result(eleveldb:write(DbRef, Actions, Opts)).
 
 
@@ -1894,7 +1894,7 @@ decode_key(Bin) ->
 %% 	>>;
 
 %% encode_key(Term) ->
-%%     term_to_binary(Bin);
+%%     term_to_binary(Bin, [deterministic]);
 
 
 %% %% @private
@@ -1948,14 +1948,12 @@ on_erase(PKey, Obj) ->
 %% @end
 %% -----------------------------------------------------------------------------
 callback(Name, {{Prefix, _}, _} = PKey, Args) when is_list(Args) ->
-    Default = true,
-
     try
         Path = [prefixes, Prefix, callbacks, Name],
 
         case plum_db_config:get(Path, undefined) of
             undefined ->
-                Default;
+                true;
 
             {Mod, FunName} when is_atom(Mod), is_atom(FunName) ->
                 case erlang:apply(Mod, FunName, [PKey | Args]) of
@@ -1984,7 +1982,7 @@ callback(Name, {{Prefix, _}, _} = PKey, Args) when is_list(Args) ->
                 class => throw,
                 reason => Reason
             }),
-            Default;
+            true;
 
         Class:Reason:Stacktrace ->
             ?LOG_ERROR(#{
@@ -1994,5 +1992,5 @@ callback(Name, {{Prefix, _}, _} = PKey, Args) when is_list(Args) ->
                 reason => Reason,
                 stacktrace => Stacktrace
             }),
-            Default
+            true
     end.
