@@ -547,7 +547,9 @@ node_key_to_name({_TreeId, NodeName}) ->
 node_id(?ROOT, #hashtree_tree{id=TreeId}) ->
     {TreeId, <<0:176/integer>>};
 node_id(NodeName, #hashtree_tree{id=TreeId}) ->
-    <<NodeMD5:128/integer>> = crypto:hash(md5, (term_to_binary(NodeName))),
+    <<NodeMD5:128/integer>> = crypto:hash(
+        md5, (term_to_binary(NodeName, [deterministic]))
+    ),
     {TreeId, <<NodeMD5:176/integer>>}.
 
 %% @private

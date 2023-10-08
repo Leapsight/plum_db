@@ -1011,7 +1011,7 @@ prefix_to_prefix_list({Prefix, SubPrefix}) ->
 
 %% @private
 prepare_pkey({FullPrefix, Key}) ->
-    {prefix_to_prefix_list(FullPrefix), term_to_binary(Key)}.
+    {prefix_to_prefix_list(FullPrefix), term_to_binary(Key, [deterministic])}.
 
 
 

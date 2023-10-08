@@ -708,7 +708,7 @@ new_segment_store(Opts) when is_list(Opts) ->
 -spec hash(term()) -> binary().
 hash(X) ->
     %% erlang:phash2(X).
-    sha(term_to_binary(X)).
+    sha(term_to_binary(X, [deterministic])).
 
 sha(Bin) ->
     Chunk = plum_db_config:get(aae_sha_chunk, 4096),
@@ -808,7 +808,7 @@ get_disk_bucket(Level, Bucket, #state{id=Id, ref=Ref}) ->
 -spec set_disk_bucket(integer(), integer(), orddict(), hashtree()) -> hashtree().
 set_disk_bucket(Level, Bucket, Val, State=#state{id=Id, ref=Ref}) ->
     HKey = encode_bucket(Id, Level, Bucket),
-    Bin = term_to_binary(Val),
+    Bin = term_to_binary(Val, [deterministic]),
     ok = eleveldb:put(Ref, HKey, Bin, []),
     State.
 

@@ -590,8 +590,8 @@ repair_keys(Peer, PrefixList, {_Type, KeyBin}) ->
     PKey = {Prefix, Key},
     LocalObj = plum_db:get_object(PKey),
     RemoteObj = plum_db:get_remote_object(Peer, PKey, [], 30000),
-    merge(undefined, PKey, RemoteObj),
-    merge(Peer, PKey, LocalObj),
+    _ = merge(undefined, PKey, RemoteObj),
+    _ = merge(Peer, PKey, LocalObj),
     ok.
 
 

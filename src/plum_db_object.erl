@@ -71,7 +71,7 @@ empty_context() -> [].
 %% @doc returns a hash representing the objects contents
 -spec hash(plum_db_object()) -> binary().
 hash({object, Clock}) ->
-    crypto:hash(sha, term_to_binary(Clock)).
+    crypto:hash(sha, term_to_binary(Clock, [deterministic])).
 
 %% @doc modifies a potentially existing object, setting its value and updating
 %% the causual history. If a function is provided as the third argument
