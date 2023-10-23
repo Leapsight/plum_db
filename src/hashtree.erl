@@ -489,9 +489,8 @@ delete(Key, State) ->
 
 -spec should_insert(segment_bin(), proplist(), hashtree()) -> boolean().
 should_insert(HKey, Opts, State) ->
-    IfMissing = proplists:get_value(if_missing, Opts, false),
-    case IfMissing of
-        true ->
+    case lists:keyfind(if_missing, 1, Opts) of
+        {if_missing, true} ->
             %% Only insert if object does not already exist
             %% TODO: Use bloom filter so we don't always call get here
             case rocksdb:get(State#state.ref, HKey, []) of
@@ -501,6 +500,7 @@ should_insert(HKey, Opts, State) ->
                     false
             end;
         _ ->
+            %% false or {if_missing, false}
             true
     end.
 
@@ -673,8 +673,8 @@ new_segment_store(Opts) when is_list(Opts) ->
                 SegmentPath
         end,
 
-    DefaultWriteBufferMin = 30 * 1024 * 1024,
-    DefaultWriteBufferMax = 60 * 1024 * 1024,
+    DefaultWriteBufferMin = 4 * 1024 * 1024,
+    DefaultWriteBufferMax = 14 * 1024 * 1024,
     Default = [
         {write_buffer_size_min, DefaultWriteBufferMin},
         {write_buffer_size_max, DefaultWriteBufferMax}
@@ -708,7 +708,7 @@ new_segment_store(Opts) when is_list(Opts) ->
 -spec hash(term()) -> binary().
 hash(X) ->
     %% erlang:phash2(X).
-    sha(term_to_binary(X)).
+    sha(term_to_binary(X, [deterministic])).
 
 sha(Bin) ->
     Chunk = plum_db_config:get(aae_sha_chunk, 4096),
@@ -808,7 +808,7 @@ get_disk_bucket(Level, Bucket, #state{id=Id, ref=Ref}) ->
 -spec set_disk_bucket(integer(), integer(), orddict(), hashtree()) -> hashtree().
 set_disk_bucket(Level, Bucket, Val, State=#state{id=Id, ref=Ref}) ->
     HKey = encode_bucket(Id, Level, Bucket),
-    Bin = term_to_binary(Val),
+    Bin = term_to_binary(Val, [deterministic]),
     ok = rocksdb:put(Ref, HKey, Bin, []),
     State.
 
@@ -856,6 +856,12 @@ encode_meta(Key) ->
 hashes(State, Segments) ->
     multi_select_segment(State, Segments, fun hash/1).
 
+
+%% -----------------------------------------------------------------------------
+%% @doc Abuses eleveldb iterators as snapshots. #state.itr will keep the
+%% iterator open until this function is called again.
+%% @end
+%% -----------------------------------------------------------------------------
 -spec snapshot(hashtree()) -> hashtree().
 snapshot(State) ->
     %% Abuse rocksdb iterators as snapshots

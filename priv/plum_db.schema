@@ -14,7 +14,7 @@
 hidden
 ]}.
 
-%% @see leveldb.write_buffer_size_min
+%% @see db.write_buffer_size_min
 {mapping, "db.write_buffer_size_max", "rocksdb.open.write_buffer_size_max", [
 {default, "64MB"},
 {datatype, bytesize},
@@ -22,7 +22,7 @@ hidden
 ]}.
 
 
-%% @doc Whether LevelDB will flush after every write. Note: If you are
+%% @doc Whether Rocksdb will flush after every write. Note: If you are
 %% familiar with fsync, this is analagous to calling fsync after every
 %% write.
 {mapping, "db.sync_on_write", "rocksdb.open.sync", [

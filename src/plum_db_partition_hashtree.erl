@@ -116,8 +116,10 @@ start_link(Partition) when is_integer(Partition) ->
     %% eqwalizer:ignore
     DataRoot = filename:join([Dir, integer_to_list(Partition)]),
     Name = name(Partition),
-    StartOpts = [{channel, plum_db_config:get(data_channel)}],
-
+    StartOpts = [
+        {channel, plum_db_config:get(data_channel)},
+        {spawn_opt, ?PARALLEL_SIGNAL_OPTIMISATION([{min_heap_size, 1598}])}
+    ],
     partisan_gen_server:start_link(
         {local, Name},
         ?MODULE,
@@ -531,6 +533,21 @@ handle_call(_Message, _From, State) ->
     {reply, {error, unsupported_call}, State}.
 
 
+handle_cast(
+    {insert, PKey, Hash, IfMissing}, #state{tree = Tree} = State) ->
+    {Prefixes, Key} = prepare_pkey(PKey),
+    Result = hashtree_tree:insert(
+        Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree
+    ),
+    case Result of
+        {ok, Tree1} ->
+            {noreply, State#state{tree = Tree1}};
+
+        {error, bad_prefixes} ->
+            %% Ignore
+            {noreply, State}
+    end;
+
 handle_cast(reset, #state{built = true, lock = undefined} = State0) ->
     State1 = do_reset(State0),
     {stop, normal, State1};
@@ -648,9 +665,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @private
 do_init(Partition, DataRoot) ->
-
     %% TODO we should have persisted the hashtree_tree and restore here if
-%% existed. See terminate.
+    %% existed. See terminate.
     TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
     Tree = hashtree_tree:new(
         TreeId, [{data_dir, DataRoot}, {num_levels, 2}]
@@ -805,6 +821,7 @@ build_async(State) ->
         true ->
             Partition = State#state.partition,
             Build = fun() ->
+
                 ?LOG_INFO(#{
                     description => "Starting hashtree build",
                     partition => Partition,
@@ -819,7 +836,8 @@ build_async(State) ->
 
                 %% We iterate over the whole database
                 try
-                    build(Partition, Iterator)
+                    ok = build(Partition, Iterator)
+
                 catch
                     Class:Reason:Stacktrace ->
                         ?LOG_ERROR(#{
@@ -835,7 +853,10 @@ build_async(State) ->
                 end
             end,
 
-            {_Pid, Ref} = spawn_monitor(Build),
+            SpawnOpts = [
+                monitor
+            ],
+            {_Pid, Ref} = spawn_opt(Build, SpawnOpts),
 
             State#state{built = Ref};
         false ->
@@ -845,17 +866,44 @@ build_async(State) ->
 
 %% @private
 build(Partition, Iterator) ->
+    build(Partition, Iterator, #{count => 0, ts => erlang:monotonic_time()}).
+
+
+%% @private
+build(Partition, Iterator, Stats) ->
     case plum_db:iterator_done(Iterator) of
         true ->
+            #{count := Count, ts := Started} = Stats,
+            Diff = erlang:monotonic_time() - Started,
+            ElapsedSecs = erlang:convert_time_unit(Diff, native, second),
+
+            ?LOG_INFO(#{
+                description => "Finished building hashtree",
+                partition => Partition,
+                node => partisan:node(),
+                elapsed_secs => ElapsedSecs,
+                count => Count
+            }),
+
             %% The caller should call plum_db:iterator_close(Iterator)
             ok;
+
         false ->
             {{FullPrefix, Key}, Obj} = plum_db:iterator_element(Iterator),
             Hash = plum_db_object:hash(Obj),
             %% insert only if missing to not clash w/ newer writes during build
-            ?MODULE:insert(Partition, {FullPrefix, Key}, Hash, true),
-            build(Partition, plum_db:iterate(Iterator))
+            %% ?MODULE:insert(Partition, {FullPrefix, Key}, Hash, true),
+            %% replace it with a cast as we do not care about the result anyway
+            _ = partisan_gen_server:cast(
+                name(Partition), {insert, {FullPrefix, Key}, Hash, true}
+            ),
+            build(Partition, plum_db:iterate(Iterator), incr_count(Stats))
     end.
+
+
+%% @private
+incr_count(#{count := N} = Stats) ->
+    Stats#{count => N + 1}.
 
 
 %% @private
@@ -963,7 +1011,7 @@ prefix_to_prefix_list({Prefix, SubPrefix}) ->
 
 %% @private
 prepare_pkey({FullPrefix, Key}) ->
-    {prefix_to_prefix_list(FullPrefix), term_to_binary(Key)}.
+    {prefix_to_prefix_list(FullPrefix), term_to_binary(Key, [deterministic])}.
 
 
 

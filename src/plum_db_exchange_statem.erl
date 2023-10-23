@@ -107,7 +107,11 @@ start_link(Peer, Opts) when is_map(Opts) ->
 
 
 init([Peer, Opts]) ->
-    %% We monitor the remote peer so that we can cleanup locks in case we
+    %% Trap exists so that all partisan_gen_server calls that fail are captured
+    %% and avoid OTP error messages
+    process_flag(trap_exit, true),
+
+    %% Monitor the remote peer so that we can cleanup locks in case we
     %% disconnect. If we do we will get {nodedown, Peer} info event.
     true = partisan:monitor_node(Peer, true),
 
@@ -139,7 +143,7 @@ terminate(Reason, _StateName, State) ->
     Peer = State#state.peer,
     _ = catch partisan:monitor_node(Peer, false),
 
-    %% We release remaining locks in case Reason =/= normal
+    %% We release remaining locks.
     %% plum_db_partition_hashtree is monitoring us so it should get a DOWN
     %% signal, but we cleanup just in case as we have remote locks and we are
     %% using Partisan monitoring,
@@ -341,9 +345,6 @@ exchanging_data(timeout, _, #state{partitions = [H|_]} = State) ->
                 reason => nodedown
             }),
             {stop, normal, State}
-    after
-        release_locks(H, State#state.peer)
-
     end;
 
 exchanging_data(Type, Content, State) ->
@@ -386,6 +387,20 @@ handle_other_event(_, info, {nodedown, Peer}, #state{peer = Peer} = State0) ->
     State = add_summary(H, skipped, State0#state{partitions = T}),
     {stop, normal, State};
 
+handle_other_event(
+    _, info, {'EXIT', _, {{nodedown, Peer}, _}}, #state{peer = Peer} = State) ->
+    %% partisan_gen_server:call failed e.g. plum_db_partition_hashtree:lock/1,2
+    ?LOG_NOTICE(#{
+        description => "AAE Exchange aborting, peer node down",
+        reason => nodedown,
+        peer => State#state.peer
+    }),
+    {stop, normal, State};
+
+
+handle_other_event(_, info, {'EXIT', _, normal}, State) ->
+    {keep_state, State};
+
 handle_other_event(StateLabel, Type, Event, State) ->
     ?LOG_INFO(#{
         reason => unsupported_event,
@@ -422,6 +437,7 @@ release_locks([], _) ->
     ok;
 
 release_locks(Partition, Peer) ->
+    ?LOG_DEBUG(#{description => "Releasing all local and remote locks"}),
     _ = catch release_remote_lock(Partition, Peer),
     _ = catch release_local_lock(Partition),
     ok.
@@ -504,9 +520,7 @@ perform_exchange(Partition, State) ->
         keys = Keys
     } = Res,
 
-    Total = LocalPrefixes + RemotePrefixes + Keys,
-
-    case Total > 0 of
+    case LocalPrefixes + RemotePrefixes + Keys > 0 of
         true ->
             ?LOG_INFO(#{
                 description => "Completed data exchange",
@@ -517,7 +531,7 @@ perform_exchange(Partition, State) ->
                 peer => Peer
             });
         false ->
-            ?LOG_DEBUG(#{
+            ?LOG_INFO(#{
                 description => "Completed data exchange (no changes)",
                 partition => Partition,
                 peer => Peer
@@ -592,8 +606,8 @@ repair_keys(Peer, PrefixList, {_Type, KeyBin}) ->
     PKey = {Prefix, Key},
     LocalObj = plum_db:get_object(PKey),
     RemoteObj = plum_db:get_remote_object(Peer, PKey, [], 30000),
-    merge(undefined, PKey, RemoteObj),
-    merge(Peer, PKey, LocalObj),
+    _ = merge(undefined, PKey, RemoteObj),
+    _ = merge(Peer, PKey, LocalObj),
     ok.
 
 

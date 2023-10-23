@@ -23,8 +23,9 @@
 -module(plum_db_partition_server).
 -behaviour(partisan_gen_server).
 -include_lib("kernel/include/logger.hrl").
+-include_lib("partisan/include/partisan.hrl").
 -include("plum_db.hrl").
--include("utils.hrl").
+%% -include("utils.hrl").
 
 %% leveldb uses $\0 but since external term format will contain nulls
 %% we need an additional separator. We use the ASCII unit separator
@@ -39,7 +40,7 @@
 	config = []							::	opts(),
 	data_root							::	file:filename(),
 	open_opts = []						::	opts(),
-    iterators = []                      ::  iterators(),
+    iterators = #{}                     ::  iterators(),
     helper = undefined                  ::  optional(pid())
 }).
 
@@ -76,7 +77,7 @@
 -type opts()                    :: 	[{atom(), term()}].
 -type db_info()                 ::  #db_info{}.
 -type iterator()                ::  #partition_iterator{}.
--type iterators()               ::  [iterator()].
+-type iterators()               ::  #{reference() => iterator()}.
 -type iterator_action()         ::  first
                                     | last | next | prev
                                     | prefetch | prefetch_stop.
@@ -152,7 +153,7 @@ start_link(Partition, Opts) ->
     Name = name(Partition),
     StartOpts = [
         {channel,  plum_db_config:get(data_channel)},
-        {spawn_opt, [{min_heap_size, 1598}]}
+        {spawn_opt, ?PARALLEL_SIGNAL_OPTIMISATION([{min_heap_size, 1598}])}
     ],
     partisan_gen_server:start_link(
         {local, Name},
@@ -1011,10 +1012,8 @@ handle_info(Event, State) ->
 
 terminate(_Reason, State) ->
     %% Close all iterators
-    _ = lists:foldl(
-        fun(Iter, Acc) ->
-            close_iterator(Iter, Acc)
-        end,
+    _ = maps:fold(
+        fun(Mref, _, Acc) -> close_iterator(Mref, Acc) end,
         State,
         State#state.iterators
     ),
@@ -1574,7 +1573,7 @@ do_put(PKey, Value, State, disk) ->
 
     DbRef = db_ref(State),
     Opts = write_opts(State),
-    Actions = [{put, encode_key(PKey), term_to_binary(Value)}],
+    Actions = [{put, encode_key(PKey), term_to_binary(Value, [deterministic])}],
     result(rocksdb:write(DbRef, Actions, Opts)).
 
 
@@ -1788,17 +1787,16 @@ update_iterator(ram_disk, Iter, Key, Cont) ->
 %% @private
 add_iterator(#partition_iterator{} = Iter, State) ->
     Mref = Iter#partition_iterator.owner_mref,
-    Iterators1 = lists:keystore(Mref, 2, State#state.iterators, Iter),
+    Iterators1 = maps:put(Mref, Iter, State#state.iterators),
     State#state{iterators = Iterators1}.
 
 
 %% @private
 take_iterator(Mref, State) when is_reference(Mref) ->
-    Pos = #partition_iterator.owner_mref,
-    case lists:keytake(Mref, Pos, State#state.iterators) of
-        {value, Iter, Iterators1} ->
+    case maps:take(Mref, State#state.iterators) of
+        {Iter, Iterators1} ->
             {Iter, State#state{iterators = Iterators1}};
-        false ->
+        error ->
             error
     end.
 
@@ -1873,7 +1871,7 @@ decode_key(Bin) ->
 %% 	>>;
 
 %% encode_key(Term) ->
-%%     term_to_binary(Bin);
+%%     term_to_binary(Bin, [deterministic]);
 
 
 %% %% @private
@@ -1927,14 +1925,12 @@ on_erase(PKey, Obj) ->
 %% @end
 %% -----------------------------------------------------------------------------
 callback(Name, {{Prefix, _}, _} = PKey, Args) when is_list(Args) ->
-    Default = true,
-
     try
         Path = [prefixes, Prefix, callbacks, Name],
 
         case plum_db_config:get(Path, undefined) of
             undefined ->
-                Default;
+                true;
 
             {Mod, FunName} when is_atom(Mod), is_atom(FunName) ->
                 case erlang:apply(Mod, FunName, [PKey | Args]) of
@@ -1963,7 +1959,7 @@ callback(Name, {{Prefix, _}, _} = PKey, Args) when is_list(Args) ->
                 class => throw,
                 reason => Reason
             }),
-            Default;
+            true;
 
         Class:Reason:Stacktrace ->
             ?LOG_ERROR(#{
@@ -1973,5 +1969,5 @@ callback(Name, {{Prefix, _}, _} = PKey, Args) when is_list(Args) ->
                 reason => Reason,
                 stacktrace => Stacktrace
             }),
-            Default
+            true
     end.
