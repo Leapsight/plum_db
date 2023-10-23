@@ -397,6 +397,10 @@ handle_other_event(
     }),
     {stop, normal, State};
 
+
+handle_other_event(_, info, {'EXIT', _, normal}, State) ->
+    {keep_state, State};
+
 handle_other_event(StateLabel, Type, Event, State) ->
     ?LOG_INFO(#{
         reason => unsupported_event,
