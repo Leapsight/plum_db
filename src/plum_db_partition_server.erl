@@ -434,7 +434,7 @@ iterator_move(#partition_iterator{disk_done = false} = Iter, Term) ->
 
     DbIter = Iter#partition_iterator.disk,
 
-    case disk_iterator_move(DbIter, eleveldb_action(Term)) of
+    case disk_iterator_move(DbIter, rocksdb_action(Term)) of
         {ok, K, _} when Iter#partition_iterator.keys_only ->
             NewIter = Iter#partition_iterator{prev_key = K},
             case matches_key(K, Iter) of
@@ -1102,7 +1102,7 @@ init_state(Name, Partition, DataRoot, Opts0) ->
             %% eqwalizer:ignore FoldOpts
             fold_opts = FoldOpts
         },
-		opts = Opts,
+		config = Opts,
         data_root = DataRoot,
 		open_opts = OpenOpts
 	}.
@@ -1624,7 +1624,7 @@ prev_iterator(disk, _) ->
     undefined.
 
 %% @private
--spec eleveldb_action(iterator_action_ext() | plum_db_prefix_pattern() | plum_db_pkey_pattern()) ->
+-spec rocksdb_action(iterator_action_ext() | plum_db_prefix_pattern() | plum_db_pkey_pattern()) ->
     iterator_action() | binary().
 
 %% @private
