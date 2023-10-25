@@ -85,7 +85,8 @@ init([]) ->
         ?CHILD(plum_db_table_owner, worker, [], permanent),
         ?CHILD(plum_db, worker, [], permanent),
         ?CHILD(plum_db_partitions_sup, supervisor, [], permanent),
-        ?CHILD(plum_db_exchanges_sup, supervisor, [], permanent)
+        ?CHILD(plum_db_exchanges_sup, supervisor, [], permanent),
+        ?CHILD(plum_db_io, worker, [], permanent)
     ],
     {ok, {RestartStrategy, Children}}.
 

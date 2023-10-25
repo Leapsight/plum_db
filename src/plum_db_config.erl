@@ -32,6 +32,15 @@
 -define(APP, plum_db).
 -define(ERROR, '$error_badarg').
 -define(DEFAULT_RESOURCE_SIZE, erlang:system_info(schedulers)).
+-define(FUN_WITH_ARITY(N),
+    fun
+        ({Mod, Fun}) when is_atom(Mod); is_atom(Fun) ->
+            erlang:function_exported(Mod, Fun, N);
+        (_) ->
+            false
+    end
+).
+
 -define(CONFIG_SPEC, #{
     type => #{
         required => true,
@@ -79,14 +88,6 @@
     }
 }).
 
--define(FUN_WITH_ARITY(N),
-    fun
-        ({Mod, Fun}) when is_atom(Mod); is_atom(Fun) ->
-            erlang:function_exported(Mod, Fun, N);
-        (_) ->
-            false
-    end
-).
 
 -export([get/1]).
 -export([get/2]).
@@ -114,8 +115,12 @@ init() ->
     ok = app_config:init(?APP, #{callback_mod => ?MODULE}),
 
     ok = setup_partisan(),
-    ok = coerce_partitions(),
-    ?LOG_NOTICE(#{description => "PlumDB configuration initialised}"}),
+    Manifest = get_manifest(),
+    ok = coerce_partitions(Manifest),
+    ?LOG_NOTICE(#{
+        description => "PlumDB configuration initialised",
+        manifest => Manifest
+    }),
     ok.
 
 
@@ -192,6 +197,7 @@ on_set(_, _) ->
     ok.
 
 
+
 %% =============================================================================
 %% PRIVATE
 %% =============================================================================
@@ -216,7 +222,7 @@ setup_env() ->
         },
         data_exchange_timeout => 60000,
         hashtree_timer => 10000,
-        partitions => max(erlang:system_info(schedulers), 8),
+        partitions => max(?DEFAULT_RESOURCE_SIZE, 8),
         prefixes => [],
         aae_enabled => true,
         aae_concurrency => 1,
@@ -270,10 +276,9 @@ validate_prefixes(L) when is_list(L) ->
 db_dir(Value) -> filename:join([Value, "db"]).
 
 
-
 %% @private
 validate_partitions(undefined) ->
-    validate_partitions(erlang:system_info(schedulers));
+    validate_partitions(?DEFAULT_RESOURCE_SIZE);
 
 validate_partitions(0) ->
     validate_partitions(1);
@@ -282,27 +287,156 @@ validate_partitions(N) when is_integer(N) ->
     N.
 
 
-coerce_partitions() ->
-    N = get(partitions),
-    DataDir = get(data_dir),
-    Pattern = filename:join([db_dir(DataDir), "*"]),
-    Subdirs = filelib:wildcard(Pattern),
-    case length(Subdirs) of
-        0 ->
-            %% We have no previous data, we take the user provided config
+%% @private
+coerce_partitions(#{partitions := P}) ->
+    case get(partitions) of
+        R when R == P ->
             ok;
-        N ->
-            ok;
-        M ->
-            %% We already have data in data_dir then
-            %% we should coerce this value to the actual number of partitions
+        R ->
             ?LOG_WARNING(#{
-                description => "The number of existing partitions on disk differ from the configuration, ignoring requested value and coercing configuration to the existing number instead",
-                partitions => N,
-                existing => M,
-                data_dir => DataDir
+                description =>
+                    "The number of existing partitions on disk "
+                    "differ from the configuration, ignoring requested "
+                    "value and coercing configuration to the existing "
+                    "number instead.",
+                partitions => R,
+                existing => P,
+                data_dir => get(data_dir)
             }),
-            set(partitions, M)
+            set(partitions, P)
+    end.
+
+
+%% @private
+get_manifest() ->
+    DataDir = get(data_dir),
+    Filename = filename:join([DataDir, "MANIFEST.dets"]),
+
+    ok = open_manifest(Filename),
+    Manifest = dets:foldl(
+        fun({K, V}, Acc) -> maps:put(K, V, Acc) end,
+        maps:new(),
+        manifest
+    ),
+
+    try
+        case maps:size(Manifest) == 0 of
+            true ->
+                %% We just created the manifest file as it did not exist
+                Default = init_manifest(),
+                update_manifest(Default),
+                Default;
+            false ->
+                Manifest
+        end
+    catch
+        Class:Reason:Stacktrace ->
+            erlang:raise(Class, Reason, Stacktrace)
+    after
+        _ = close_manifest()
+    end.
+
+
+%% @private
+init_manifest() ->
+    Backend = storage_backend(),
+    Requested = get(partitions),
+    Partitions =
+        case storage_backend_partitions() of
+            0 ->
+                %% We have no previous data, we take the user provided config
+                Requested;
+
+            N when N == Requested ->
+                N;
+
+            N ->
+                %% We already have data in data_dir then
+                %% we should coerce this value to the actual number of partitions
+                N
+        end,
+
+    #{
+        timestamp => erlang:system_time(),
+        storage_backend => Backend,
+        partitions => Partitions
+        %% ,
+        %% compression => #{
+        %%     enabled => application:get_env(Backend, compression_enabled, true),
+        %%     algorithm => application:get_env(Backend, compression, lz4)
+        %% }
+    }.
+
+
+%% @private
+update_manifest(Manifest) when is_map(Manifest) ->
+    maps:foreach(
+        fun(K, V) ->
+            dets:insert(manifest, {K, V})
+        end,
+        Manifest
+    ).
+
+
+%% @private
+open_manifest(Filename) ->
+    Opts = [
+        {access, read_write},
+        {file, Filename},
+        {max_no_slots, 256},
+        {min_no_slots, 8}
+    ],
+    %% Crash if not ok
+    {ok, manifest} = dets:open_file(manifest, Opts),
+    ok.
+
+
+%% @private
+close_manifest() ->
+    %% Crash if not ok
+    ok = dets:close(manifest).
+
+
+%% @private
+storage_backend_partitions() ->
+    Pattern = filename:join([get(data_dir), "db", "*"]),
+    length(filelib:wildcard(Pattern)).
+
+
+%% @private
+storage_backend() ->
+    storage_backend(undefined).
+
+
+%% @private
+storage_backend(undefined) ->
+    %% eleveldb disk layout
+    %% db/{0..N}/sst_{0..L}
+    %% db/{0..N}/sst_{0..L}/MANIFEST-*
+    %% rocksdb disk layout
+    %% db/{0..N}/sst_{0..L}
+    %% db/{0..N}/*.log
+    %% db/{0..N}/MANIFEST-*
+    %% db/{0..N}/OPTIONS-*
+    storage_backend(
+        filelib:wildcard(filename:join([get(data_dir), "db", "*", "OPTIONS-*"]))
+    );
+
+storage_backend([]) ->
+    eleveldb;
+
+storage_backend([H|T]) ->
+    case file:read_file(H) of
+        {ok, Bin} ->
+            storage_backend(Bin);
+        {error, _} ->
+            storage_backend(T)
+    end;
+
+storage_backend(Bin) when is_binary(Bin) ->
+    case binary:matches(Bin, <<"rocksdb_version">>) of
+        [] -> eleveldb;
+        [_|_] -> rocksdb
     end.
 
 

@@ -217,7 +217,7 @@ get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
         true ->
             partisan_gen_server:call(Name, {get, PKey, Opts}, Timeout);
         false ->
-            try plum_db_partitions_sup:get_db_info(Name) of
+            try get_db_info(Name) of
                 DBInfo ->
                     case do_get(PKey, DBInfo) of
                         {ok, Object} ->
@@ -728,9 +728,7 @@ init([Name, Partition, Opts]) ->
             case open_db(State0) of
                 {ok, State1} ->
                     State2 = spawn_helper(State1),
-                    ok = plum_db_partitions_sup:set_db_info(
-                        Name, State2#state.db_info
-                    ),
+                    ok = set_db_info(Name, State2#state.db_info),
                     {ok, State2};
                 {error, Reason} ->
                     {stop, Reason}
@@ -1179,6 +1177,22 @@ open_db(State, RetriesLeft, _) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+
+
+%% @private
+get_db_info(ServerRef) ->
+    case persistent_term:get({?MODULE, ServerRef}) of
+        undefined ->
+            error({badarg, ServerRef});
+        Value ->
+            Value
+    end.
+
+
+%% @private
+set_db_info(ServerRef, Data) ->
+    persistent_term:put({?MODULE, ServerRef}, Data).
 
 
 
