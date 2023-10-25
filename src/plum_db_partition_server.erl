@@ -1041,10 +1041,10 @@ init_state(Name, Partition, DataRoot, Config) ->
     %% Use a variable write buffer size in order to reduce the number
     %% of vnodes that try to kick off compaction at the same time
     %% under heavy uniform load...
-    WriteBufferMin = config_value(
+    WriteBufferMin = key_value:get(
         write_buffer_size_min, MergedConfig, 30 * 1024 * 1024
     ),
-    WriteBufferMax = config_value(
+    WriteBufferMax = key_value:get(
         write_buffer_size_max, MergedConfig, 60 * 1024 * 1024
     ),
     WriteBufferSize = WriteBufferMin + rand:uniform(
@@ -1121,16 +1121,6 @@ init_state(Name, Partition, DataRoot, Config) ->
         data_root = DataRoot,
 		open_opts = OpenOpts
 	}.
-
-
-%% @private
-config_value(Key, Config, Default) ->
-    case orddict:find(Key, Config) of
-        error ->
-            Default;
-        {ok, Value} ->
-            Value
-    end.
 
 
 %% @private
