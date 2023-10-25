@@ -32,6 +32,15 @@
 -define(APP, plum_db).
 -define(ERROR, '$error_badarg').
 -define(DEFAULT_RESOURCE_SIZE, erlang:system_info(schedulers)).
+-define(FUN_WITH_ARITY(N),
+    fun
+        ({Mod, Fun}) when is_atom(Mod); is_atom(Fun) ->
+            erlang:function_exported(Mod, Fun, N);
+        (_) ->
+            false
+    end
+).
+
 -define(CONFIG_SPEC, #{
     type => #{
         required => true,
@@ -79,14 +88,6 @@
     }
 }).
 
--define(FUN_WITH_ARITY(N),
-    fun
-        ({Mod, Fun}) when is_atom(Mod); is_atom(Fun) ->
-            erlang:function_exported(Mod, Fun, N);
-        (_) ->
-            false
-    end
-).
 
 -export([get/1]).
 -export([get/2]).
@@ -115,7 +116,7 @@ init() ->
 
     ok = setup_partisan(),
     ok = coerce_partitions(),
-    ?LOG_NOTICE(#{description => "PlumDB configuration initialised}"}),
+    ?LOG_NOTICE(#{description => "PlumDB configuration initialised"}),
     ok.
 
 
@@ -192,6 +193,7 @@ on_set(_, _) ->
     ok.
 
 
+
 %% =============================================================================
 %% PRIVATE
 %% =============================================================================
@@ -218,7 +220,7 @@ setup_env() ->
         },
         data_exchange_timeout => 60000,
         hashtree_timer => 10000,
-        partitions => max(erlang:system_info(schedulers), 8),
+        partitions => max(?DEFAULT_RESOURCE_SIZE, 8),
         prefixes => [],
         aae_enabled => true,
         aae_concurrency => 1,
@@ -276,10 +278,9 @@ validate_prefixes(L) when is_list(L) ->
 db_dir(Value) -> filename:join([Value, "db"]).
 
 
-
 %% @private
 validate_partitions(undefined) ->
-    validate_partitions(erlang:system_info(schedulers));
+    validate_partitions(?DEFAULT_RESOURCE_SIZE);
 
 validate_partitions(0) ->
     validate_partitions(1);
