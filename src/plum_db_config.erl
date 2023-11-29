@@ -309,10 +309,7 @@ coerce_partitions(#{partitions := P}) ->
 
 %% @private
 get_manifest() ->
-    DataDir = get(data_dir),
-    Filename = filename:join([DataDir, "MANIFEST.dets"]),
-
-    ok = open_manifest(Filename),
+    ok = open_manifest(),
     Manifest = dets:foldl(
         fun({K, V}, Acc) -> maps:put(K, V, Acc) end,
         maps:new(),
@@ -379,7 +376,9 @@ update_manifest(Manifest) when is_map(Manifest) ->
 
 
 %% @private
-open_manifest(Filename) ->
+open_manifest() ->
+    DataDir = get(data_dir),
+    Filename = filename:join([DataDir, "MANIFEST.dets"]),
     Opts = [
         {access, read_write},
         {file, Filename},
@@ -387,6 +386,7 @@ open_manifest(Filename) ->
         {min_no_slots, 8}
     ],
     %% Crash if not ok
+    ok = filelib:ensure_path(DataDir),
     {ok, manifest} = dets:open_file(manifest, Opts),
     ok.
 
