@@ -217,7 +217,7 @@ get(Name, PKey, Opts, Timeout) when is_atom(Name) ->
         true ->
             partisan_gen_server:call(Name, {get, PKey, Opts}, Timeout);
         false ->
-            try plum_db_partitions_sup:get_db_info(Name) of
+            try get_db_info(Name) of
                 DBInfo ->
                     case do_get(PKey, DBInfo) of
                         {ok, Object} ->
@@ -727,9 +727,7 @@ init([Name, Partition, Opts]) ->
             case open_db(State0) of
                 {ok, State1} ->
                     State2 = spawn_helper(State1),
-                    ok = plum_db_partitions_sup:set_db_info(
-                        Name, State2#state.db_info
-                    ),
+                    ok = set_db_info(Name, State2#state.db_info),
                     {ok, State2};
                 {error, Reason} ->
                     {stop, Reason}
@@ -1043,10 +1041,10 @@ init_state(Name, Partition, DataRoot, Config) ->
     %% Use a variable write buffer size in order to reduce the number
     %% of vnodes that try to kick off compaction at the same time
     %% under heavy uniform load...
-    WriteBufferMin = config_value(
+    WriteBufferMin = key_value:get(
         write_buffer_size_min, MergedConfig, 30 * 1024 * 1024
     ),
-    WriteBufferMax = config_value(
+    WriteBufferMax = key_value:get(
         write_buffer_size_max, MergedConfig, 60 * 1024 * 1024
     ),
     WriteBufferSize = WriteBufferMin + rand:uniform(
@@ -1126,16 +1124,6 @@ init_state(Name, Partition, DataRoot, Config) ->
 
 
 %% @private
-config_value(Key, Config, Default) ->
-    case orddict:find(Key, Config) of
-        error ->
-            Default;
-        {ok, Value} ->
-            Value
-    end.
-
-
-%% @private
 open_db(State) ->
     RetriesLeft = plum_db_config:get(store_open_retry_Limit, 30),
     open_db(State, max(1, RetriesLeft), undefined).
@@ -1206,6 +1194,22 @@ open_db(State, RetriesLeft, _) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+
+
+%% @private
+get_db_info(ServerRef) ->
+    case persistent_term:get({?MODULE, ServerRef}) of
+        undefined ->
+            error({badarg, ServerRef});
+        Value ->
+            Value
+    end.
+
+
+%% @private
+set_db_info(ServerRef, Data) ->
+    persistent_term:put({?MODULE, ServerRef}, Data).
 
 
 
