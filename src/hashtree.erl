@@ -338,6 +338,9 @@
               remote_fun/0,
               acc_fun/1]).
 
+-compile({no_auto_import, [term_to_binary/1]}).
+
+
 
 %% =============================================================================
 %% API
@@ -614,6 +617,10 @@ get_bucket(Level, Bucket, State) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
+term_to_binary(Term) ->
+    erlang:term_to_binary(Term, [deterministic]).
+
 -ifndef(old_hash).
 md5(Bin) ->
     crypto:hash(md5, Bin).
@@ -708,7 +715,7 @@ new_segment_store(Opts) when is_list(Opts) ->
 -spec hash(term()) -> binary().
 hash(X) ->
     %% erlang:phash2(X).
-    sha(term_to_binary(X, [deterministic])).
+    sha(term_to_binary(X)).
 
 sha(Bin) ->
     Chunk = plum_db_config:get(aae_sha_chunk, 4096),
@@ -808,7 +815,7 @@ get_disk_bucket(Level, Bucket, #state{id=Id, ref=Ref}) ->
 -spec set_disk_bucket(integer(), integer(), orddict(), hashtree()) -> hashtree().
 set_disk_bucket(Level, Bucket, Val, State=#state{id=Id, ref=Ref}) ->
     HKey = encode_bucket(Id, Level, Bucket),
-    Bin = term_to_binary(Val, [deterministic]),
+    Bin = term_to_binary(Val),
     ok = rocksdb:put(Ref, HKey, Bin, []),
     State.
 
@@ -1287,6 +1294,8 @@ peval(L) ->
     L2 = [receive {peval, N, R} -> {N,R} end || _ <- L],
     {_, L3} = lists:unzip(lists:keysort(1, L2)),
     L3.
+
+
 
 %%%===================================================================
 %%% EUnit
