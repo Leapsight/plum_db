@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 1.1.7
+* Upgrade Partisan to latest
+
 ## v0.3.7
 
 
