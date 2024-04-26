@@ -1152,7 +1152,7 @@ open_db(State, RetriesLeft, _) ->
                         true ->
                             ?LOG_WARNING(#{
                                 description =>
-                                    "Starting repair of corrupted Leveldb store",
+                                    "Starting repair of corrupted RocksDB store",
                                 partition => State#state.partition,
                                 node => partisan:node(),
                                 data_root => State#state.data_root,
@@ -1163,7 +1163,7 @@ open_db(State, RetriesLeft, _) ->
                             ),
                             ?LOG_NOTICE(#{
                                 description =>
-                                    "Finished repair of corrupted Leveldb store",
+                                    "Finished repair of corrupted RocksDB store",
                                 partition => State#state.partition,
                                 node => partisan:node(),
                                 data_root => State#state.data_root,

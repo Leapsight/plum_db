@@ -92,11 +92,11 @@
 %% 2. Comparing two trees may be done by a seperate process. Compares should should use
 %% a snapshot and only be performed after an update.
 %%
-%% The nodes in this tree are backend by LevelDB, however, this is
+%% The nodes in this tree are backend by RocksDB, however, this is
 %% most likely temporary and Cluster Metadata's use of the tree is
 %% ephemeral. Trees are only meant to live for the lifetime of a
 %% running node and are rebuilt on start.  To ensure the tree is fresh
-%% each time, when nodes are created the backing LevelDB store is
+%% each time, when nodes are created the backing RocksDB store is
 %% opened, closed, and then re-opened to ensure any lingering files
 %% are removed.  Additionally, the nodes themselves (references to
 %% {@link hashtree}, are stored in {@link ets}.
@@ -168,7 +168,7 @@
 %% Takes the following options:
 %%   * num_levels - the height of the tree excluding leaves. corresponds to the
 %%                  length of the prefix list passed to {@link insert/5}.
-%%   * data_dir   - the directory where the LevelDB instances for the nodes will
+%%   * data_dir   - the directory where the RocksDB instances for the nodes will
 %%                  be stored.
 -type new_opt_num_levels() :: {num_levels, non_neg_integer()}.
 -type new_opt_data_dir()   :: {data_dir, file:name_all()}.
@@ -189,7 +189,7 @@ new(TreeId, Opts) ->
     Tree.
 
 %% @doc Destroys the tree cleaning up any used resources.
-%% This deletes the LevelDB files for the nodes.
+%% This deletes the RocksDB files for the nodes.
 -spec destroy(tree()) -> ok.
 destroy(Tree) ->
     ets:foldl(fun({_, Node}, _) ->

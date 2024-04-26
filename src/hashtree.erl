@@ -202,19 +202,19 @@
 %% single sparse scan over the on-disk segments and a minimal traversal up the
 %% hash tree.
 %%
-%% The heavy-lifting of this module is provided by LevelDB. What is logically
+%% The heavy-lifting of this module is provided by RocksDB. What is logically
 %% viewed as sorted on-disk segments is in reality a range of on-disk
-%% (segment, key, hash) values written to LevelDB. Each insert of a (key,
-%% hash) pair therefore corresponds to a single LevelDB write (no read
-%% necessary). Likewise, the update operation is performed using LevelDB
+%% (segment, key, hash) values written to RocksDB. Each insert of a (key,
+%% hash) pair therefore corresponds to a single RocksDB write (no read
+%% necessary). Likewise, the update operation is performed using RocksDB
 %% iterators.
 %%
 %% When used for active anti-entropy in Riak, the hash tree is built once and
 %% then updated in real-time as writes occur. A key design goal is to ensure
 %% that adding (key, hash) pairs to the tree is non-blocking, even during a
-%% tree update or a tree exchange. This is accomplished using LevelDB
+%% tree update or a tree exchange. This is accomplished using RocksDB
 %% snapshots. Inserts into the tree always write directly to the active
-%% LevelDB instance, however updates and exchanges operate over a snapshot of
+%% RocksDB instance, however updates and exchanges operate over a snapshot of
 %% the tree.
 %%
 %% In order to improve performance, writes are buffered in memory and sent
@@ -302,7 +302,7 @@
 
 -type select_fun(T) :: fun((orddict(binary(), binary())) -> T).
 
--type segment_store() :: {eleveldb:db_ref(), string()}.
+-type segment_store() :: {rocksdb:db_ref(), string()}.
 
 -record(state, {
     id                  ::  tree_id_bin(),
@@ -312,7 +312,7 @@
     width               ::  pos_integer(),
     mem_levels          ::  integer(),
     tree                ::  dict:dict(),
-    ref                 ::  eleveldb:db_ref(),
+    ref                 ::  rocksdb:db_ref(),
     path                ::  string(),
     itr                 ::  term(),
     write_buffer        ::  [{put, binary(), binary()} | {delete, binary()}],
@@ -433,7 +433,7 @@ destroy(Path) when is_list(Path) ->
     ok;
 destroy(#state{path = Path} = State) when is_list(Path)->
     %% Assumption: close was already called on all hashtrees that
-    %%             use this LevelDB instance,
+    %%             use this RocksDB instance,
     ok = rocksdb:destroy(Path, []),
     State.
 
@@ -686,6 +686,8 @@ new_segment_store(Opts) when is_list(Opts) ->
         {write_buffer_size_min, DefaultWriteBufferMin},
         {write_buffer_size_max, DefaultWriteBufferMax}
     ],
+    %% TODO: it is not configured due to we use rocksdb!
+    %% using default defined above
     ConfigVars = plum_db_config:get(aae_leveldb_opts, Default),
 
     is_list(ConfigVars)
@@ -865,7 +867,7 @@ hashes(State, Segments) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Abuses eleveldb iterators as snapshots. #state.itr will keep the
+%% @doc Abuses rocksdb iterators as snapshots. #state.itr will keep the
 %% iterator open until this function is called again.
 %% @end
 %% -----------------------------------------------------------------------------

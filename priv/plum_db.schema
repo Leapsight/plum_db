@@ -37,7 +37,7 @@ hidden
 %% are destined to not find the requested key. The Bloom filter
 %% typically increases the size of an .sst table file by about
 %% 2%.
-{mapping, "db.bloomfilter", "eleveldb.open.block_based_table_options.bloom_filter_policy", [
+{mapping, "db.bloomfilter", "rocksdb.open.block_based_table_options.bloom_filter_policy", [
   {default, 10},
   {datatype, integer},
   hidden
@@ -55,7 +55,7 @@ hidden
 
 
 %% @doc Enables or disables the verification of the data fetched from
-%% LevelDB against internal checksums.
+%% RocksDB against internal checksums.
 {mapping, "db.verify_checksums", "rocksdb.read.verify_checksums", [
   {default, on},
   {datatype, flag},
@@ -63,7 +63,7 @@ hidden
 ]}.
 
 
-%% @doc The number of worker threads performing LevelDB operations.
+%% @doc The number of worker threads performing RocksDB operations.
 {mapping, "db.threads", "rocksdb.open.total_threads", [
   {default, 3},
   {datatype, integer},

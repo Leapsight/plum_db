@@ -289,7 +289,7 @@ validate_partitions(N) when is_integer(N) ->
 
 %% @private
 coerce_partitions(#{partitions := P}) ->
-    case get(partitions) of
+    case ?MODULE:get(partitions) of
         R when R == P ->
             ok;
         R ->
@@ -301,7 +301,7 @@ coerce_partitions(#{partitions := P}) ->
                     "number instead.",
                 partitions => R,
                 existing => P,
-                data_dir => get(data_dir)
+                data_dir => ?MODULE:get(data_dir)
             }),
             set(partitions, P)
     end.
@@ -337,7 +337,7 @@ get_manifest() ->
 %% @private
 init_manifest() ->
     Backend = storage_backend(),
-    Requested = get(partitions),
+    Requested = ?MODULE:get(partitions),
     Partitions =
         case storage_backend_partitions() of
             0 ->
@@ -377,7 +377,7 @@ update_manifest(Manifest) when is_map(Manifest) ->
 
 %% @private
 open_manifest() ->
-    DataDir = get(data_dir),
+    DataDir = ?MODULE:get(data_dir),
     Filename = filename:join([DataDir, "MANIFEST.dets"]),
     Opts = [
         {access, read_write},
@@ -399,7 +399,7 @@ close_manifest() ->
 
 %% @private
 storage_backend_partitions() ->
-    Pattern = filename:join([get(data_dir), "db", "*"]),
+    Pattern = filename:join([?MODULE:get(data_dir), "db", "*"]),
     length(filelib:wildcard(Pattern)).
 
 
@@ -419,7 +419,7 @@ storage_backend(undefined) ->
     %% db/{0..N}/MANIFEST-*
     %% db/{0..N}/OPTIONS-*
     storage_backend(
-        filelib:wildcard(filename:join([get(data_dir), "db", "*", "OPTIONS-*"]))
+        filelib:wildcard(filename:join([?MODULE:get(data_dir), "db", "*", "OPTIONS-*"]))
     );
 
 storage_backend([]) ->
