@@ -1283,7 +1283,7 @@ init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab) ->
             %% Element is {{P, K}, MetadataObj}
             PKey = decode_key(K),
             true = ets:insert(Tab, {PKey, binary_to_term(V)}),
-            Next = disk_iterator_move(DbIter, prefetch),
+            Next = disk_iterator_move(DbIter, rocksdb_action(prefetch)),
             init_prefix_iterate(Next, DbIter, BinPrefix, BPSize, Tab);
         _ ->
             %% We have no more matches in this Prefix
