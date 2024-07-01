@@ -25,7 +25,7 @@
 -include("plum_db.hrl").
 
 %% default value for aae_hashtree_ttl config option
-%% Time in milliseconds after which the hashtree will be reset
+%% Time in seconds after which the hashtree will be reset
 %% i.e. destroyed and rebuilt
 -define(DEFAULT_TTL, 7 * 24 * 60 * 60). %% 1 week
 
