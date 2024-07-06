@@ -14,7 +14,7 @@ PlumDB builds on top of Plumtree but changes its architecture offering additiona
 |---|---|---|
 |Cluster membership state| Partisan's membership state which uses an AWSET | ORSWOT (riak_dt)|
 |Data model| Riak Core Metadata (dvvset)| Riak Core Metadata (dvvset)|
-|Persistence|leveldb. A key is sharded across `N` instances of a store. Stores can be in-memory (`ets`), on disk (Basho's Eleveldb i.e. Leveldb) or both. `N` is configurable at deployment time.|Each prefix has its own ets and dets table.|
+|Persistence|leveldb. A key is sharded across `N` instances of a store. Stores can be in-memory (`ets`), on disk (Rocksdb) or both. `N` is configurable at deployment time.|Each prefix has its own ets and dets table.|
 |API|A simplification of the Riak Core Metadata API. A single function to iterate over the whole database i.e. across one or all shards and across a single or many prefixes. |Riak Core Metadata API (`plumtree_metadata_manager`) is used to iterate over prefixes whereas `plumtree_metadata` is used to iterate over keys within each prefix. The API is confusing and is the result of having a store (ets + dets) per prefix.|
 |Active anti-entropy|Based on Riak Core Metadata AAE, uses a separate instance of leveldb to store a merkle tree on disk. Updated to use the new API and gen_statem|Based on Riak Core Metadata AAE, uses a separate instance of leveldb to store a merkle tree on disk.|
 |Pubsub|Based on a combination of gen_event and [gproc](https://github.com/uwiger/gproc), allowing to register a Callback module or function to be executed when an event is generated. gproc dependency allows to pattern match events using a match spec | Based on gen_event, allowing to register a Callback module or function to be executed when an event is generated|

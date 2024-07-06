@@ -15,7 +15,7 @@
         tools,
         runtime_tools,
         os_mon,
-        eleveldb,
+        rocksdb,
         sext,
         app_config,
         gproc,

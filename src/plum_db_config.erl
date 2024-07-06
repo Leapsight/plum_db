@@ -206,8 +206,6 @@ on_set(_, _) ->
 
 setup_env() ->
     Config0 = maps:from_list(application:get_all_env(?APP)),
-    DefaultWriteBufferMin = 4 * 1024 * 1024,
-    DefaultWriteBufferMax = 14 * 1024 * 1024,
     Defaults = #{
         wait_for_partitions => true,
         wait_for_hashtrees => true,
@@ -229,11 +227,7 @@ setup_env() ->
         aae_enabled => true,
         aae_concurrency => 1,
         aae_hashtree_ttl => 7 * 24 * 60 * 60, %% 1 week
-        aae_sha_chunk => 4096,
-        aae_leveldb_opts => [
-            {write_buffer_size_min, DefaultWriteBufferMin},
-            {write_buffer_size_max, DefaultWriteBufferMax}
-        ]
+        aae_sha_chunk => 4096
     },
     Config1 = maps:merge(Defaults, Config0),
     _ShardBy = validate_shard_by(maps:get(shard_by, Config1)),
@@ -295,7 +289,7 @@ validate_partitions(N) when is_integer(N) ->
 
 %% @private
 coerce_partitions(#{partitions := P}) ->
-    case get(partitions) of
+    case ?MODULE:get(partitions) of
         R when R == P ->
             ok;
         R ->
@@ -307,7 +301,7 @@ coerce_partitions(#{partitions := P}) ->
                     "number instead.",
                 partitions => R,
                 existing => P,
-                data_dir => get(data_dir)
+                data_dir => ?MODULE:get(data_dir)
             }),
             set(partitions, P)
     end.
@@ -343,7 +337,7 @@ get_manifest() ->
 %% @private
 init_manifest() ->
     Backend = storage_backend(),
-    Requested = get(partitions),
+    Requested = ?MODULE:get(partitions),
     Partitions =
         case storage_backend_partitions() of
             0 ->
@@ -383,7 +377,7 @@ update_manifest(Manifest) when is_map(Manifest) ->
 
 %% @private
 open_manifest() ->
-    DataDir = get(data_dir),
+    DataDir = ?MODULE:get(data_dir),
     Filename = filename:join([DataDir, "MANIFEST.dets"]),
     Opts = [
         {access, read_write},
@@ -405,7 +399,7 @@ close_manifest() ->
 
 %% @private
 storage_backend_partitions() ->
-    Pattern = filename:join([get(data_dir), "db", "*"]),
+    Pattern = filename:join([?MODULE:get(data_dir), "db", "*"]),
     length(filelib:wildcard(Pattern)).
 
 
@@ -425,7 +419,7 @@ storage_backend(undefined) ->
     %% db/{0..N}/MANIFEST-*
     %% db/{0..N}/OPTIONS-*
     storage_backend(
-        filelib:wildcard(filename:join([get(data_dir), "db", "*", "OPTIONS-*"]))
+        filelib:wildcard(filename:join([?MODULE:get(data_dir), "db", "*", "OPTIONS-*"]))
     );
 
 storage_backend([]) ->
