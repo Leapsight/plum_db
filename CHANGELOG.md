@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 1.2.0
+### Bug Fixes
+
+* Fixes a bug in `plum_db:is_stale` and `plum_db:get_object`. The latter now
+returns `{ok, plum_db_object()}` and `{error, any()}`.
+
 ## 1.1.7
 * Upgrade Partisan to latest
 
