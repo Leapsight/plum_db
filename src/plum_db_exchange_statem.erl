@@ -604,10 +604,31 @@ repair_keys(Peer, PrefixList, {_Type, KeyBin}) ->
     Key = binary_to_term(KeyBin),
     Prefix = list_to_tuple(PrefixList),
     PKey = {Prefix, Key},
-    LocalObj = plum_db:get_object(PKey),
-    RemoteObj = plum_db:get_remote_object(Peer, PKey, [], 30000),
-    _ = merge(undefined, PKey, RemoteObj),
-    _ = merge(Peer, PKey, LocalObj),
+
+    case plum_db:get_object(PKey) of
+        {ok, LocalObj} ->
+            _ = merge(Peer, PKey, LocalObj);
+
+        {error, LocalReason} ->
+            ?LOG_ERROR(#{
+                description =>
+                    "Repair keys failed to get local object. Skipping merge",
+                reason => LocalReason
+            })
+    end,
+
+    case plum_db:get_remote_object(Peer, PKey, [], 30000) of
+        {ok, RemoteObj} ->
+            _ = merge(undefined, PKey, RemoteObj);
+
+        {error, RemoteReason} ->
+            ?LOG_ERROR(#{
+                description =>
+                    "Repair keys failed to get remote object. Skipping merge",
+                reason => RemoteReason
+            })
+    end,
+
     ok.
 
 
