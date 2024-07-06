@@ -423,14 +423,14 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     RemoveTomb = get_option(remove_tombstones, Opts, true),
 
     case get_object(PKey, Opts, Timeout) of
-        {object, _} = Existing when RemoveTomb == true ->
+        {ok, {object, _} = Existing} when RemoveTomb == true ->
             maybe_tombstone(plum_db_object:value(Existing), Default);
-        {object, _} = Existing when RemoveTomb == false ->
+        {ok, {object, _}= Existing} when RemoveTomb == false ->
             plum_db_object:value(Existing);
+        {error, not_found} ->
+            Default;
         {error, _} = Error ->
-            Error;
-        undefined ->
-            Default
+            Error
     end.
 
 
@@ -441,10 +441,14 @@ andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
 %% obtained w/ plum_db_object:values/1.
 %% @end
 %% -----------------------------------------------------------------------------
+-spec get_object(plum_db_pkey()) -> {ok, plum_db_object()} | {error, any()}.
+
 get_object(PKey) ->
     get_object(PKey, []).
 
 
+-spec get_object(plum_db_pkey(), get_opts()) ->
+    {ok, plum_db_object()} | {error, any()}.
 
 get_object(PKey, Opts) ->
     get_object(PKey, Opts, infinity).
@@ -457,26 +461,22 @@ get_object(PKey, Opts) ->
 %% obtained w/ plum_db_object:values/1.
 %% @end
 %% -----------------------------------------------------------------------------
+
+-spec get_object(plum_db_pkey(), get_opts(), timeout()) ->
+    {ok, plum_db_object()} | {error, not_found | any()}.
+
 get_object({{Prefix, SubPrefix}, _Key} = PKey, Opts, Timeout)
 when (is_binary(Prefix) orelse is_atom(Prefix))
 andalso (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
-    Name = plum_db_partition_server:name(get_partition(PKey)),
+    Name = plum_db_partition_server:name(get_partition(PKey)),plum_db_partition_server:get(Name, PKey, Opts, Timeout).
 
-    case plum_db_partition_server:get(Name, PKey, Opts, Timeout) of
-        {ok, Obj} ->
-            Obj;
-        {error, not_found} ->
-            undefined;
-        {error, {badrpc, Class, Reason, Stack}} ->
-            erlang:raise(Class, Reason, Stack);
-        {error, _} = Error ->
-            Error
-    end.
-
-
-
+%% -----------------------------------------------------------------------------
+%% @doc Same as get/2 but reads the value from `Node'
+%% This is function is used by plum_db_exchange_statem.
+%% @end
+%% -----------------------------------------------------------------------------
 -spec get_remote_object(node(), plum_db_pkey(), get_opts()) ->
-    plum_db_object() | undefined | {error, not_found | any()}.
+    {ok, plum_db_object()} | {error, not_found | any()}.
 
 get_remote_object(Node, PKey, Opts) ->
     get_remote_object(Node, PKey, Opts, infinity).
@@ -488,18 +488,16 @@ get_remote_object(Node, PKey, Opts) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec get_remote_object(node(), plum_db_pkey(), get_opts(), timeout()) ->
-    plum_db_object() | undefined
-    | {error, not_found | timeout | any()}
-    | no_return().
+    {ok, plum_db_object()} | {error, not_found, timeout | any()}.
 
 get_remote_object(Node, {{Prefix, SubPrefix}, _Key} = PKey, Opts, Timeout)
 when is_atom(Node) andalso
 (is_binary(Prefix) orelse is_atom(Prefix)) andalso
 (is_binary(SubPrefix) orelse is_atom(SubPrefix))  ->
-    case partisan:node() of
-        Node ->
+    case partisan:node() == Node of
+        true ->
             get_object(PKey, Opts, Timeout);
-        _ ->
+        false ->
             %% This assumes all nodes have the same number of plum_db
             %% partitions.
             %% TODO We could implement a protocol that validates this by taking
@@ -507,17 +505,7 @@ when is_atom(Node) andalso
             %% all match - maybe something we can ask Partisan to provide
             Name = plum_db_partition_server:name(get_partition(PKey)),
             ServerRef = {Name, Node},
-
-            case plum_db_partition_server:get(ServerRef, PKey, Opts, Timeout) of
-                {ok, Existing} ->
-                    Existing;
-                {error, not_found} ->
-                    undefined;
-                {error, {badrpc, Class, Reason, Stack}} ->
-                    erlang:raise(Class, Reason, Stack);
-                {error, _} = Error ->
-                    Error
-            end
+            plum_db_partition_server:get(ServerRef, PKey, Opts, Timeout)
     end.
 
 %% -----------------------------------------------------------------------------
@@ -1702,8 +1690,17 @@ merge(Node, {PKey, _Context}, Obj) ->
 %% -----------------------------------------------------------------------------
 -spec is_stale({plum_db_pkey(), plum_db_context()}) -> boolean().
 
-is_stale({PKey, Context}) ->
-    plum_db_object:is_stale(Context, ?MODULE:get_object(PKey)).
+is_stale({{_, _} = PKey, Context}) ->
+    case ?MODULE:get_object(PKey) of
+        {ok, Object} ->
+            plum_db_object:is_stale(Context, Object);
+        {error, Reason} ->
+            ?LOG_ERROR(#{
+                description => "Error while retrieving object",
+                reason => Reason
+            }),
+            false
+    end.
 
 
 %% -----------------------------------------------------------------------------
@@ -1723,14 +1720,14 @@ is_stale({PKey, Context}) ->
 -spec graft({plum_db_pkey(), plum_db_context()}) ->
     stale | {ok, plum_db_object()} | {error, term()}.
 
-graft({PKey, Context}) ->
+graft({{_, _} = PKey, Context}) ->
     case ?MODULE:get_object(PKey) of
-        undefined ->
+        {error, not_found} ->
             %% There would have to be a serious error in implementation to hit
             %% this case.
             %% Catch it here b/c it would be much harder to detect
             {error, {not_found, PKey}};
-         Obj ->
+         {ok, Obj} = OK ->
             case plum_db_object:equal_context(Context, Obj) of
                 false ->
                     %% when grafting the context will never be causally newer
@@ -1740,7 +1737,7 @@ graft({PKey, Context}) ->
                     %% addition to its own.  This graft is deemed stale
                     stale;
                 true ->
-                    {ok, Obj}
+                    OK
             end
     end.
 
