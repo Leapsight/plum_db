@@ -337,7 +337,7 @@ exchanging_data(timeout, _, #state{partitions = [H|_]} = State) ->
         Result
 
     catch
-        exit:{nodedown, Peer} ->
+        exit:{{nodedown, Peer}, _} ->
             ?LOG_NOTICE(#{
                 description => "AAE Exchange aborting, peer is down",
                 partition => H,
