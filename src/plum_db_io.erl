@@ -81,7 +81,7 @@
 
 -record(state, {
     status          ::  status(),
-    timestamp       ::  non_neg_integer(),
+    timestamp       ::  non_neg_integer() | undefined,
     helper          ::  pid() | undefined,
     filename        ::  file:filename() | undefined
 }).
