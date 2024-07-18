@@ -42,9 +42,9 @@
 	open_opts = []						::	opts(),
     iterators = #{}                     ::  iterators(),
     helper = undefined                  ::  optional(pid()),
-    key_encoder                         ::  fun((plum_db_pkey(), list()) -> binary()),
-    key_decoder                         ::  fun((plum_db_pkey()) -> binary()),
-    prefix_encoder                      ::  fun((plum_db_pkey()) -> binary())
+    key_encoder                         ::  plum_db_key:encoder(),
+    key_decoder                         ::  plum_db_key:decoder(),
+    prefix_encoder                      ::  plum_db_key:prefix_encoder()
 }).
 
 -record(db_info, {
@@ -54,7 +54,7 @@
 	read_opts = []						::	opts(),
     write_opts = []						::	opts(),
     fold_opts = [{fill_cache, false}]	::	opts(),
-    key_encoder                         ::  fun((plum_db_pkey(), list()) -> binary())
+    key_encoder                         ::  plum_db_key:encoder()
 }).
 
 -record(partition_iterator, {
@@ -68,8 +68,8 @@
     bin_prefix              ::  binary(),
     match_spec              ::  optional(ets:comp_match_spec()),
     keys_only = false       ::  boolean(),
-    key_decoder             ::  fun((plum_db_pkey()) -> binary()),
-    prefix_encoder          ::  fun((plum_db_pkey()) -> binary()),
+    key_decoder             ::  plum_db_key:decoder(),
+    prefix_encoder          ::  plum_db_key:prefix_encoder(),
     %% plum_db_pkey() when iterating over ets, but binary() when iterating over
     %% rocksdb
     prev_key                ::  optional(plum_db_pkey() | binary()),
@@ -532,6 +532,35 @@ ets_iterator_move(Type, key, #partition_iterator{} = Iter, next)
 when Iter#partition_iterator.prev_key == undefined ->
     ets_iterator_move(Type, key, Iter, first);
 
+ets_iterator_move(Type, _, Iter, last) ->
+    KeysOnly = Iter#partition_iterator.keys_only,
+    Tab = table_name(Iter, Type),
+
+    case ets:last(Tab) of
+        ?EOT ->
+            {error, invalid_iterator, Iter};
+        K when KeysOnly ->
+            NewIter = update_iterator(Type, Iter, K, key),
+            case matches_key(K, Iter) of
+                {true, K} ->
+                    {ok, K, NewIter};
+                {false, _} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end;
+        K ->
+            [{K, V}] = ets:lookup(Tab, K),
+            NewIter = update_iterator(Type, Iter, K, key),
+            case matches_key(K, Iter) of
+                {true, K} ->
+                    {ok, K, V, NewIter};
+                {false, _} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end
+    end;
 ets_iterator_move(Type, key, #partition_iterator{} = Iter, prev)
 when Iter#partition_iterator.prev_key == undefined ->
     ets_iterator_move(Type, key, Iter, last);
@@ -1726,10 +1755,7 @@ matches_key(PKey, #partition_iterator{match_spec = undefined} = Iter) ->
     end;
 
 matches_key(PKey0, #partition_iterator{match_spec = MS} = Iter) ->
-    PKey = case is_binary(PKey0) of
-        true -> decode_key(PKey0, Iter);
-        false -> PKey0
-    end,
+    PKey = decode_key(PKey0, Iter),
 
     case ets:match_spec_run([PKey], MS) of
         [true] ->
@@ -1883,39 +1909,14 @@ encode_prefix(Key, #partition_iterator{prefix_encoder = Fun}) ->
 
 
 %% @private
-decode_key(Bin, #state{key_decoder = Fun}) ->
+decode_key(Bin, #state{key_decoder = Fun}) when is_binary(Bin) ->
     Fun(Bin);
 
-decode_key(Bin, #partition_iterator{key_decoder = Fun}) ->
-    Fun(Bin).
+decode_key(Bin, #partition_iterator{key_decoder = Fun}) when is_binary(Bin) ->
+    Fun(Bin);
 
-
-%% encode_key({}) ->
-%% 	E = <<>>,
-%% 	<<
-%% 		Idx/binary, ?KEY_SEPARATOR/binary,
-%% 		TenId/binary, ?KEY_SEPARATOR/binary,
-%% 		(encode_element(G))/binary, ?KEY_SEPARATOR/binary,
-%% 		E/binary, ?KEY_SEPARATOR/binary,
-%% 		E/binary, ?KEY_SEPARATOR/binary,
-%% 		E/binary, ?KEY_SEPARATOR/binary,
-%% 		(encode_element(Txid))/binary
-%% 	>>;
-
-%% encode_key(Term) ->
-%%     term_to_binary(Bin, [deterministic]);
-
-
-%% %% @private
-%% decode_key(Bin) when is_binary(Bin) ->
-%% 	decode_key(binary:split(Bin, ?KEY_SEPARATOR, [global]));
-
-%% decode_key([Term]) ->
-%%     binary_to_term(Term);
-
-%% decode_key(_L) when is_list(L) ->
-%%     error(not_implemented).
-
+decode_key({{_, _}, _} = FPKey, _) ->
+    FPKey.
 
 %% @private
 on_update(_, undefined, _) ->

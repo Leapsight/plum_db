@@ -18,6 +18,18 @@
 
 -module(plum_db_key).
 
+-include("plum_db.hrl").
+
+-type encoder() :: fun((plum_db_pkey(), Opts :: list()) -> binary()).
+-type prefix_encoder() :: fun((plum_db_pkey()) -> binary()).
+-type decoder() :: fun((binary()) -> plum_db_pkey()).
+
+
+-export_type([encoder/0]).
+-export_type([prefix_encoder/0]).
+-export_type([decoder/0]).
+
+
 -export([encoder/0]).
 -export([decoder/0]).
 -export([prefix_encoder/0]).
@@ -28,37 +40,85 @@
 
 
 
+
 %% =============================================================================
 %% API
 %% =============================================================================
 
 
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec encoder() -> encoder().
+
 encoder() ->
     Mode = plum_db_config:get(key_encoding),
     fun(Key, Opts) -> encode(Key, Opts, Mode) end.
 
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec prefix_encoder() -> prefix_encoder().
+
 prefix_encoder() ->
     Mode = plum_db_config:get(key_encoding),
     fun(Key) -> prefix(Key, Mode) end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec decoder() -> decoder().
 
 decoder() ->
     Mode = plum_db_config:get(key_encoding),
     fun(Key) -> decode(Key, Mode) end.
 
 
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec encode(plum_db_pkey()) -> binary().
+
 encode(Key) ->
     encode(Key, []).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec encode(plum_db_pkey(), Opts :: list()) -> binary().
 
 encode(Key, Opts) ->
     encode(Key, Opts, plum_db_config:get(key_encoding)).
 
 
-decode(Bin) when is_binary(Bin) ->
-    decode(Bin, plum_db_config:get(key_encoding)).
-
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec prefix(plum_db_pkey()) -> binary().
 
 prefix(Key) ->
     prefix(Key, plum_db_config:get(key_encoding)).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec decode(binary()) -> plum_db_pkey().
+
+decode(Bin) when is_binary(Bin) ->
+    decode(Bin, plum_db_config:get(key_encoding)).
+
 
 
 
