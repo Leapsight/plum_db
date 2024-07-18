@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.0-rc.1
+* Replace `eleveldb` storage with `rocksdb`
+* Added configuration option `key_encoding` that determines whether to use `sext` or `record_separator` which is not implemented at the moment.
+
 ## 1.2.0
 ### Bug Fixes
 
