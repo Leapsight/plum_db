@@ -12,8 +12,13 @@ compile-no-deps:
 docs: compile
 	${REBAR} as docs edoc
 
-test: xref compile
+eunit:
+	${REBAR} eunit
+
+ct:
 	${REBAR} ct
+
+test: xref compile eunit ct
 
 xref: compile
 	${REBAR} xref skip_deps=true

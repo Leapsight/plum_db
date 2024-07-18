@@ -206,8 +206,6 @@ on_set(_, _) ->
 
 setup_env() ->
     Config0 = maps:from_list(application:get_all_env(?APP)),
-    DefaultWriteBufferMin = 4 * 1024 * 1024,
-    DefaultWriteBufferMax = 14 * 1024 * 1024,
     Defaults = #{
         wait_for_partitions => true,
         wait_for_hashtrees => true,
@@ -215,6 +213,7 @@ setup_env() ->
         store_open_retries_delay => 2000,
         store_open_retry_Limit => 30,
         shard_by => prefix,
+        key_encoding => sext,
         data_dir => "data",
         data_channel => ?DATA_CHANNEL,
         data_channel_opts => #{
@@ -229,20 +228,23 @@ setup_env() ->
         aae_enabled => true,
         aae_concurrency => 1,
         aae_hashtree_ttl => 7 * 24 * 60 * 60, %% 1 week
-        aae_sha_chunk => 4096,
-        aae_leveldb_opts => [
-            {write_buffer_size_min, DefaultWriteBufferMin},
-            {write_buffer_size_max, DefaultWriteBufferMax}
-        ]
+        aae_sha_chunk => 4096
     },
     Config1 = maps:merge(Defaults, Config0),
-    _ShardBy = validate_shard_by(maps:get(shard_by, Config1)),
+    _ = validate_shard_by(maps:get(shard_by, Config1)),
+    _ = validate_key_encoding(maps:get(key_encoding, Config1)),
     application:set_env([{?APP, maps:to_list(Config1)}]).
 
 
 validate_shard_by(prefix) -> prefix;
 validate_shard_by(key) -> key;
 validate_shard_by(Term) -> throw({invalid_prefix_shard_by, Term}).
+
+validate_key_encoding(record_separator) -> record_separator;
+validate_key_encoding(sext) -> sext;
+validate_key_encoding(Term) -> throw({invalid_key_encoding, Term}).
+
+
 
 
 
@@ -295,7 +297,7 @@ validate_partitions(N) when is_integer(N) ->
 
 %% @private
 coerce_partitions(#{partitions := P}) ->
-    case get(partitions) of
+    case ?MODULE:get(partitions) of
         R when R == P ->
             ok;
         R ->
@@ -307,7 +309,7 @@ coerce_partitions(#{partitions := P}) ->
                     "number instead.",
                 partitions => R,
                 existing => P,
-                data_dir => get(data_dir)
+                data_dir => ?MODULE:get(data_dir)
             }),
             set(partitions, P)
     end.
@@ -343,7 +345,7 @@ get_manifest() ->
 %% @private
 init_manifest() ->
     Backend = storage_backend(),
-    Requested = get(partitions),
+    Requested = ?MODULE:get(partitions),
     Partitions =
         case storage_backend_partitions() of
             0 ->
@@ -383,7 +385,7 @@ update_manifest(Manifest) when is_map(Manifest) ->
 
 %% @private
 open_manifest() ->
-    DataDir = get(data_dir),
+    DataDir = ?MODULE:get(data_dir),
     Filename = filename:join([DataDir, "MANIFEST.dets"]),
     Opts = [
         {access, read_write},
@@ -405,7 +407,7 @@ close_manifest() ->
 
 %% @private
 storage_backend_partitions() ->
-    Pattern = filename:join([get(data_dir), "db", "*"]),
+    Pattern = filename:join([?MODULE:get(data_dir), "db", "*"]),
     length(filelib:wildcard(Pattern)).
 
 
@@ -425,11 +427,11 @@ storage_backend(undefined) ->
     %% db/{0..N}/MANIFEST-*
     %% db/{0..N}/OPTIONS-*
     storage_backend(
-        filelib:wildcard(filename:join([get(data_dir), "db", "*", "OPTIONS-*"]))
+        filelib:wildcard(filename:join([?MODULE:get(data_dir), "db", "*", "OPTIONS-*"]))
     );
 
 storage_backend([]) ->
-    eleveldb;
+    rocksdb;
 
 storage_backend([H|T]) ->
     case file:read_file(H) of

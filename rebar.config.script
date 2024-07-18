@@ -1,0 +1,22 @@
+%% -*- erlang-mode -*-
+case os:getenv("ERLANG_ROCKSDB_OPTS") of
+    false ->
+
+        % export ERLANG_ROCKSDB_OPTS="-DERLANG_ROCKSDB_USE_SYSTEM_ROCKSDB=ON -DERLANG_ROCKSDB_USE_SYSTEM_SNAPPY=ON -DERLANG_ROCKSDB_USE_SYSTEM_LZ4=ON"
+        true = os:putenv(
+            "ERLANG_ROCKSDB_OPTS",
+            "-DWITH_BUNDLE_LZ4=ON -DWITH_BUNDLE_SNAPPY=ON"
+        );
+    _ ->
+        skip
+end.
+
+case os:getenv("DEBUG") of
+    "true" ->
+	Opts = proplists:get_value(erl_opts, CONFIG, []),
+	lists:keystore(erl_opts, 1, CONFIG,
+		       [{d,'DEBUG'} | Opts -- [{d,'DEBUG'}]]);
+    _ ->
+	CONFIG
+end.
+

@@ -488,7 +488,7 @@ get_remote_object(Node, PKey, Opts) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec get_remote_object(node(), plum_db_pkey(), get_opts(), timeout()) ->
-    {ok, plum_db_object()} | {error, not_found, timeout | any()}.
+    {ok, plum_db_object()} | {error, not_found | timeout | any()}.
 
 get_remote_object(Node, {{Prefix, SubPrefix}, _Key} = PKey, Opts, Timeout)
 when is_atom(Node) andalso

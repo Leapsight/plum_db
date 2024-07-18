@@ -41,22 +41,26 @@
 	data_root							::	file:filename(),
 	open_opts = []						::	opts(),
     iterators = #{}                     ::  iterators(),
-    helper = undefined                  ::  optional(pid())
+    helper = undefined                  ::  optional(pid()),
+    key_encoder                         ::  plum_db_key:encoder(),
+    key_decoder                         ::  plum_db_key:decoder(),
+    prefix_encoder                      ::  plum_db_key:prefix_encoder()
 }).
 
 -record(db_info, {
-    db_ref 								::	optional(eleveldb:db_ref()),
+    db_ref 								::	optional(rocksdb:db_handle()),
     ram_tab                             ::  atom(),
     ram_disk_tab                        ::  atom(),
 	read_opts = []						::	opts(),
     write_opts = []						::	opts(),
-    fold_opts = [{fill_cache, false}]	::	opts()
+    fold_opts = [{fill_cache, false}]	::	opts(),
+    key_encoder                         ::  plum_db_key:encoder()
 }).
 
 -record(partition_iterator, {
     owner_mref              ::  reference(),
     partition               ::  non_neg_integer(),
-    disk                    ::  optional(eleveldb:itr_ref()),
+    disk                    ::  optional(rocksdb:itr_handle()),
     ram_tab                 ::  optional(ets:tab()),
     ram_disk_tab            ::  optional(ets:tab()),
     full_prefix             ::  plum_db_prefix_pattern(),
@@ -64,8 +68,10 @@
     bin_prefix              ::  binary(),
     match_spec              ::  optional(ets:comp_match_spec()),
     keys_only = false       ::  boolean(),
+    key_decoder             ::  plum_db_key:decoder(),
+    prefix_encoder          ::  plum_db_key:prefix_encoder(),
     %% plum_db_pkey() when iterating over ets, but binary() when iterating over
-    %% eleveldb
+    %% rocksdb
     prev_key                ::  optional(plum_db_pkey() | binary()),
     disk_done = true        ::  boolean(),
     ram_disk_done = true    ::  boolean(),
@@ -74,6 +80,7 @@
     ram_disk                ::  optional(key | {cont, any()})
 }).
 
+-type state()                   ::  #state{}.
 -type opts()                    :: 	[{atom(), term()}].
 -type db_info()                 ::  #db_info{}.
 -type iterator()                ::  #partition_iterator{}.
@@ -341,6 +348,7 @@ byte_size(Store) when is_pid(Store); is_atom(Store) ->
     partisan_gen_server:call(Store, byte_size, infinity).
 
 
+
 %% -----------------------------------------------------------------------------
 %% @doc
 %% @end
@@ -433,8 +441,8 @@ iterator_move(#partition_iterator{disk_done = false} = Iter, Term) ->
 
     DbIter = Iter#partition_iterator.disk,
 
-    case disk_iterator_move(DbIter, eleveldb_action(Term)) of
-        {ok, K} ->
+    case disk_iterator_move(DbIter, rocksdb_action(Term, Iter)) of
+        {ok, K, _} when Iter#partition_iterator.keys_only ->
             NewIter = Iter#partition_iterator{prev_key = K},
             case matches_key(K, Iter) of
                 {true, Key} ->
@@ -456,7 +464,7 @@ iterator_move(#partition_iterator{disk_done = false} = Iter, Term) ->
             end;
 
         {error, Reason}  ->
-            %% No more data in eleveldb, maybe we continue with ets
+            %% No more data in rocksdb, maybe we continue with ets
             case next_iterator(disk, Iter) of
                 undefined ->
                     {error, Reason, Iter};
@@ -486,7 +494,7 @@ disk_iterator_move(undefined, _) ->
     {error, invalid_iterator};
 
 disk_iterator_move(DbIter, Term) ->
-    eleveldb:iterator_move(DbIter, Term).
+    rocksdb:iterator_move(DbIter, Term).
 
 
 %% @private
@@ -524,6 +532,35 @@ ets_iterator_move(Type, key, #partition_iterator{} = Iter, next)
 when Iter#partition_iterator.prev_key == undefined ->
     ets_iterator_move(Type, key, Iter, first);
 
+ets_iterator_move(Type, _, Iter, last) ->
+    KeysOnly = Iter#partition_iterator.keys_only,
+    Tab = table_name(Iter, Type),
+
+    case ets:last(Tab) of
+        ?EOT ->
+            {error, invalid_iterator, Iter};
+        K when KeysOnly ->
+            NewIter = update_iterator(Type, Iter, K, key),
+            case matches_key(K, Iter) of
+                {true, K} ->
+                    {ok, K, NewIter};
+                {false, _} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end;
+        K ->
+            [{K, V}] = ets:lookup(Tab, K),
+            NewIter = update_iterator(Type, Iter, K, key),
+            case matches_key(K, Iter) of
+                {true, K} ->
+                    {ok, K, V, NewIter};
+                {false, _} ->
+                    {error, no_match, NewIter};
+                ?EOT ->
+                    {error, invalid_iterator, NewIter}
+            end
+    end;
 ets_iterator_move(Type, key, #partition_iterator{} = Iter, prev)
 when Iter#partition_iterator.prev_key == undefined ->
     ets_iterator_move(Type, key, Iter, last);
@@ -586,7 +623,7 @@ ets_iterator_move(Type, key, Iter, prev) ->
 
     case ets:prev(Tab, Iter#partition_iterator.prev_key) of
         ?EOT ->
-            %% No more data in ets, maybe we continue with eleveldb
+            %% No more data in ets, maybe we continue with rocksdb
             case prev_iterator(Type, Iter) of
                 undefined ->
                     {error, invalid_iterator, Iter};
@@ -830,11 +867,11 @@ handle_call({erase, PKey}, _From, State) ->
             ok;
         ram_disk ->
             true = ets:delete(ram_disk_tab(State), PKey),
-            Actions = [{delete, encode_key(PKey)}],
-            result(eleveldb:write(DbRef, Actions, Opts));
+            Actions = [{delete, encode_key(PKey, State)}],
+            result(rocksdb:write(DbRef, Actions, Opts));
         _ ->
-            Actions = [{delete, encode_key(PKey)}],
-            result(eleveldb:write(DbRef, Actions, Opts))
+            Actions = [{delete, encode_key(PKey, State)}],
+            result(rocksdb:write(DbRef, Actions, Opts))
     end,
 
     %% Maybe callback
@@ -904,31 +941,24 @@ handle_call({merge, PKey0, Obj0}, _From, State) ->
     end;
 
 handle_call(byte_size, _From, State) ->
-    DbRef = db_ref(State),
+    _DbRef = db_ref(State),
     Ram = ets:info(ram_tab(State), memory),
     RamDisk = ets:info(ram_disk_tab(State), memory),
     Ets = (Ram + RamDisk) * erlang:system_info(wordsize),
-
-    try eleveldb:status(DbRef, <<"leveldb.total-bytes">>) of
-        {ok, Bin} ->
-            {reply, binary_to_integer(Bin) + Ets, State}
-    catch
-        error:_ ->
-            {reply, Ets, State}
-    end;
+    {reply, Ets, State};
 
 handle_call(is_empty, _From, State) ->
     DbRef = db_ref(State),
     Ram = ets:info(ram_tab(State), size),
     RamDisk = ets:info(ram_disk_tab(State), size),
-    Result = eleveldb:is_empty(DbRef) andalso (Ram + RamDisk) == 0,
+    Result = rocksdb:is_empty(DbRef) andalso (Ram + RamDisk) == 0,
     {reply, Result, State};
 
 handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
     Mref = erlang:monitor(process, Pid),
     {Prefix, _} = FullPrefix,
 
-    KeyPattern = proplists:get_value(match, Opts, undefined),
+    KeyPattern = key_value:get(match, Opts, undefined),
 
     MS = case KeyPattern == undefined of
         true ->
@@ -943,10 +973,12 @@ handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
         partition = State#state.partition,
         owner_mref = Mref,
         full_prefix = FullPrefix,
-        keys_only = proplists:get_value(keys_only, Opts, false),
+        keys_only = key_value:get(keys_only, Opts, false),
         match_pattern = KeyPattern,
         match_spec = MS,
-        bin_prefix = sext:prefix({FullPrefix, '_'})
+        bin_prefix = encode_prefix({FullPrefix, '_'}, State),
+        key_decoder = plum_db_key:decoder(),
+        prefix_encoder = plum_db_key:prefix_encoder()
     },
 
     PartIter1 = case Prefix of
@@ -1012,8 +1044,8 @@ terminate(_Reason, State) ->
         State#state.iterators
     ),
 
-    %% Close eleveldb
-    catch eleveldb:close(db_ref(State)),
+    %% Close rocksdb
+    catch rocksdb:close(db_ref(State)),
     ok.
 
 
@@ -1023,70 +1055,48 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% =============================================================================
-%% PRIVATE: ELEVELDB INIT
-%% Borrowed from riak_kv_eleveldb_backend.erl
+%% PRIVATE: ROCKSDB INIT
 %% =============================================================================
 
 
 %% @private
-init_state(Name, Partition, DataRoot, Config) ->
-    %% Merge the proplist passed in from Config with any values specified by the
-    %% eleveldb app level; precedence is given to the Config.
-    MergedConfig = orddict:merge(
+init_state(Name, Partition, DataRoot, Opts0) ->
+    %% Merge the proplist passed in from Opts with any values specified by the
+    %% rocksdb app level; precedence is given to the Opts.
+    Opts1 = orddict:merge(
         fun(_K, VLocal, _VGlobal) -> VLocal end,
-        orddict:from_list(Config), % Local
-        orddict:from_list(application:get_all_env(eleveldb))
+        orddict:from_list(Opts0), % Local
+        orddict:from_list(application:get_all_env(rocksdb))
     ), % Global
 
     %% Use a variable write buffer size in order to reduce the number
     %% of vnodes that try to kick off compaction at the same time
     %% under heavy uniform load...
     WriteBufferMin = key_value:get(
-        write_buffer_size_min, MergedConfig, 30 * 1024 * 1024
+        [open, write_buffer_size_min], Opts1, 32 * 1024 * 1024
     ),
     WriteBufferMax = key_value:get(
-        write_buffer_size_max, MergedConfig, 60 * 1024 * 1024
+        [open, write_buffer_size_max], Opts1, 64 * 1024 * 1024
     ),
-    WriteBufferSize = WriteBufferMin + rand:uniform(
+    WriteBuffer = WriteBufferMin + rand:uniform(
         1 + WriteBufferMax - WriteBufferMin
     ),
 
-    %% Update the write buffer size in the merged config and make sure
+    %% Update the write buffer size in the merged Opts and make sure
     %% create_if_missing is set to true
-    FinalConfig = orddict:store(
-        write_buffer_size,
-        WriteBufferSize,
-        orddict:store(create_if_missing, true, MergedConfig)
-    ),
+    Opts2 = key_value:set([open, write_buffer_size], WriteBuffer, Opts1),
+    Opts3 = key_value:set([open, create_if_missing], true, Opts2),
+    Opts4 = key_value:set([open, create_missing_column_families], true, Opts3),
+    Opts5 = key_value:remove([open, write_buffer_size_min], Opts4),
+    Opts = key_value:remove([open, write_buffer_size_max], Opts5),
 
     %% Parse out the open/read/write options
-    {OpenOpts, _BadOpenOpts} = eleveldb:validate_options(open, FinalConfig),
-    {ReadOpts, _BadReadOpts} = eleveldb:validate_options(read, FinalConfig),
-    {WriteOpts, _BadWriteOpts} = eleveldb:validate_options(write, FinalConfig),
+    OpenOpts = key_value:get(open, Opts, []),
+    ReadOpts = key_value:get(read, Opts, []),
+    WriteOpts = key_value:get(write, Opts, []),
 
     %% Use read options for folding, but FORCE fill_cache to false
     FoldOpts = key_value:put(fill_cache, false, ReadOpts),
-
-    %% Warn if block_size is set
-    SSTBS = proplists:get_value(sst_block_size, OpenOpts, false),
-    BS = proplists:get_value(block_size, OpenOpts, false),
-
-    case BS /= false andalso SSTBS == false of
-        true ->
-            ?LOG_WARNING(#{
-                description => io_lib:format(
-                    "eleveldb block_size has been renamed 'sst_block_size' "
-                    "and the current setting of '~p' is being ignored.  "
-                    "Changing sst_block_size is strongly cautioned "
-                    "against unless you know what you are doing.  Remove "
-                    "block_size from app.config to get rid of this "
-                    "message.\n", [BS]
-                )
-            }),
-            ok;
-        _ ->
-            ok
-    end,
 
     %% We create two ets tables for ram and ram_disk storage levels
     EtsOpts = [
@@ -1115,11 +1125,15 @@ init_state(Name, Partition, DataRoot, Config) ->
             read_opts = ReadOpts,
             write_opts = WriteOpts,
             %% eqwalizer:ignore FoldOpts
-            fold_opts = FoldOpts
+            fold_opts = FoldOpts,
+            key_encoder = plum_db_key:encoder()
         },
-		config = FinalConfig,
+		config = Opts,
         data_root = DataRoot,
-		open_opts = OpenOpts
+		open_opts = OpenOpts,
+        key_encoder = plum_db_key:encoder(),
+        key_decoder = plum_db_key:decoder(),
+        prefix_encoder = plum_db_key:prefix_encoder()
 	}.
 
 
@@ -1137,7 +1151,7 @@ open_db(State, RetriesLeft, _) ->
     OpenOpts = State#state.open_opts,
 
     %% eqwalizer:ignore open opts
-    case eleveldb:open(State#state.data_root, OpenOpts) of
+    case rocksdb:open(State#state.data_root, OpenOpts) of
         {ok, Ref} ->
             DBInfo0 = State#state.db_info,
             DBInfo = DBInfo0#db_info{db_ref = Ref},
@@ -1153,7 +1167,7 @@ open_db(State, RetriesLeft, _) ->
                     SleepFor = plum_db_config:get(store_open_retries_delay),
 
                     ?LOG_DEBUG(#{
-                        description => "Leveldb backend retrying after error",
+                        description => "Rocksdb backend retrying after error",
                         partition => State#state.partition,
                         node => partisan:node(),
                         data_root => State#state.data_root,
@@ -1169,18 +1183,18 @@ open_db(State, RetriesLeft, _) ->
                         true ->
                             ?LOG_WARNING(#{
                                 description =>
-                                    "Starting repair of corrupted Leveldb store",
+                                    "Starting repair of corrupted RocksDB store",
                                 partition => State#state.partition,
                                 node => partisan:node(),
                                 data_root => State#state.data_root,
                                 reason => OpenErr
                             }),
-                            _ = eleveldb:repair(
+                            _ = rocksdb:repair(
                                 State#state.data_root, State#state.open_opts
                             ),
                             ?LOG_NOTICE(#{
                                 description =>
-                                    "Finished repair of corrupted Leveldb store",
+                                    "Finished repair of corrupted RocksDB store",
                                 partition => State#state.partition,
                                 node => partisan:node(),
                                 data_root => State#state.data_root,
@@ -1233,7 +1247,7 @@ init_ram_disk_prefixes_fun(State) ->
 
         %% We load ram_disk prefixes from disk to ram
         PrefixList = maps:to_list(plum_db:prefixes()),
-        {ok, DbIter} = eleveldb:iterator(db_ref(State), fold_opts(State)),
+        {ok, DbIter} = rocksdb:iterator(db_ref(State), fold_opts(State)),
 
         try
             Fun = fun
@@ -1246,10 +1260,12 @@ init_ram_disk_prefixes_fun(State) ->
                         prefix => Prefix,
                         node => partisan:node()
                     }),
-                    First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
+                    First = encode_prefix(
+                        {{Prefix, ?WILDCARD}, ?WILDCARD}, State
+                    ),
                     Next = disk_iterator_move(DbIter, First),
                     init_prefix_iterate(
-                        Next, DbIter, First, erlang:byte_size(First), Tab
+                        Next, DbIter, First, erlang:byte_size(First), Tab, State
                     );
                 F(_, ok) ->
                     ok
@@ -1283,25 +1299,25 @@ init_ram_disk_prefixes_fun(State) ->
 
         after
 
-            catch eleveldb:iterator_close(DbIter)
+            catch rocksdb:iterator_close(DbIter)
 
         end
     end.
 
 
 %% @private
-init_prefix_iterate({error, _}, _, _, _, _) ->
+init_prefix_iterate({error, _}, _, _, _, _, _) ->
     %% We have no more matches in this Prefix
     ok;
 
-init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab) ->
+init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab, State) ->
     case K of
         <<BinPrefix:BPSize/binary, _/binary>> ->
             %% Element is {{P, K}, MetadataObj}
-            PKey = decode_key(K),
+            PKey = decode_key(K, State),
             true = ets:insert(Tab, {PKey, binary_to_term(V)}),
-            Next = disk_iterator_move(DbIter, prefetch),
-            init_prefix_iterate(Next, DbIter, BinPrefix, BPSize, Tab);
+            Next = disk_iterator_move(DbIter, rocksdb_action(prefetch, State)),
+            init_prefix_iterate(Next, DbIter, BinPrefix, BPSize, Tab, State);
         _ ->
             %% We have no more matches in this Prefix
             ok
@@ -1410,6 +1426,7 @@ modify(PKey, ValueOrFun, Opts, State, Existing, Ctxt) ->
 
         case do_put(PKey, Modified, State) of
             ok ->
+            ok = do_put(PKey, Modified, State),
                 ok = maybe_broadcast(PKey, Modified, Opts),
                 {ok, Existing, Modified};
 
@@ -1516,7 +1533,7 @@ do_get_from(PKey, State, Type)
 when (Type == disk) orelse (Type == undefined) ->
     DbRef = db_ref(State),
     ReadOpts = read_opts(State),
-    result(eleveldb:get(DbRef, encode_key(PKey), ReadOpts));
+    result(rocksdb:get(DbRef, encode_key(PKey, State), ReadOpts));
 
 do_get_from(PKey, State, ram) ->
     case ets:lookup(ram_tab(State), PKey) of
@@ -1603,8 +1620,8 @@ do_put(PKey, Value, State, disk) ->
 
     DbRef = db_ref(State),
     Opts = write_opts(State),
-    Actions = [{put, encode_key(PKey), term_to_binary(Value, [deterministic])}],
-    result(eleveldb:write(DbRef, Actions, Opts)).
+    Actions = [{put, encode_key(PKey, State), term_to_binary(Value, [deterministic])}],
+    result(rocksdb:write(DbRef, Actions, Opts)).
 
 
 %% @private
@@ -1648,37 +1665,46 @@ prev_iterator(ram_disk, Iter) ->
     Iter#partition_iterator{
         disk_done = false,
         ram_disk_done = false
-    }.
+    };
 
+prev_iterator(disk, _) ->
+    undefined.
 
 %% @private
--spec eleveldb_action(iterator_action_ext() | plum_db_prefix_pattern() | plum_db_pkey_pattern()) ->
+-spec rocksdb_action(iterator_action_ext() | plum_db_prefix_pattern() | plum_db_pkey_pattern(), state() | iterator()) ->
     iterator_action() | binary().
 
-eleveldb_action({?WILDCARD, _}) ->
+%% @private
+rocksdb_action({?WILDCARD, _}, _) ->
     first;
 
-eleveldb_action({{?WILDCARD, _}, _}) ->
+rocksdb_action({{?WILDCARD, _}, _}, _) ->
     first;
 
-eleveldb_action({{_, _}, _} = PKey) ->
-    sext:prefix(PKey);
+rocksdb_action({{_, _}, _} = PKey, StateOrIter) ->
+    encode_prefix(PKey, StateOrIter);
 
-eleveldb_action({_, _} = FullPrefix) ->
+rocksdb_action({_, _} = FullPrefix, Term) ->
     %% A PKey with wildcard key
     %% eqwalizer:ignore
-    eleveldb_action({FullPrefix, ?WILDCARD});
+    rocksdb_action({FullPrefix, ?WILDCARD}, Term);
 
-eleveldb_action(first) ->
+rocksdb_action(first, _) ->
     first;
-eleveldb_action(next) ->
+
+rocksdb_action(next, _) ->
     next;
-eleveldb_action(prev) ->
+
+rocksdb_action(prev, _) ->
     prev;
-eleveldb_action(prefetch) ->
-    prefetch;
-eleveldb_action(prefetch_stop) ->
-    prefetch_stop.
+
+rocksdb_action(prefetch, _) ->
+    %% Not supported in rocksdb
+    next;
+
+rocksdb_action(prefetch_stop, _) ->
+    %% Not supported in rocksdb
+    next.
 
 
 %% @private
@@ -1720,7 +1746,7 @@ matches_key(PKey, #partition_iterator{match_spec = undefined} = Iter) ->
     %% We try to match the prefix and if it doesn't we stop
     case matches_prefix(PKey, Iter) of
         true when is_binary(PKey) ->
-            {true, decode_key(PKey)};
+            {true, decode_key(PKey, Iter)};
         true ->
             %% eqwalizer:ignore
             {true, PKey};
@@ -1729,10 +1755,7 @@ matches_key(PKey, #partition_iterator{match_spec = undefined} = Iter) ->
     end;
 
 matches_key(PKey0, #partition_iterator{match_spec = MS} = Iter) ->
-    PKey = case is_binary(PKey0) of
-        true -> decode_key(PKey0);
-        false -> PKey0
-    end,
+    PKey = decode_key(PKey0, Iter),
 
     case ets:match_spec_run([PKey], MS) of
         [true] ->
@@ -1769,14 +1792,8 @@ matches_prefix(_, _) -> false.
 set_disk_iterator(#partition_iterator{} = PartIter0, State) ->
     DbRef = db_ref(State),
     Opts = fold_opts(State),
-    KeysOnly = PartIter0#partition_iterator.keys_only,
 
-    {ok, DbIter} = case KeysOnly of
-        true ->
-            eleveldb:iterator(DbRef, Opts, keys_only);
-        false ->
-            eleveldb:iterator(DbRef, Opts)
-    end,
+    {ok, DbIter} = rocksdb:iterator(DbRef, Opts),
 
     PartIter0#partition_iterator{
         disk_done = false,
@@ -1840,7 +1857,7 @@ close_iterator(Mref, State0) when is_reference(Mref) ->
 
         {#partition_iterator{disk = DbIter}, State1} ->
             _ = erlang:demonitor(Mref, [flush]),
-            _ = catch eleveldb:iterator_close(DbIter),
+            _ = catch rocksdb:iterator_close(DbIter),
             State1;
 
         error ->
@@ -1876,41 +1893,30 @@ result({error, _} = Error) ->
 
 
 %% @private
-encode_key(Key) ->
-    sext:encode(Key).
+encode_key(Key, #state{key_encoder = Fun}) ->
+    Fun(Key, []);
+
+encode_key(Key, #db_info{key_encoder = Fun}) ->
+    Fun(Key, []).
 
 
 %% @private
-decode_key(Bin) ->
-    sext:decode(Bin).
+encode_prefix(Key, #state{prefix_encoder = Fun}) ->
+    Fun(Key);
+
+encode_prefix(Key, #partition_iterator{prefix_encoder = Fun}) ->
+    Fun(Key).
 
 
-%% encode_key({}) ->
-%% 	E = <<>>,
-%% 	<<
-%% 		Idx/binary, ?KEY_SEPARATOR/binary,
-%% 		TenId/binary, ?KEY_SEPARATOR/binary,
-%% 		(encode_element(G))/binary, ?KEY_SEPARATOR/binary,
-%% 		E/binary, ?KEY_SEPARATOR/binary,
-%% 		E/binary, ?KEY_SEPARATOR/binary,
-%% 		E/binary, ?KEY_SEPARATOR/binary,
-%% 		(encode_element(Txid))/binary
-%% 	>>;
+%% @private
+decode_key(Bin, #state{key_decoder = Fun}) when is_binary(Bin) ->
+    Fun(Bin);
 
-%% encode_key(Term) ->
-%%     term_to_binary(Bin, [deterministic]);
+decode_key(Bin, #partition_iterator{key_decoder = Fun}) when is_binary(Bin) ->
+    Fun(Bin);
 
-
-%% %% @private
-%% decode_key(Bin) when is_binary(Bin) ->
-%% 	decode_key(binary:split(Bin, ?KEY_SEPARATOR, [global]));
-
-%% decode_key([Term]) ->
-%%     binary_to_term(Term);
-
-%% decode_key(_L) when is_list(L) ->
-%%     error(not_implemented).
-
+decode_key({{_, _}, _} = FPKey, _) ->
+    FPKey.
 
 %% @private
 on_update(_, undefined, _) ->

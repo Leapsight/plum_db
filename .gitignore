@@ -18,3 +18,5 @@ _build
 rebar3.crashdump
 /data
 /erlang_ls.config
+/TEST-plum_db_SUITE.xml
+/TEST-file_plum_db.app.xml

@@ -83,7 +83,7 @@
 
 
 %% @doc Constructs a new clock set without causal history,
-%% and receives a list of values that gos to the anonymous list.
+%% and receives a list of values that goes to the anonymous list.
 -spec new(value() | [value()]) -> clock().
 new(Vs) when is_list(Vs) -> {[], Vs};
 new(V) -> {[], [V]}.

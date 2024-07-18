@@ -1,6 +1,6 @@
 {application, plum_db, [
     {description, "A database globally replicated via Plumtree (Epidemic Broadcast Trees) and Partisan. An offspring of Plumtree and Partisan, a descendant of Riak Core Metadata Store."},
-    {vsn, "1.2.0"},
+    {vsn, "2.0.0-rc.1"},
     {registered, []},
     {mod, {plum_db_app, []}},
     % {mod, {application_starter, [plum_db_app, []]}},
@@ -15,10 +15,12 @@
         tools,
         runtime_tools,
         os_mon,
-        eleveldb,
+        rocksdb,
         sext,
         app_config,
         gproc,
+        key_value,
+        maps_utils,
         utils
         %% partisan is started manually
     ]},
