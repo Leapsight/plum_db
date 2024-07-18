@@ -19,6 +19,8 @@
         sext,
         app_config,
         gproc,
+        key_value,
+        maps_utils,
         utils
         %% partisan is started manually
     ]},
