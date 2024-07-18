@@ -302,7 +302,7 @@
 
 -type select_fun(T) :: fun((orddict(binary(), binary())) -> T).
 
--type segment_store() :: {rocksdb:db_ref(), string()}.
+-type segment_store() :: {rocksdb:db_handle(), string()}.
 
 -record(state, {
     id                  ::  tree_id_bin(),
@@ -312,7 +312,7 @@
     width               ::  pos_integer(),
     mem_levels          ::  integer(),
     tree                ::  dict:dict(),
-    ref                 ::  rocksdb:db_ref(),
+    ref                 ::  rocksdb:db_handle(),
     path                ::  string(),
     itr                 ::  term(),
     write_buffer        ::  [{put, binary(), binary()} | {delete, binary()}],

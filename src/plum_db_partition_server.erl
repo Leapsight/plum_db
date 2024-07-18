@@ -45,7 +45,7 @@
 }).
 
 -record(db_info, {
-    db_ref 								::	optional(rocksdb:db_ref()),
+    db_ref 								::	optional(rocksdb:db_handle()),
     ram_tab                             ::  atom(),
     ram_disk_tab                        ::  atom(),
 	read_opts = []						::	opts(),
@@ -56,7 +56,7 @@
 -record(partition_iterator, {
     owner_mref              ::  reference(),
     partition               ::  non_neg_integer(),
-    disk                    ::  optional(rocksdb:itr_ref()),
+    disk                    ::  optional(rocksdb:itr_handle()),
     ram_tab                 ::  optional(ets:tab()),
     ram_disk_tab            ::  optional(ets:tab()),
     full_prefix             ::  plum_db_prefix_pattern(),
@@ -65,7 +65,7 @@
     match_spec              ::  optional(ets:comp_match_spec()),
     keys_only = false       ::  boolean(),
     %% plum_db_pkey() when iterating over ets, but binary() when iterating over
-    %% eleveldb
+    %% rocksdb
     prev_key                ::  optional(plum_db_pkey() | binary()),
     disk_done = true        ::  boolean(),
     ram_disk_done = true    ::  boolean(),
