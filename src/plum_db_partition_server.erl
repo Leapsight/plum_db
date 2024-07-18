@@ -41,7 +41,10 @@
 	data_root							::	file:filename(),
 	open_opts = []						::	opts(),
     iterators = #{}                     ::  iterators(),
-    helper = undefined                  ::  optional(pid())
+    helper = undefined                  ::  optional(pid()),
+    key_encoder                         ::  fun((plum_db_pkey(), list()) -> binary()),
+    key_decoder                         ::  fun((plum_db_pkey()) -> binary()),
+    prefix_encoder                      ::  fun((plum_db_pkey()) -> binary())
 }).
 
 -record(db_info, {
@@ -50,7 +53,8 @@
     ram_disk_tab                        ::  atom(),
 	read_opts = []						::	opts(),
     write_opts = []						::	opts(),
-    fold_opts = [{fill_cache, false}]	::	opts()
+    fold_opts = [{fill_cache, false}]	::	opts(),
+    key_encoder                         ::  fun((plum_db_pkey(), list()) -> binary())
 }).
 
 -record(partition_iterator, {
@@ -64,6 +68,8 @@
     bin_prefix              ::  binary(),
     match_spec              ::  optional(ets:comp_match_spec()),
     keys_only = false       ::  boolean(),
+    key_decoder             ::  fun((plum_db_pkey()) -> binary()),
+    prefix_encoder          ::  fun((plum_db_pkey()) -> binary()),
     %% plum_db_pkey() when iterating over ets, but binary() when iterating over
     %% rocksdb
     prev_key                ::  optional(plum_db_pkey() | binary()),
@@ -74,6 +80,7 @@
     ram_disk                ::  optional(key | {cont, any()})
 }).
 
+-type state()                   ::  #state{}.
 -type opts()                    :: 	[{atom(), term()}].
 -type db_info()                 ::  #db_info{}.
 -type iterator()                ::  #partition_iterator{}.
@@ -434,7 +441,7 @@ iterator_move(#partition_iterator{disk_done = false} = Iter, Term) ->
 
     DbIter = Iter#partition_iterator.disk,
 
-    case disk_iterator_move(DbIter, rocksdb_action(Term)) of
+    case disk_iterator_move(DbIter, rocksdb_action(Term, Iter)) of
         {ok, K, _} when Iter#partition_iterator.keys_only ->
             NewIter = Iter#partition_iterator{prev_key = K},
             case matches_key(K, Iter) of
@@ -831,10 +838,10 @@ handle_call({erase, PKey}, _From, State) ->
             ok;
         ram_disk ->
             true = ets:delete(ram_disk_tab(State), PKey),
-            Actions = [{delete, encode_key(PKey)}],
+            Actions = [{delete, encode_key(PKey, State)}],
             result(rocksdb:write(DbRef, Actions, Opts));
         _ ->
-            Actions = [{delete, encode_key(PKey)}],
+            Actions = [{delete, encode_key(PKey, State)}],
             result(rocksdb:write(DbRef, Actions, Opts))
     end,
 
@@ -909,16 +916,6 @@ handle_call(byte_size, _From, State) ->
     Ram = ets:info(ram_tab(State), memory),
     RamDisk = ets:info(ram_disk_tab(State), memory),
     Ets = (Ram + RamDisk) * erlang:system_info(wordsize),
-
-    %% TODO
-    %% try eleveldb:status(DbRef, <<"leveldb.total-bytes">>) of
-    %%     {ok, Bin} ->
-    %%         {reply, binary_to_integer(Bin) + Ets, State}
-    %% catch
-    %%     error:_ ->
-    %%         {reply, Ets, State}
-    %% end;
-
     {reply, Ets, State};
 
 handle_call(is_empty, _From, State) ->
@@ -950,7 +947,9 @@ handle_call({iterator, Pid, FullPrefix, Opts}, _From, State) ->
         keys_only = key_value:get(keys_only, Opts, false),
         match_pattern = KeyPattern,
         match_spec = MS,
-        bin_prefix = sext:prefix({FullPrefix, '_'})
+        bin_prefix = encode_prefix({FullPrefix, '_'}, State),
+        key_decoder = plum_db_key:decoder(),
+        prefix_encoder = plum_db_key:prefix_encoder()
     },
 
     PartIter1 = case Prefix of
@@ -1027,8 +1026,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% =============================================================================
-%% PRIVATE: ELEVELDB INIT
-%% Borrowed from riak_kv_eleveldb_backend.erl
+%% PRIVATE: ROCKSDB INIT
 %% =============================================================================
 
 
@@ -1098,11 +1096,15 @@ init_state(Name, Partition, DataRoot, Opts0) ->
             read_opts = ReadOpts,
             write_opts = WriteOpts,
             %% eqwalizer:ignore FoldOpts
-            fold_opts = FoldOpts
+            fold_opts = FoldOpts,
+            key_encoder = plum_db_key:encoder()
         },
 		config = Opts,
         data_root = DataRoot,
-		open_opts = OpenOpts
+		open_opts = OpenOpts,
+        key_encoder = plum_db_key:encoder(),
+        key_decoder = plum_db_key:decoder(),
+        prefix_encoder = plum_db_key:prefix_encoder()
 	}.
 
 
@@ -1229,10 +1231,12 @@ init_ram_disk_prefixes_fun(State) ->
                         prefix => Prefix,
                         node => partisan:node()
                     }),
-                    First = sext:prefix({{Prefix, ?WILDCARD}, ?WILDCARD}),
+                    First = encode_prefix(
+                        {{Prefix, ?WILDCARD}, ?WILDCARD}, State
+                    ),
                     Next = disk_iterator_move(DbIter, First),
                     init_prefix_iterate(
-                        Next, DbIter, First, erlang:byte_size(First), Tab
+                        Next, DbIter, First, erlang:byte_size(First), Tab, State
                     );
                 F(_, ok) ->
                     ok
@@ -1273,18 +1277,18 @@ init_ram_disk_prefixes_fun(State) ->
 
 
 %% @private
-init_prefix_iterate({error, _}, _, _, _, _) ->
+init_prefix_iterate({error, _}, _, _, _, _, _) ->
     %% We have no more matches in this Prefix
     ok;
 
-init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab) ->
+init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab, State) ->
     case K of
         <<BinPrefix:BPSize/binary, _/binary>> ->
             %% Element is {{P, K}, MetadataObj}
-            PKey = decode_key(K),
+            PKey = decode_key(K, State),
             true = ets:insert(Tab, {PKey, binary_to_term(V)}),
-            Next = disk_iterator_move(DbIter, rocksdb_action(prefetch)),
-            init_prefix_iterate(Next, DbIter, BinPrefix, BPSize, Tab);
+            Next = disk_iterator_move(DbIter, rocksdb_action(prefetch, State)),
+            init_prefix_iterate(Next, DbIter, BinPrefix, BPSize, Tab, State);
         _ ->
             %% We have no more matches in this Prefix
             ok
@@ -1500,7 +1504,7 @@ do_get_from(PKey, State, Type)
 when (Type == disk) orelse (Type == undefined) ->
     DbRef = db_ref(State),
     ReadOpts = read_opts(State),
-    result(rocksdb:get(DbRef, encode_key(PKey), ReadOpts));
+    result(rocksdb:get(DbRef, encode_key(PKey, State), ReadOpts));
 
 do_get_from(PKey, State, ram) ->
     case ets:lookup(ram_tab(State), PKey) of
@@ -1587,7 +1591,7 @@ do_put(PKey, Value, State, disk) ->
 
     DbRef = db_ref(State),
     Opts = write_opts(State),
-    Actions = [{put, encode_key(PKey), term_to_binary(Value, [deterministic])}],
+    Actions = [{put, encode_key(PKey, State), term_to_binary(Value, [deterministic])}],
     result(rocksdb:write(DbRef, Actions, Opts)).
 
 
@@ -1638,38 +1642,38 @@ prev_iterator(disk, _) ->
     undefined.
 
 %% @private
--spec rocksdb_action(iterator_action_ext() | plum_db_prefix_pattern() | plum_db_pkey_pattern()) ->
+-spec rocksdb_action(iterator_action_ext() | plum_db_prefix_pattern() | plum_db_pkey_pattern(), state() | iterator()) ->
     iterator_action() | binary().
 
 %% @private
-rocksdb_action({?WILDCARD, _}) ->
+rocksdb_action({?WILDCARD, _}, _) ->
     first;
 
-rocksdb_action({{?WILDCARD, _}, _}) ->
+rocksdb_action({{?WILDCARD, _}, _}, _) ->
     first;
 
-rocksdb_action({{_, _}, _} = PKey) ->
-    sext:prefix(PKey);
+rocksdb_action({{_, _}, _} = PKey, StateOrIter) ->
+    encode_prefix(PKey, StateOrIter);
 
-rocksdb_action({_, _} = FullPrefix) ->
+rocksdb_action({_, _} = FullPrefix, Term) ->
     %% A PKey with wildcard key
     %% eqwalizer:ignore
-    rocksdb_action({FullPrefix, ?WILDCARD});
+    rocksdb_action({FullPrefix, ?WILDCARD}, Term);
 
-rocksdb_action(first) ->
+rocksdb_action(first, _) ->
     first;
 
-rocksdb_action(next) ->
+rocksdb_action(next, _) ->
     next;
 
-rocksdb_action(prev) ->
+rocksdb_action(prev, _) ->
     prev;
 
-rocksdb_action(prefetch) ->
+rocksdb_action(prefetch, _) ->
     %% Not supported in rocksdb
     next;
 
-rocksdb_action(prefetch_stop) ->
+rocksdb_action(prefetch_stop, _) ->
     %% Not supported in rocksdb
     next.
 
@@ -1713,7 +1717,7 @@ matches_key(PKey, #partition_iterator{match_spec = undefined} = Iter) ->
     %% We try to match the prefix and if it doesn't we stop
     case matches_prefix(PKey, Iter) of
         true when is_binary(PKey) ->
-            {true, decode_key(PKey)};
+            {true, decode_key(PKey, Iter)};
         true ->
             %% eqwalizer:ignore
             {true, PKey};
@@ -1723,7 +1727,7 @@ matches_key(PKey, #partition_iterator{match_spec = undefined} = Iter) ->
 
 matches_key(PKey0, #partition_iterator{match_spec = MS} = Iter) ->
     PKey = case is_binary(PKey0) of
-        true -> decode_key(PKey0);
+        true -> decode_key(PKey0, Iter);
         false -> PKey0
     end,
 
@@ -1863,13 +1867,27 @@ result({error, _} = Error) ->
 
 
 %% @private
-encode_key(Key) ->
-    sext:encode(Key).
+encode_key(Key, #state{key_encoder = Fun}) ->
+    Fun(Key, []);
+
+encode_key(Key, #db_info{key_encoder = Fun}) ->
+    Fun(Key, []).
 
 
 %% @private
-decode_key(Bin) ->
-    sext:decode(Bin).
+encode_prefix(Key, #state{prefix_encoder = Fun}) ->
+    Fun(Key);
+
+encode_prefix(Key, #partition_iterator{prefix_encoder = Fun}) ->
+    Fun(Key).
+
+
+%% @private
+decode_key(Bin, #state{key_decoder = Fun}) ->
+    Fun(Bin);
+
+decode_key(Bin, #partition_iterator{key_decoder = Fun}) ->
+    Fun(Bin).
 
 
 %% encode_key({}) ->

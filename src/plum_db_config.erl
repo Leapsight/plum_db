@@ -213,6 +213,7 @@ setup_env() ->
         store_open_retries_delay => 2000,
         store_open_retry_Limit => 30,
         shard_by => prefix,
+        key_encoding => sext,
         data_dir => "data",
         data_channel => ?DATA_CHANNEL,
         data_channel_opts => #{
@@ -230,13 +231,20 @@ setup_env() ->
         aae_sha_chunk => 4096
     },
     Config1 = maps:merge(Defaults, Config0),
-    _ShardBy = validate_shard_by(maps:get(shard_by, Config1)),
+    _ = validate_shard_by(maps:get(shard_by, Config1)),
+    _ = validate_key_encoding(maps:get(key_encoding, Config1)),
     application:set_env([{?APP, maps:to_list(Config1)}]).
 
 
 validate_shard_by(prefix) -> prefix;
 validate_shard_by(key) -> key;
 validate_shard_by(Term) -> throw({invalid_prefix_shard_by, Term}).
+
+validate_key_encoding(record_separator) -> record_separator;
+validate_key_encoding(sext) -> sext;
+validate_key_encoding(Term) -> throw({invalid_key_encoding, Term}).
+
+
 
 
 
@@ -423,7 +431,7 @@ storage_backend(undefined) ->
     );
 
 storage_backend([]) ->
-    eleveldb;
+    rocksdb;
 
 storage_backend([H|T]) ->
     case file:read_file(H) of
