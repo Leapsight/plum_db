@@ -145,7 +145,7 @@ terminate(Reason, _StateName, State) ->
 
     %% We release remaining locks.
     %% plum_db_partition_hashtree is monitoring us so it should get a DOWN
-    %% signal, but we cleanup just in case as we have remote locks and we are
+    %% signal, but we cleanup just in case as we have remote locks as we are
     %% using Partisan monitoring,
     ok = release_locks(State#state.partitions, Peer),
 
