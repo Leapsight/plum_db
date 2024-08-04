@@ -1,4 +1,7 @@
 # CHANGELOG
+## 2.0-rc.2
+* Reuduce lock timeout and avoid loggin and error when object is not present during AAE
+
 
 ## 2.0-rc.1
 * Replace `eleveldb` storage with `rocksdb`
