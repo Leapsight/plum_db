@@ -120,7 +120,7 @@ init([Peer, Opts]) ->
         peer = Peer,
         partitions = Partitions,
         summary = #{},
-        timeout = maps:get(timeout, Opts, 60000)
+        timeout = maps:get(timeout, Opts, 30000)
     },
 
     %% We notify subscribers
