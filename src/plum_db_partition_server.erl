@@ -1426,7 +1426,6 @@ modify(PKey, ValueOrFun, Opts, State, Existing, Ctxt) ->
 
         case do_put(PKey, Modified, State) of
             ok ->
-            ok = do_put(PKey, Modified, State),
                 ok = maybe_broadcast(PKey, Modified, Opts),
                 {ok, Existing, Modified};
 
