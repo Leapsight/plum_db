@@ -6,9 +6,7 @@
 %% -include("my_module.hrl").
 
 prop_sha_test() ->
-    %% NOTE: Generating 1MB (1024 * 1024) size binaries is incredibly slow
-    %% with EQC and was using over 2GB of memory
-    ?FORALL({Size, NumChunks}, {proper_types:integer(1, 1024), proper_types:integer(1, 16)},
+    ?FORALL({Size, NumChunks}, {proper_types:integer(memory:kibibytes(1), memory:mebibytes(1)), proper_types:integer(1, 16)},
         ?FORALL(Bin, proper_types:binary(Size),
             begin
                 ChunkSize = max(1, (Size div NumChunks)),
@@ -78,7 +76,7 @@ prop_est_test() ->
     %% It's hard to estimate under 10000 keys
     ?FORALL(
         N,
-        proper_types:integer(10000, 500000),
+        proper_types:integer(10000, 5000000),
         begin
             {ok, EstKeys} = hashtree:estimate_keys(
                 hashtree:update_tree(
