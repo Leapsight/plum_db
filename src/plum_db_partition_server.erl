@@ -85,9 +85,7 @@
 -type db_info()                 ::  #db_info{}.
 -type iterator()                ::  #partition_iterator{}.
 -type iterators()               ::  #{reference() => iterator()}.
--type iterator_action()         ::  first
-                                    | last | next | prev
-                                    | prefetch | prefetch_stop.
+-type iterator_action()         ::  first | last | next | prev.
 -type iterator_action_ext()     ::  iterator_action()
                                     | plum_db_prefix()
                                     | plum_db_pkey()
@@ -429,13 +427,6 @@ iterator_move(
     %% We continue with ets so we translate the action
     iterator_move(Iter, first);
 
-iterator_move(#partition_iterator{disk_done = true} = Iter, prefetch) ->
-    %% We continue with ets so we translate the action
-    iterator_move(Iter, next);
-
-iterator_move(#partition_iterator{disk_done = true} = Iter, prefetch_stop) ->
-    %% We continue with ets so we translate the action
-    iterator_move(Iter, next);
 
 iterator_move(#partition_iterator{disk_done = false} = Iter, Term) ->
 
@@ -1316,7 +1307,7 @@ init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab, State) ->
             %% Element is {{P, K}, MetadataObj}
             PKey = decode_key(K, State),
             true = ets:insert(Tab, {PKey, binary_to_term(V)}),
-            Next = disk_iterator_move(DbIter, rocksdb_action(prefetch, State)),
+            Next = disk_iterator_move(DbIter, rocksdb_action(next, State)),
             init_prefix_iterate(Next, DbIter, BinPrefix, BPSize, Tab, State);
         _ ->
             %% We have no more matches in this Prefix
@@ -1695,15 +1686,7 @@ rocksdb_action(next, _) ->
     next;
 
 rocksdb_action(prev, _) ->
-    prev;
-
-rocksdb_action(prefetch, _) ->
-    %% Not supported in rocksdb
-    next;
-
-rocksdb_action(prefetch_stop, _) ->
-    %% Not supported in rocksdb
-    next.
+    prev.
 
 
 %% @private

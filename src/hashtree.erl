@@ -913,17 +913,9 @@ multi_select_segment(#state{id=Id, itr=Itr}, Segments, F) ->
 iterator_move(undefined, _Seek) ->
     {error, invalid_iterator};
 
-iterator_move(Itr, prefetch) ->
-    %% Not supported in rocksdb
-    iterator_move(Itr, next);
-
-iterator_move(Itr, prefetch_stop) ->
-    %% Not supported in rocksdb
-    iterator_move(Itr, next);
-
-iterator_move(Itr, Seek) ->
+iterator_move(Itr, IterAction) ->
     try
-        rocksdb:iterator_move(Itr, Seek)
+        rocksdb:iterator_move(Itr, IterAction)
     catch
         _:badarg ->
             {error, invalid_iterator}
@@ -931,8 +923,31 @@ iterator_move(Itr, Seek) ->
 
 -spec iterate({'error','invalid_iterator'} | {'ok',binary(),binary()},
               #itr_state{}) -> #itr_state{}.
-iterate({error, invalid_iterator}, IS=#itr_state{}) ->
+
+%% Ended up at an invalid_iterator likely due to encountering a missing dirty
+%% segment - e.g. segment dirty, but removed last entries for it
+iterate({error, invalid_iterator}, IS=#itr_state{current_segment='*'}) ->
     IS;
+iterate({error, invalid_iterator}, IS=#itr_state{itr=Itr,
+                                                 id=Id,
+                                                 current_segment=CurSeg,
+                                                 remaining_segments=Segments,
+                                                 acc_fun=F,
+                                                 segment_acc=Acc,
+                                                 final_acc=FinalAcc}) ->
+    case Segments of
+        [] ->
+            IS;
+        ['*'] ->
+            IS;
+        [NextSeg | Remaining] ->
+            Seek = encode(Id, NextSeg, <<>>),
+            IS2 = IS#itr_state{current_segment=NextSeg,
+                               remaining_segments=Remaining,
+                               segment_acc=[],
+                               final_acc=[{CurSeg, F(Acc)} | FinalAcc]},
+            iterate(iterator_move(Itr, Seek), IS2)
+    end;
 iterate({ok, K, V}, IS=#itr_state{itr=Itr,
                                   id=Id,
                                   current_segment=CurSeg,
@@ -947,48 +962,33 @@ iterate({ok, K, V}, IS=#itr_state{itr=Itr,
                   _ ->
                       CurSeg
               end,
-    case {SegId, Seg, Segments, IS#itr_state.prefetch} of
-        {bad, -1, _, _} ->
+    case {SegId, Seg, Segments} of
+        {bad, -1, _} ->
             %% Non-segment encountered, end traversal
             IS;
-        {Id, Segment, _, _} ->
+        {Id, Segment, _} ->
             %% Still reading existing segment
             IS2 = IS#itr_state{current_segment=Segment,
-                               segment_acc=[{K,V} | Acc],
-                               prefetch=true},
-            iterate(iterator_move(Itr, prefetch), IS2);
-        {Id, _, [Seg|Remaining], _} ->
+                               segment_acc=[{K,V} | Acc]
+                               },
+            iterate(iterator_move(Itr, next), IS2);
+        {Id, _, [Seg|Remaining]} ->
             %% Pointing at next segment we are interested in
             IS2 = IS#itr_state{current_segment=Seg,
                                remaining_segments=Remaining,
                                segment_acc=[{K,V}],
-                               final_acc=[{Segment, F(Acc)} | FinalAcc],
-                               prefetch=true},
-            iterate(iterator_move(Itr, prefetch), IS2);
-        {Id, _, ['*'], _} ->
+                               final_acc=[{Segment, F(Acc)} | FinalAcc]
+                               },
+            iterate(iterator_move(Itr, next), IS2);
+        {Id, _, ['*']} ->
             %% Pointing at next segment we are interested in
             IS2 = IS#itr_state{current_segment=Seg,
                                remaining_segments=['*'],
                                segment_acc=[{K,V}],
-                               final_acc=[{Segment, F(Acc)} | FinalAcc],
-                               prefetch=true},
-            iterate(iterator_move(Itr, prefetch), IS2);
-        {Id, NextSeg, [NextSeg|Remaining], _} ->
-            %% A previous prefetch_stop left us at the start of the
-            %% next interesting segment.
-            IS2 = IS#itr_state{current_segment=NextSeg,
-                               remaining_segments=Remaining,
-                               segment_acc=[{K,V}],
-                               prefetch=true},
-            iterate(iterator_move(Itr, prefetch), IS2);
-        {Id, _, [_NextSeg | _Remaining], true} ->
-            %% Pointing at uninteresting segment, but need to halt the
-            %% prefetch to ensure the interator can be reused
-            IS2 = IS#itr_state{segment_acc=[],
-                               final_acc=[{Segment, F(Acc)} | FinalAcc],
-                               prefetch=false},
-            iterate(iterator_move(Itr, prefetch_stop), IS2);
-        {Id, _, [NextSeg | Remaining], false} ->
+                               final_acc=[{Segment, F(Acc)} | FinalAcc]
+                               },
+            iterate(iterator_move(Itr, next), IS2);
+        {Id, _, [NextSeg | Remaining]} ->
             %% Pointing at uninteresting segment, seek to next interesting one
             Seek = encode(Id, NextSeg, <<>>),
             IS2 = IS#itr_state{current_segment=NextSeg,
@@ -996,14 +996,7 @@ iterate({ok, K, V}, IS=#itr_state{itr=Itr,
                                segment_acc=[],
                                final_acc=[{Segment, F(Acc)} | FinalAcc]},
             iterate(iterator_move(Itr, Seek), IS2);
-        {_, _, _, true} ->
-            %% Done with traversal, but need to stop the prefetch to
-            %% ensure the iterator can be reused. The next operation
-            %% with this iterator is a seek so no need to be concerned
-            %% with the data returned here.
-            _ = iterator_move(Itr, prefetch_stop),
-            IS#itr_state{prefetch=false};
-        {_, _, _, false} ->
+        {_, _, _} ->
             %% Done with traversal
             IS
     end.
@@ -1055,8 +1048,7 @@ orddict_delta(D1, D2) ->
 orddict_delta([{K1,V1}|D1], [{K2,_}=E2|D2], Acc) when K1 < K2 ->
     Acc2 = [{K1,{V1,'$none'}} | Acc],
     orddict_delta(D1, [E2|D2], Acc2);
-orddict_delta([{K1,_}=E1|D1], [{K2,V2}|D2], Acc) when K1 > K2 ->
-    Acc2 = [{K2,{'$none',V2}} | Acc],
+orddict_delta([{K1,_}=E1|D1], [{K2,V2}|D2], Acc) when K1 > K2 ->    Acc2 = [{K2,{'$none',V2}} | Acc],
     orddict_delta([E1|D1], D2, Acc2);
 orddict_delta([{K1,V1}|D1], [{_K2,V2}|D2], Acc) -> %K1 == K2
     case V1 of

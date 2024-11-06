@@ -988,7 +988,7 @@ iterate(#iterator{ref = undefined, partitions = [H|_]} = I0) ->
     iterate(Res, I0#iterator{ref = Ref});
 
 iterate(#iterator{ref = Ref} = I) ->
-    iterate(plum_db_partition_server:iterator_move(Ref, prefetch), I).
+    iterate(plum_db_partition_server:iterator_move(Ref, next), I).
 
 
 %% @private
