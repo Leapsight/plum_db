@@ -104,6 +104,8 @@
 
 -module(hashtree_tree).
 
+-include("plum_db.hrl").
+
 -export([new/2,
          delete/3,
          destroy/1,
@@ -121,26 +123,26 @@
 -export_type([tree/0, tree_node/0, handler_fun/1, remote_fun/0]).
 
 -record(hashtree_tree, {
-          %% the identifier for this tree. used as part of the ids
-          %% passed to hashtree.erl and in keys used to store nodes in
-          %% the tree's ets tables.
-          id         :: term(),
+    %% the identifier for this tree. used as part of the ids
+    %% passed to hashtree.erl and in keys used to store nodes in
+    %% the tree's ets tables.
+    id         :: term(),
 
-          %% directory where nodes are stored on disk
-          data_root  :: file:name_all(),
+    %% directory where nodes are stored on disk
+    data_root  :: file:name_all(),
 
-          %% number of levels in the tree excluding leaves (height - 1)
-          num_levels :: non_neg_integer(),
+    %% number of levels in the tree excluding leaves (height - 1)
+    num_levels :: non_neg_integer(),
 
-          %% ets table that holds hashtree nodes in the tree
-          nodes      :: ets:tab(),
+    %% ets table that holds hashtree nodes in the tree
+    nodes      :: ets:tab(),
 
-          %% ets table that holds snapshot nodes
-          snapshot   :: ets:tab(),
+    %% ets table that holds snapshot nodes
+    snapshot   :: ets:tab(),
 
-          %% set of dirty leaves
-          dirty      :: gb_sets:set()
-         }).
+    %% set of dirty leaves
+    dirty      :: gb_sets:set()
+}).
 
 -define(ROOT, '$ht_root').
 -define(NUM_LEVELS, 2).
@@ -477,7 +479,12 @@ create_node(?ROOT, Tree) ->
     NodePath = node_path(Tree),
     NumSegs = node_num_segs(?ROOT),
     Width = node_width(?ROOT),
-    Opts = [{segment_path, NodePath}, {segments, NumSegs}, {width, Width}],
+    Opts = [
+        {segment_path, NodePath},
+        {segments, NumSegs},
+        {width, Width}
+        | plum_db_config:get(hashtree_rocksdb)
+    ],
     %% destroy any data that previously existed because its lingering from
     %% a tree that was not properly destroyed
     ok = hashtree:destroy(NodePath),
@@ -490,7 +497,10 @@ create_node(NodeName, Tree) ->
     RootNode = get_node(?ROOT, Tree),
     NumSegs = node_num_segs(NodeName),
     Width = node_width(NodeName),
-    Opts = [{segments, NumSegs}, {width, Width}],
+    Opts = [
+        {segments, NumSegs},
+        {width, Width}
+        | plum_db_config:get(hashtree_rocksdb)],
     %% share segment store accross all nodes
     Node = hashtree:new(NodeId, RootNode, Opts),
     set_node(NodeName, Node, Tree).
@@ -548,13 +558,13 @@ node_id(?ROOT, #hashtree_tree{id=TreeId}) ->
     {TreeId, <<0:176/integer>>};
 node_id(NodeName, #hashtree_tree{id=TreeId}) ->
     <<NodeMD5:128/integer>> = crypto:hash(
-        md5, (term_to_binary(NodeName, [deterministic]))
+        md5, (term_to_binary(NodeName, ?EXT_OPTS))
     ),
     {TreeId, <<NodeMD5:176/integer>>}.
 
 %% @private
 to_parent_key(NodeName) ->
-    term_to_binary(NodeName).
+    term_to_binary(NodeName, ?EXT_OPTS).
 
 %% @private
 from_parent_key(NodeKey) ->
@@ -587,7 +597,9 @@ data_root(Opts) ->
     case proplists:get_value(data_dir, Opts) of
         undefined ->
             Base = "/tmp/hashtree_tree",
-            <<P:128/integer>> = crypto:hash(md5, term_to_binary(erlang:timestamp())),
+            <<P:128/integer>> = crypto:hash(
+                md5, term_to_binary(erlang:timestamp(), ?EXT_OPTS)
+            ),
             filename:join(Base, integer_to_list(P, 16));
         Root -> Root
     end.

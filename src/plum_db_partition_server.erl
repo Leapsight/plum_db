@@ -132,6 +132,8 @@
 -export([take/2]).
 -export([take/3]).
 -export([take/4]).
+-export([stats/1]).
+
 
 %% GEN_SERVER CALLBACKS
 -export([init/1]).
@@ -190,6 +192,19 @@ name(Partition) ->
             Name;
         Name ->
             Name
+    end.
+
+
+stats(Partition) when is_integer(Partition) ->
+    stats(name(Partition));
+
+stats(Name) ->
+    try get_db_info(Name) of
+        #db_info{db_ref = DbRef} ->
+            rocksdb:stats(DbRef)
+    catch
+        _Class:Reason ->
+            {error, Reason}
     end.
 
 
@@ -1051,36 +1066,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
-init_state(Name, Partition, DataRoot, Opts0) ->
-    %% Merge the proplist passed in from Opts with any values specified by the
-    %% rocksdb app level; precedence is given to the Opts.
-    Opts1 = orddict:merge(
-        fun(_K, VLocal, _VGlobal) -> VLocal end,
-        orddict:from_list(Opts0), % Local
-        orddict:from_list(application:get_all_env(rocksdb))
-    ), % Global
-
-    %% Use a variable write buffer size in order to reduce the number
-    %% of vnodes that try to kick off compaction at the same time
-    %% under heavy uniform load...
-    WriteBufferMin = key_value:get(
-        [open, write_buffer_size_min], Opts1, 32 * 1024 * 1024
-    ),
-    WriteBufferMax = key_value:get(
-        [open, write_buffer_size_max], Opts1, 64 * 1024 * 1024
-    ),
-    WriteBuffer = WriteBufferMin + rand:uniform(
-        1 + WriteBufferMax - WriteBufferMin
-    ),
-
-    %% Update the write buffer size in the merged Opts and make sure
-    %% create_if_missing is set to true
-    Opts2 = key_value:set([open, write_buffer_size], WriteBuffer, Opts1),
-    Opts3 = key_value:set([open, create_if_missing], true, Opts2),
-    Opts4 = key_value:set([open, create_missing_column_families], true, Opts3),
-    Opts5 = key_value:remove([open, write_buffer_size_min], Opts4),
-    Opts = key_value:remove([open, write_buffer_size_max], Opts5),
-
+init_state(Name, Partition, DataRoot, Opts) ->
     %% Parse out the open/read/write options
     OpenOpts = key_value:get(open, Opts, []),
     ReadOpts = key_value:get(read, Opts, []),
@@ -1551,6 +1537,7 @@ maybe_hashtree_insert(PKey, Object, State) ->
     case plum_db_config:get(aae_enabled) of
         true ->
             Hash = plum_db_object:hash(Object),
+            %% TODO avoid failing if hashtree server is down.
             ok = plum_db_partition_hashtree:insert(
                 State#state.partition, PKey, Hash, false
             );
@@ -1610,7 +1597,7 @@ do_put(PKey, Value, State, disk) ->
 
     DbRef = db_ref(State),
     Opts = write_opts(State),
-    Actions = [{put, encode_key(PKey, State), term_to_binary(Value, [deterministic])}],
+    Actions = [{put, encode_key(PKey, State), term_to_binary(Value, ?EXT_OPTS)}],
     result(rocksdb:write(DbRef, Actions, Opts)).
 
 
@@ -1876,10 +1863,10 @@ result({error, _} = Error) ->
 
 %% @private
 encode_key(Key, #state{key_encoder = Fun}) ->
-    Fun(Key, []);
+    Fun(Key);
 
 encode_key(Key, #db_info{key_encoder = Fun}) ->
-    Fun(Key, []).
+    Fun(Key).
 
 
 %% @private
