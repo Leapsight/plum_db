@@ -596,7 +596,7 @@ extract_top_hash([{0, Hash}]) ->
 data_root(Opts) ->
     case proplists:get_value(data_dir, Opts) of
         undefined ->
-            Base = "/tmp/hashtree_tree",
+            Base = "/tmp/plumb_db/hashtree_tree",
             <<P:128/integer>> = crypto:hash(
                 md5, term_to_binary(erlang:timestamp(), ?EXT_OPTS)
             ),
