@@ -803,41 +803,6 @@ get_bucket(Level, Bucket, State) ->
 term_to_binary(Term) ->
     erlang:term_to_binary(Term, ?EXT_OPTS).
 
--ifndef(old_hash).
-md5(Bin) ->
-    crypto:hash(md5, Bin).
-
--ifdef(TEST).
-esha(Bin) ->
-    crypto:hash(sha, Bin).
--endif.
-
-esha_init() ->
-    crypto:hash_init(sha).
-
-esha_update(Ctx, Bin) ->
-    crypto:hash_update(Ctx, Bin).
-
-esha_final(Ctx) ->
-    crypto:hash_final(Ctx).
--else.
-md5(Bin) ->
-    crypto:md5(Bin).
-
--ifdef(TEST).
-esha(Bin) ->
-    crypto:sha(Bin).
--endif.
-
-esha_init() ->
-    crypto:sha_init().
-
-esha_update(Ctx, Bin) ->
-    crypto:sha_update(Ctx, Bin).
-
-esha_final(Ctx) ->
-    crypto:sha_final(Ctx).
--endif.
 
 -spec set_bucket(integer(), integer(), any(), hashtree()) -> hashtree().
 set_bucket(Level, Bucket, Val, State) ->
@@ -864,7 +829,7 @@ new_segment_store(Opts) ->
             undefined ->
                 Root = "/tmp/plum_db",
                 <<P:128/integer>> =
-                    md5(term_to_binary({erlang:timestamp(), make_ref()})),
+                    hashtree_utils:md5(term_to_binary({erlang:timestamp(), make_ref()})),
                 filename:join(Root, integer_to_list(P));
             SegmentPath when is_list(SegmentPath) ->
                 SegmentPath
@@ -874,33 +839,6 @@ new_segment_store(Opts) ->
     %% eqwalizer:ignore Options
     {ok, Ref} = rocksdb:open(DataDir, key_value:get(open, Opts, [])),
     {Ref, DataDir}.
-
--spec hash(term()) -> empty | binary().
-hash([]) ->
-    empty;
-hash(X) ->
-    %% erlang:phash2(X).
-    sha(term_to_binary(X)).
-
-sha(Bin) ->
-    Chunk = plum_db_config:get(aae_sha_chunk, 4096),
-    sha(Chunk, Bin).
-
-sha(Chunk, Bin) ->
-    Ctx1 = esha_init(),
-    Ctx2 = sha(Chunk, Bin, Ctx1),
-    SHA = esha_final(Ctx2),
-    SHA.
-
-sha(Chunk, Bin, Ctx) ->
-    case Bin of
-        <<Data:Chunk/binary, Rest/binary>> ->
-            Ctx2 = esha_update(Ctx, Data),
-            sha(Chunk, Rest, Ctx2);
-        Data ->
-            Ctx2 = esha_update(Ctx, Data),
-            Ctx2
-    end.
 
 -spec update_levels(integer(),
                     [{integer(), [{integer(), binary()}]}],
@@ -955,7 +893,7 @@ rebuild_folder({Bucket, NewHashes}, {Level, Type, StateAcc, BucketsAcc}) ->
             %% Otherwise, at least one hash entry present, update
             %% and propagate
             StateAcc2 = set_bucket(Level, Bucket, Hashes, StateAcc),
-            NewBucket = {Bucket, hash(PopHashes)},
+            NewBucket = {Bucket, hashtree_utils:hash(PopHashes)},
             {Level, Type, StateAcc2, [NewBucket | BucketsAcc]}
     end.
 
@@ -1080,7 +1018,7 @@ encode_meta(Key) ->
 -spec hashes(hashtree(), list('*'|integer())) ->
     orddict:orddict('*'|integer(), binary()).
 hashes(State, Segments) ->
-    multi_select_segment(State, Segments, fun hash/1).
+    multi_select_segment(State, Segments, fun hashtree_utils:hash/1).
 
 
 %% -----------------------------------------------------------------------------
@@ -1577,12 +1515,10 @@ message_loop(Tree, Msgs, Bytes) ->
 insert_many(N, T1) ->
     T2 =
         lists:foldl(fun(X, TX) ->
-                            insert(bin(-X), bin(X*100), TX)
+                            insert(hashtree_utils:bin(-X), hashtree_utils:bin(X*100), TX)
                     end, T1, lists:seq(1,N)),
     T2.
 
-bin(X) ->
-    list_to_binary(integer_to_list(X)).
 
 peval(L) ->
     Parent = self(),
@@ -1681,9 +1617,9 @@ snapshot_test() ->
 delta_test() ->
     partisan_config:init(),
     Opts = new_opts(),
-    T1 = update_tree(insert(<<"1">>, esha(term_to_binary(make_ref())),
+    T1 = update_tree(insert(<<"1">>, hashtree_utils:esha(term_to_binary(make_ref())),
                             new({0,0}, Opts))),
-    T2 = update_tree(insert(<<"2">>, esha(term_to_binary(make_ref())),
+    T2 = update_tree(insert(<<"2">>, hashtree_utils:esha(term_to_binary(make_ref())),
                             new({0,0}, Opts))),
     Diff = local_compare(T1, T2),
     ?assertEqual([{remote_missing, <<"1">>}, {missing, <<"2">>}], Diff),
@@ -1806,22 +1742,22 @@ prop_sha() ->
     %% NOTE: Generating 1MB (1024 * 1024) size binaries is incredibly slow
     %% with EQC and was using over 2GB of memory
     ?FORALL({Size, NumChunks}, {choose(1, 1024), choose(1, 16)},
-                    ?FORALL(Bin, binary(Size),
-                            begin
-                                %% we need at least one chunk,
-                                %% and then we divide the binary size
-                                %% into the number of chunks (as a natural
-                                %% number)
-                                ChunkSize = max(1, (Size div NumChunks)),
-                                sha(ChunkSize, Bin) =:= esha(Bin)
-                            end)).
+        ?FORALL(Bin, binary(Size),
+                begin
+                    %% we need at least one chunk,
+                    %% and then we divide the binary size
+                    %% into the number of chunks (as a natural
+                    %% number)
+                    ChunkSize = max(1, (Size div NumChunks)),
+                    hashtree_utils:sha(ChunkSize, Bin) =:= hashtree_utils:esha(Bin)
+                end)).
 
 objects() ->
     ?SIZED(Size, objects(Size+3)).
 
 objects(N) ->
     ?LET(Keys, shuffle(lists:seq(1,N)),
-         [{bin(K), binary(8)} || K <- Keys]
+         [{hashtree_utils:bin(K), binary(8)} || K <- Keys]
         ).
 
 lengths(N) ->
@@ -1911,3 +1847,4 @@ prop_est() ->
             end).
 -endif.
 -endif.
+
