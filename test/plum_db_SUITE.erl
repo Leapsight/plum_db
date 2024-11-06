@@ -17,6 +17,10 @@ all() ->
 
 init_per_suite(Config) ->
     application:ensure_all_started(plum_db),
+    ct:pal(info, "Waiting for PlumDB partitions to be ready"),
+    ct:pal(info, "Waiting for PlumDB hashtrees to be ready"),
+    ok = plum_db_startup_coordinator:wait_for_partitions(),
+    ok = plum_db_startup_coordinator:wait_for_hashtrees(),
 
     case net_kernel:start([partisan:node()]) of
         {ok, _} ->
@@ -51,7 +55,9 @@ fold_concurrency(_) ->
                 T1 = erlang:system_time(millisecond),
                 Diff = T1 -T0,
                 ct:pal(
-                    info, "Fold worker finished in ~p msecs, results=~p~n", [Diff, length(Res)]
+                    info,
+                    "Fold worker finished in ~p msecs, results=~p~n",
+                    [Diff, length(Res)]
                 ),
                 Me ! promise(Ref, {Res, Diff})
             end;
@@ -61,7 +67,9 @@ fold_concurrency(_) ->
                 ct:pal(info, "Insert worker init", []),
                 {N, Time} = insert(5000 * X, N),
                 ct:pal(
-                    info, "Insert worker finished in ~p msecs, inserts=~p~n", [Time, N]
+                    info,
+                    "Insert worker finished in ~p msecs, inserts=~p~n",
+                    [Time, N]
                 ),
                 Me ! promise(Ref, {N, Time})
             end
