@@ -26,3 +26,5 @@
 ## Enable multi_time_warp
 +C multi_time_warp
 
+## Dirty IO Scheduler Threads
++SDio 256

@@ -20,7 +20,7 @@
 
 -include("plum_db.hrl").
 
--type encoder() :: fun((plum_db_pkey(), Opts :: list()) -> binary()).
+-type encoder() :: fun((plum_db_pkey()) -> binary()).
 -type prefix_encoder() :: fun((plum_db_pkey()) -> binary()).
 -type decoder() :: fun((binary()) -> plum_db_pkey()).
 
@@ -55,7 +55,7 @@
 
 encoder() ->
     Mode = plum_db_config:get(key_encoding),
-    fun(Key, Opts) -> encode(Key, Opts, Mode) end.
+    fun(Key) -> encode(Key, Mode) end.
 
 
 %% -----------------------------------------------------------------------------
@@ -87,17 +87,7 @@ decoder() ->
 -spec encode(plum_db_pkey()) -> binary().
 
 encode(Key) ->
-    encode(Key, []).
-
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
--spec encode(plum_db_pkey(), Opts :: list()) -> binary().
-
-encode(Key, Opts) ->
-    encode(Key, Opts, plum_db_config:get(key_encoding)).
+    encode(Key, plum_db_config:get(key_encoding)).
 
 
 %% -----------------------------------------------------------------------------
@@ -128,13 +118,13 @@ decode(Bin) when is_binary(Bin) ->
 
 
 
-encode({{_, _} = Prefix, Key}, Opts, record_separator) ->
+encode({{_, _} = Prefix, Key}, record_separator) ->
     <<
-    (encode_tuple(Prefix, Opts))/binary, $\30,
-    (encode_field(Key, Opts))/binary
+    (encode_tuple(Prefix))/binary, $\30,
+    (encode_field(Key))/binary
     >>;
 
-encode({{_, _}, _} = FPKey, _, sext) ->
+encode({{_, _}, _} = FPKey, sext) ->
     sext:encode(FPKey).
 
 
@@ -152,61 +142,61 @@ prefix({{_Prefix, _Tab}, _} = Term, sext) ->
     sext:prefix(Term).
 
 
-encode_tuple({A, B}, Opts) ->
+encode_tuple({A, B}) ->
     <<
-        (encode_field(A, Opts))/binary, $\30,
-        (encode_field(B, Opts))/binary
+        (encode_field(A))/binary, $\30,
+        (encode_field(B))/binary
     >>;
 
-encode_tuple({A, B, C}, Opts) ->
+encode_tuple({A, B, C}) ->
     <<
-        (encode_field(A, Opts))/binary, $\30,
-        (encode_field(B, Opts))/binary, $\30,
-        (encode_field(C, Opts))/binary
+        (encode_field(A))/binary, $\30,
+        (encode_field(B))/binary, $\30,
+        (encode_field(C))/binary
     >>;
 
-encode_tuple({A, B, C, D}, Opts) ->
+encode_tuple({A, B, C, D}) ->
     <<
-        (encode_field(A, Opts))/binary, $\30,
-        (encode_field(B, Opts))/binary, $\30,
-        (encode_field(C, Opts))/binary, $\30,
-        (encode_field(D, Opts))/binary
+        (encode_field(A))/binary, $\30,
+        (encode_field(B))/binary, $\30,
+        (encode_field(C))/binary, $\30,
+        (encode_field(D))/binary
     >>;
 
-encode_tuple({A, B, C, D, E}, Opts) ->
+encode_tuple({A, B, C, D, E}) ->
     <<
-        (encode_field(A, Opts))/binary, $\30,
-        (encode_field(B, Opts))/binary, $\30,
-        (encode_field(C, Opts))/binary, $\30,
-        (encode_field(D, Opts))/binary, $\30,
-        (encode_field(E, Opts))/binary
+        (encode_field(A))/binary, $\30,
+        (encode_field(B))/binary, $\30,
+        (encode_field(C))/binary, $\30,
+        (encode_field(D))/binary, $\30,
+        (encode_field(E))/binary
     >>;
 
-encode_tuple({A, B, C, D, E, F}, Opts) ->
+encode_tuple({A, B, C, D, E, F}) ->
     <<
-        (encode_field(A, Opts))/binary, $\30,
-        (encode_field(B, Opts))/binary, $\30,
-        (encode_field(C, Opts))/binary, $\30,
-        (encode_field(D, Opts))/binary, $\30,
-        (encode_field(E, Opts))/binary, $\30,
-        (encode_field(F, Opts))/binary
+        (encode_field(A))/binary, $\30,
+        (encode_field(B))/binary, $\30,
+        (encode_field(C))/binary, $\30,
+        (encode_field(D))/binary, $\30,
+        (encode_field(E))/binary, $\30,
+        (encode_field(F))/binary
     >>;
 
-encode_tuple(Tuple, Opts) when is_tuple(Tuple) ->
+encode_tuple(Tuple) when is_tuple(Tuple) ->
     Size = tuple_size(Tuple),
     {Head, [Last]} = lists:split(Size - 1, tuple_to_list(Tuple)),
 
-    Bin = << <<(encode_field(F, Opts))/binary, $\30>> || F <- Head >>,
-    <<Bin/binary, $\30, (encode_field(Last, Opts))/binary>>.
+    Bin = << <<(encode_field(F))/binary, $\30>> || F <- Head >>,
+    <<Bin/binary, $\30, (encode_field(Last))/binary>>.
 
 
 
-encode_field(Term, _) when is_binary(Term) ->
+encode_field(Term) when is_binary(Term) ->
     Term;
 
-encode_field(Term, Opts) when is_tuple(Term) ->
-    encode_tuple(Term, Opts);
+encode_field(Term) when is_tuple(Term) ->
+    encode_tuple(Term);
 
-encode_field(Term, Opts) ->
-    term_to_binary(Term, Opts).
+encode_field(Term) ->
+    term_to_binary(Term, ?EXT_OPTS).
 

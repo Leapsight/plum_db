@@ -16,6 +16,7 @@ eunit:
 	${REBAR} eunit
 
 ct:
+	rm -rf /tmp/plum_db/ct
 	${REBAR} ct
 
 test: xref compile eunit ct

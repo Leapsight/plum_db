@@ -1,4 +1,12 @@
 # CHANGELOG
+
+
+## 2.1.0
+* Fixes to Hashtree algorithm (integrated upstream changes from Riak KV) adapted to `rocksdb` and fixed previous iterator API translation between original `eleveldb` to `rocksdb`.
+* Added `rocksdb` condifuration option and provided sensitive defaults.
+* Fixed Common Test suites and ported Riak's `eqc` test cases to `proper`
+* Added shared write buffer and shared block cache for all used `rocksdb` instances
+
 ## 2.0-rc.2
 * Reuduce lock timeout and avoid loggin and error when object is not present during AAE
 

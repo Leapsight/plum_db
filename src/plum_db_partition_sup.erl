@@ -19,12 +19,8 @@
 -module(plum_db_partition_sup).
 -behaviour(supervisor).
 
--define(CHILD(Id, Mod, Type, Args, Timeout),
-    {Id, {Mod, start_link, Args}, permanent, Timeout, Type, [Mod]}).
 
-
-
--export([start_link/1]).
+-export([start_link/3]).
 -export([init/1]).
 -export([name/1]).
 
@@ -36,9 +32,11 @@
 
 
 
-start_link(Partition) ->
-    Name = name(Partition),
-    supervisor:start_link({local, Name}, ?MODULE, [Partition]).
+start_link(Id, ServerOpts, HashtreeOpts) ->
+    Name = name(Id),
+    supervisor:start_link(
+        {local, Name}, ?MODULE, [Id, ServerOpts, HashtreeOpts]
+    ).
 
 
 
@@ -57,8 +55,7 @@ name(Id) when is_integer(Id) ->
 
 
 
-init([Id]) ->
-    Opts = [],
+init([Id, ServerOpts, HashtreeOpts]) ->
     RestartStrategy = {one_for_all, 10, 60},
     Children = [
         #{
@@ -66,7 +63,7 @@ init([Id]) ->
             start => {
                 plum_db_partition_server,
                 start_link,
-                [Id, Opts]
+                [Id, ServerOpts]
             },
             restart => permanent,
             shutdown => 5000,
@@ -78,7 +75,7 @@ init([Id]) ->
             start => {
                 plum_db_partition_hashtree,
                 start_link,
-                [Id]
+                [Id, HashtreeOpts]
             },
             restart => permanent,
             shutdown => 5000,

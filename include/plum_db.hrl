@@ -4,6 +4,9 @@
 -define(TOMBSTONE, '$deleted').
 -define(ERASED, '$erased').
 
+%% Options for term_to_binary
+-define(EXT_OPTS, [{minor_version, 2}]).
+
 -define(DATA_CHANNEL, plum_db_data).
 
 -define(LONG_TIMEOUT, 300000). %% 5m, very long but not infinity

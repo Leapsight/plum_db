@@ -32,6 +32,7 @@
 
 -record(state, {
     id              ::  atom(),
+    opts            ::  proplist:proplist(),
     data_root       ::  file:filename(),
     %% the plum_db partition this hashtree represents
     partition       ::  non_neg_integer(),
@@ -78,7 +79,7 @@
 -export([release_locks/0]).
 -export([name/1]).
 -export([prefix_hash/2]).
--export([start_link/1]).
+-export([start_link/2]).
 -export([update/1]).
 -export([update/2]).
 -export([reset/1]).
@@ -109,13 +110,13 @@
 %% as the data root.
 %% @end
 %% -----------------------------------------------------------------------------
--spec start_link(non_neg_integer()) -> {ok, pid()} | ignore | {error, term()}.
+-spec start_link(non_neg_integer(), list()) -> {ok, pid()} | ignore | {error, term()}.
 
-start_link(Partition) when is_integer(Partition) ->
+start_link(Id, Opts) when is_integer(Id) ->
     Dir = plum_db_config:get(hashtrees_dir),
     %% eqwalizer:ignore
-    DataRoot = filename:join([Dir, integer_to_list(Partition)]),
-    Name = name(Partition),
+    DataRoot = filename:join([Dir, integer_to_list(Id)]),
+    Name = name(Id),
     StartOpts = [
         {channel, plum_db_config:get(data_channel)},
         {spawn_opt, ?PARALLEL_SIGNAL_OPTIMISATION([{min_heap_size, 1598}])}
@@ -123,7 +124,7 @@ start_link(Partition) when is_integer(Partition) ->
     partisan_gen_server:start_link(
         {local, Name},
         ?MODULE,
-        [Partition, DataRoot],
+        [Id, DataRoot, Opts],
         StartOpts
     ).
 
@@ -464,9 +465,9 @@ compare(Partition, RemoteFun, HandlerFun, HandlerAcc) ->
 
 
 
-init([Partition, DataRoot]) ->
+init([Partition, DataRoot, Opts]) ->
     try
-        {ok, do_init(Partition, DataRoot)}
+        {ok, do_init(Partition, DataRoot, Opts)}
     catch
         _:Reason ->
             {stop, Reason}
@@ -507,11 +508,7 @@ handle_call({prefix_hash, Prefix}, _From, #state{tree = Tree} = State) ->
 
 handle_call(
     {insert, PKey, Hash, IfMissing}, _From, #state{tree = Tree} = State) ->
-    {Prefixes, Key} = prepare_pkey(PKey),
-    Result = hashtree_tree:insert(
-        Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree
-    ),
-    case Result of
+    case do_insert(Tree, PKey, Hash, IfMissing) of
         {ok, Tree1} ->
             {reply, ok, State#state{tree = Tree1}};
 
@@ -535,11 +532,7 @@ handle_call(_Message, _From, State) ->
 
 handle_cast(
     {insert, PKey, Hash, IfMissing}, #state{tree = Tree} = State) ->
-    {Prefixes, Key} = prepare_pkey(PKey),
-    Result = hashtree_tree:insert(
-        Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree
-    ),
-    case Result of
+    case do_insert(Tree, PKey, Hash, IfMissing) of
         {ok, Tree1} ->
             {noreply, State#state{tree = Tree1}};
 
@@ -553,7 +546,7 @@ handle_cast(reset, #state{built = true, lock = undefined} = State0) ->
     {stop, normal, State1};
 
 handle_cast(reset, #state{built = true, lock = {internal, _, Pid}} = State) ->
-    ?LOG_INFO(#{
+    ?LOG_NOTICE(#{
         description => "Postponing hashtree reset",
         reason => ongoing_update,
         lock_owner => Pid,
@@ -564,7 +557,7 @@ handle_cast(reset, #state{built = true, lock = {internal, _, Pid}} = State) ->
     {noreply, NewState};
 
 handle_cast(reset, #state{built = true, lock = {external, _, Pid}} = State) ->
-    ?LOG_INFO(#{
+    ?LOG_NOTICE(#{
         description => "Postponing hashtree reset",
         reason => locked,
         lock_owner => Pid,
@@ -575,7 +568,7 @@ handle_cast(reset, #state{built = true, lock = {external, _, Pid}} = State) ->
     {noreply, NewState};
 
 handle_cast(reset, #state{built = _} = State) ->
-    ?LOG_INFO(#{
+    ?LOG_NOTICE(#{
         description => "Skipping hashtree reset",
         reason => not_built,
         partition => State#state.partition,
@@ -664,18 +657,19 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
-do_init(Partition, DataRoot) ->
+do_init(Partition, DataRoot, Opts) ->
     %% TODO we should have persisted the hashtree_tree and restore here if
     %% existed. See terminate.
     TreeId = list_to_atom("hashtree_" ++ integer_to_list(Partition)),
     Tree = hashtree_tree:new(
-        TreeId, [{data_dir, DataRoot}, {num_levels, 2}]
+        TreeId, [{data_dir, DataRoot}, {num_levels, 2} | Opts]
     ),
     TTL = plum_db_config:get(aae_hashtree_ttl, ?DEFAULT_TTL),
 
 
     State0 = #state{
         id = name(Partition),
+        opts = Opts,
         data_root = DataRoot,
         partition = Partition,
         tree = Tree,
@@ -690,14 +684,28 @@ do_init(Partition, DataRoot) ->
 
 
 %% @private
-do_reset(#state{data_root = DataRoot, partition = Partition, lock = undefined} = State) ->
+do_reset(State) ->
+    #state{
+        data_root = DataRoot,
+        opts = Opts,
+        partition = Partition,
+        lock = undefined
+    } = State,
     _ = hashtree_tree:destroy(State#state.tree),
-    ?LOG_INFO(#{
+    ?LOG_NOTICE(#{
         description => "Resetting hashtree",
         partition => State#state.partition,
         node => partisan:node()
     }),
-    do_init(Partition, DataRoot).
+    do_init(Partition, DataRoot, Opts).
+
+
+%% @private
+do_insert(Tree, PKey, Hash, IfMissing) ->
+    {Prefixes, Key} = prepare_pkey(PKey),
+    hashtree_tree:insert(
+        Prefixes, Key, Hash, [{if_missing, IfMissing}], Tree
+    ).
 
 
 %% @private
@@ -822,7 +830,7 @@ build_async(State) ->
             Partition = State#state.partition,
             Build = fun() ->
 
-                ?LOG_INFO(#{
+                ?LOG_NOTICE(#{
                     description => "Starting hashtree build",
                     partition => Partition,
                     node => partisan:node()
@@ -877,7 +885,7 @@ build(Partition, Iterator, Stats) ->
             Diff = erlang:monotonic_time() - Started,
             ElapsedSecs = erlang:convert_time_unit(Diff, native, second),
 
-            ?LOG_INFO(#{
+            ?LOG_NOTICE(#{
                 description => "Finished building hashtree",
                 partition => Partition,
                 node => partisan:node(),
@@ -910,7 +918,7 @@ incr_count(#{count := N} = Stats) ->
 build_done(State) ->
     Partition = State#state.partition,
 
-    ?LOG_INFO(#{
+    ?LOG_NOTICE(#{
         description => "Finished hashtree build",
         partition => Partition,
         node => partisan:node()
@@ -1011,7 +1019,7 @@ prefix_to_prefix_list({Prefix, SubPrefix}) ->
 
 %% @private
 prepare_pkey({FullPrefix, Key}) ->
-    {prefix_to_prefix_list(FullPrefix), term_to_binary(Key, [deterministic])}.
+    {prefix_to_prefix_list(FullPrefix), term_to_binary(Key, ?EXT_OPTS)}.
 
 
 

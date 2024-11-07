@@ -85,9 +85,7 @@
 -type db_info()                 ::  #db_info{}.
 -type iterator()                ::  #partition_iterator{}.
 -type iterators()               ::  #{reference() => iterator()}.
--type iterator_action()         ::  first
-                                    | last | next | prev
-                                    | prefetch | prefetch_stop.
+-type iterator_action()         ::  first | last | next | prev.
 -type iterator_action_ext()     ::  iterator_action()
                                     | plum_db_prefix()
                                     | plum_db_pkey()
@@ -134,6 +132,8 @@
 -export([take/2]).
 -export([take/3]).
 -export([take/4]).
+-export([stats/1]).
+
 
 %% GEN_SERVER CALLBACKS
 -export([init/1]).
@@ -192,6 +192,19 @@ name(Partition) ->
             Name;
         Name ->
             Name
+    end.
+
+
+stats(Partition) when is_integer(Partition) ->
+    stats(name(Partition));
+
+stats(Name) ->
+    try get_db_info(Name) of
+        #db_info{db_ref = DbRef} ->
+            rocksdb:stats(DbRef)
+    catch
+        _Class:Reason ->
+            {error, Reason}
     end.
 
 
@@ -429,13 +442,6 @@ iterator_move(
     %% We continue with ets so we translate the action
     iterator_move(Iter, first);
 
-iterator_move(#partition_iterator{disk_done = true} = Iter, prefetch) ->
-    %% We continue with ets so we translate the action
-    iterator_move(Iter, next);
-
-iterator_move(#partition_iterator{disk_done = true} = Iter, prefetch_stop) ->
-    %% We continue with ets so we translate the action
-    iterator_move(Iter, next);
 
 iterator_move(#partition_iterator{disk_done = false} = Iter, Term) ->
 
@@ -1060,36 +1066,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
-init_state(Name, Partition, DataRoot, Opts0) ->
-    %% Merge the proplist passed in from Opts with any values specified by the
-    %% rocksdb app level; precedence is given to the Opts.
-    Opts1 = orddict:merge(
-        fun(_K, VLocal, _VGlobal) -> VLocal end,
-        orddict:from_list(Opts0), % Local
-        orddict:from_list(application:get_all_env(rocksdb))
-    ), % Global
-
-    %% Use a variable write buffer size in order to reduce the number
-    %% of vnodes that try to kick off compaction at the same time
-    %% under heavy uniform load...
-    WriteBufferMin = key_value:get(
-        [open, write_buffer_size_min], Opts1, 32 * 1024 * 1024
-    ),
-    WriteBufferMax = key_value:get(
-        [open, write_buffer_size_max], Opts1, 64 * 1024 * 1024
-    ),
-    WriteBuffer = WriteBufferMin + rand:uniform(
-        1 + WriteBufferMax - WriteBufferMin
-    ),
-
-    %% Update the write buffer size in the merged Opts and make sure
-    %% create_if_missing is set to true
-    Opts2 = key_value:set([open, write_buffer_size], WriteBuffer, Opts1),
-    Opts3 = key_value:set([open, create_if_missing], true, Opts2),
-    Opts4 = key_value:set([open, create_missing_column_families], true, Opts3),
-    Opts5 = key_value:remove([open, write_buffer_size_min], Opts4),
-    Opts = key_value:remove([open, write_buffer_size_max], Opts5),
-
+init_state(Name, Partition, DataRoot, Opts) ->
     %% Parse out the open/read/write options
     OpenOpts = key_value:get(open, Opts, []),
     ReadOpts = key_value:get(read, Opts, []),
@@ -1237,7 +1214,7 @@ spawn_helper(State) ->
 %% @private
 init_ram_disk_prefixes_fun(State) ->
     fun() ->
-        ?LOG_INFO(#{
+        ?LOG_NOTICE(#{
             description => "Initialising partition",
             partition => State#state.partition,
             node => partisan:node()
@@ -1254,7 +1231,7 @@ init_ram_disk_prefixes_fun(State) ->
                 F({Prefix, #{type := Type}}, Acc) ->
                     F({Prefix, Type}, Acc);
                 F({Prefix, ram_disk}, ok) ->
-                    ?LOG_INFO(#{
+                    ?LOG_NOTICE(#{
                         description => "Loading data from disk to ram",
                         partition => State#state.partition,
                         prefix => Prefix,
@@ -1271,7 +1248,7 @@ init_ram_disk_prefixes_fun(State) ->
                     ok
             end,
             ok = lists:foldl(Fun, ok, PrefixList),
-            ?LOG_INFO(#{
+            ?LOG_NOTICE(#{
                 description => "Finished initialisation of partition",
                 partition => State#state.partition,
                 node => partisan:node()
@@ -1316,7 +1293,7 @@ init_prefix_iterate({ok, K, V}, DbIter, BinPrefix, BPSize, Tab, State) ->
             %% Element is {{P, K}, MetadataObj}
             PKey = decode_key(K, State),
             true = ets:insert(Tab, {PKey, binary_to_term(V)}),
-            Next = disk_iterator_move(DbIter, rocksdb_action(prefetch, State)),
+            Next = disk_iterator_move(DbIter, rocksdb_action(next, State)),
             init_prefix_iterate(Next, DbIter, BinPrefix, BPSize, Tab, State);
         _ ->
             %% We have no more matches in this Prefix
@@ -1426,7 +1403,6 @@ modify(PKey, ValueOrFun, Opts, State, Existing, Ctxt) ->
 
         case do_put(PKey, Modified, State) of
             ok ->
-            ok = do_put(PKey, Modified, State),
                 ok = maybe_broadcast(PKey, Modified, Opts),
                 {ok, Existing, Modified};
 
@@ -1561,6 +1537,7 @@ maybe_hashtree_insert(PKey, Object, State) ->
     case plum_db_config:get(aae_enabled) of
         true ->
             Hash = plum_db_object:hash(Object),
+            %% TODO avoid failing if hashtree server is down.
             ok = plum_db_partition_hashtree:insert(
                 State#state.partition, PKey, Hash, false
             );
@@ -1620,7 +1597,7 @@ do_put(PKey, Value, State, disk) ->
 
     DbRef = db_ref(State),
     Opts = write_opts(State),
-    Actions = [{put, encode_key(PKey, State), term_to_binary(Value, [deterministic])}],
+    Actions = [{put, encode_key(PKey, State), term_to_binary(Value, ?EXT_OPTS)}],
     result(rocksdb:write(DbRef, Actions, Opts)).
 
 
@@ -1696,15 +1673,7 @@ rocksdb_action(next, _) ->
     next;
 
 rocksdb_action(prev, _) ->
-    prev;
-
-rocksdb_action(prefetch, _) ->
-    %% Not supported in rocksdb
-    next;
-
-rocksdb_action(prefetch_stop, _) ->
-    %% Not supported in rocksdb
-    next.
+    prev.
 
 
 %% @private
@@ -1894,10 +1863,10 @@ result({error, _} = Error) ->
 
 %% @private
 encode_key(Key, #state{key_encoder = Fun}) ->
-    Fun(Key, []);
+    Fun(Key);
 
 encode_key(Key, #db_info{key_encoder = Fun}) ->
-    Fun(Key, []).
+    Fun(Key).
 
 
 %% @private

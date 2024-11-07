@@ -228,7 +228,46 @@ setup_env() ->
         aae_enabled => true,
         aae_concurrency => 1,
         aae_hashtree_ttl => 7 * 24 * 60 * 60, %% 1 week
-        aae_sha_chunk => 4096
+        aae_sha_chunk => 4096,
+        rocksdb => [
+            %% Prefix Extractor
+            %% {prefix_extractor, {capped_prefix_extractor, 12}},
+            %% SST Options
+            {num_levels, 7},
+            %% Compression Options
+            {compression, lz4},
+            {compression_opts, [{enabled, true}]},
+            {bottommost_compression,  zstd},
+            {bottommost_compression_opts, [{enabled, true}]},
+            %% Compaction Options
+            {disable_auto_compactions, false},
+            {compaction_style, level},
+            {max_background_jobs, 6},
+            {max_background_compactions, 4},
+            {max_background_flushes, 1},
+            {max_subcompactions, 2},
+            {level0_file_num_compaction_trigger, 4},
+            {periodic_compaction_seconds, trunc(timer:hours(2) / 1000)},
+            {write_buffer_size, memory:mebibytes(64)},
+            %% Buffer Options
+            {max_write_buffer_number, 2},
+            {min_write_buffer_number_to_merge, 1},
+            %% Cache Options
+            {block_based_table_options, [
+                {no_block_cache, false},
+                {bloom_filter_policy, 10},
+                {cache_index_and_filter_blocks, false}
+            ]},
+            {optimize_filters_for_hits, false},
+            %% BlobDB Options
+            %% {enable_blob_files, true},
+            %% {min_blob_size, memory:bytes(256)},
+            %% {blob_file_size, memory:bytes(256)},
+            %% {blob_compression_type, none},
+            %% Direct I/O Options
+            {use_direct_reads, true},
+            {use_direct_io_for_flush_and_compaction, true}
+        ]
     },
     Config1 = maps:merge(Defaults, Config0),
     _ = validate_shard_by(maps:get(shard_by, Config1)),

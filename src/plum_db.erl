@@ -988,7 +988,7 @@ iterate(#iterator{ref = undefined, partitions = [H|_]} = I0) ->
     iterate(Res, I0#iterator{ref = Ref});
 
 iterate(#iterator{ref = Ref} = I) ->
-    iterate(plum_db_partition_server:iterator_move(Ref, prefetch), I).
+    iterate(plum_db_partition_server:iterator_move(Ref, next), I).
 
 
 %% @private
@@ -1680,8 +1680,11 @@ merge(Node, {PKey, _Context}, Obj) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Returns false if the update (or a causally newer update) has already
-%% been received (stored locally).
+%% @doc Determines if the given context (version vector) is causually newer than
+%% an existing object. If the object missing or if the context does not represent
+%% an anscestor of the current key, false is returned. Otherwise, when the
+%% context does represent an ancestor of the existing object or the existing
+%% object itself, true is returned.
 %%
 %% > This function is part of the implementation of the
 %% partisan_plumtree_broadcast_handler behaviour.
@@ -1694,9 +1697,15 @@ is_stale({{_, _} = PKey, Context}) ->
     case ?MODULE:get_object(PKey) of
         {ok, Object} ->
             plum_db_object:is_stale(Context, Object);
+
+        {error, not_found} ->
+            false;
+
         {error, Reason} ->
             ?LOG_ERROR(#{
                 description => "Error while retrieving object",
+                pkey => PKey,
+                context => Context,
                 reason => Reason
             }),
             false

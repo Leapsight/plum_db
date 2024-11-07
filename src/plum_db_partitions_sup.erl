@@ -20,6 +20,7 @@
 -behaviour(supervisor).
 
 -export([start_link/0]).
+-export([add_partition/3]).
 
 
 -export([init/1]).
@@ -33,7 +34,23 @@
 
 
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+
+add_partition(Id, ServerOpts, HashtreeOpts) ->
+    ChildSpec = #{
+        id => plum_db_partition_sup:name(Id),
+        start => {
+            plum_db_partition_sup,
+            start_link,
+            [Id, ServerOpts, HashtreeOpts]
+        },
+        restart => permanent,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [plum_db_partition_sup]
+    },
+    supervisor:start_child(?MODULE, ChildSpec).
 
 
 %% =============================================================================
@@ -43,21 +60,20 @@ start_link() ->
 
 
 init([]) ->
-    RestartStrategy = {one_for_one, 5, 60},
+    RestartStrategy = {one_for_all, 5, 60},
     Children = [
         #{
-            id => plum_db_partition_sup:name(Id),
+            id => plum_db_partition_manager,
             start => {
-                plum_db_partition_sup,
+                plum_db_partition_manager,
                 start_link,
-                [Id]
+                []
             },
             restart => permanent,
-            shutdown => infinity,
-            type => supervisor,
-            modules => [plum_db_partition_sup]
+            shutdown => 5000,
+            type => worker,
+            modules => [plum_db_partition_manager]
         }
-        || Id <- plum_db:partitions()
     ],
 
     {ok, {RestartStrategy, Children}}.
