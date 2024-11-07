@@ -128,10 +128,15 @@ handle_continue(init_config, #state{} = State0) ->
     CacheSize = key_value:get(
         [block_based_table_options, block_cache_size],
         Opts0,
-        memory:gibibytes(4)
+        memory:gibibytes(1)
+    ),
+    ?LOG_INFO(
+        "Configuring store shared block cache to ~s",
+        [memory:format(CacheSize, binary)]
     ),
 
     {ok, BlockCache} = rocksdb:new_cache(lru, CacheSize),
+
 
     %% Create a shared buffer for partition server instances
     %% We multiply the value by the nuber of partitions
@@ -140,16 +145,26 @@ handle_continue(init_config, #state{} = State0) ->
         Opts0,
         memory:mebibytes(40)
     ) * N,
+    ?LOG_INFO(
+        "Configuring db store shared write buffer to ~s",
+        [memory:format(WriteBufferSize, binary)]
+    ),
 
     {ok, ServerWriteBuffer} = rocksdb:new_write_buffer_manager(
         WriteBufferSize,
         BlockCache
     ),
 
+    HashtreeWriteBufferSize = memory:mebibytes(10 * N),
+    ?LOG_INFO(
+        "Configuring hashtree store shared write buffer to ~s",
+        [memory:format(HashtreeWriteBufferSize, binary)]
+    ),
+
     %% Create a shared buffer for partition hashtree instances
     %% This value is harcoded
     {ok, HashtreeWriteBuffer} = rocksdb:new_write_buffer_manager(
-        memory:mebibytes(10 * N),
+        HashtreeWriteBufferSize,
         BlockCache
     ),
 
@@ -163,8 +178,6 @@ handle_continue(init_config, #state{} = State0) ->
         server_stats = ServerStats,
         hashtree_stats = HashtreeStats
     },
-
-    ?LOG_INFO("Building Configs"),
 
     Opts1 = key_value:put(create_if_missing, true, Opts0),
     Opts = key_value:put(create_missing_column_families, true, Opts1),
@@ -188,6 +201,7 @@ handle_continue(init_config, #state{} = State0) ->
             [
                 {[block_based_table_options, block_cache], BlockCache},
                 {write_buffer_manager, HashtreeWriteBuffer},
+                {max_write_buffer_number, 4},
                 {statistics, State#state.hashtree_stats}
             ]
         )}
