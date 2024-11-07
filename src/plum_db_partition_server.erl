@@ -1214,7 +1214,7 @@ spawn_helper(State) ->
 %% @private
 init_ram_disk_prefixes_fun(State) ->
     fun() ->
-        ?LOG_INFO(#{
+        ?LOG_NOTICE(#{
             description => "Initialising partition",
             partition => State#state.partition,
             node => partisan:node()
@@ -1231,7 +1231,7 @@ init_ram_disk_prefixes_fun(State) ->
                 F({Prefix, #{type := Type}}, Acc) ->
                     F({Prefix, Type}, Acc);
                 F({Prefix, ram_disk}, ok) ->
-                    ?LOG_INFO(#{
+                    ?LOG_NOTICE(#{
                         description => "Loading data from disk to ram",
                         partition => State#state.partition,
                         prefix => Prefix,
@@ -1248,7 +1248,7 @@ init_ram_disk_prefixes_fun(State) ->
                     ok
             end,
             ok = lists:foldl(Fun, ok, PrefixList),
-            ?LOG_INFO(#{
+            ?LOG_NOTICE(#{
                 description => "Finished initialisation of partition",
                 partition => State#state.partition,
                 node => partisan:node()
