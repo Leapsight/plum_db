@@ -543,7 +543,7 @@ handle_cast(
 
 handle_cast(reset, #state{built = true, lock = undefined} = State0) ->
     State1 = do_reset(State0),
-    {stop, normal, State1};
+    {noreply, State1};
 
 handle_cast(reset, #state{built = true, lock = {internal, _, Pid}} = State) ->
     ?LOG_NOTICE(#{
