@@ -918,12 +918,6 @@ incr_count(#{count := N} = Stats) ->
 build_done(State) ->
     Partition = State#state.partition,
 
-    ?LOG_NOTICE(#{
-        description => "Finished hashtree build",
-        partition => Partition,
-        node => partisan:node()
-    }),
-
     _ = plum_db_events:notify(hashtree_build_finished, {ok, Partition}),
 
     State#state{built = true, build_ts_secs = erlang:system_time(second)}.
