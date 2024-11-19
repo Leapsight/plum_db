@@ -1,5 +1,7 @@
 # CHANGELOG
 
+## 2.1.1
+* Fixes an issue by which a hashtree reset would shutdown the hashtree server
 
 ## 2.1.0
 * Fixes to Hashtree algorithm (integrated upstream changes from Riak KV) adapted to `rocksdb` and fixed previous iterator API translation between original `eleveldb` to `rocksdb`.
