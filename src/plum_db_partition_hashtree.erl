@@ -543,7 +543,7 @@ handle_cast(
 
 handle_cast(reset, #state{built = true, lock = undefined} = State0) ->
     State1 = do_reset(State0),
-    {stop, normal, State1};
+    {noreply, State1};
 
 handle_cast(reset, #state{built = true, lock = {internal, _, Pid}} = State) ->
     ?LOG_NOTICE(#{
@@ -917,12 +917,6 @@ incr_count(#{count := N} = Stats) ->
 %% @private
 build_done(State) ->
     Partition = State#state.partition,
-
-    ?LOG_NOTICE(#{
-        description => "Finished hashtree build",
-        partition => Partition,
-        node => partisan:node()
-    }),
 
     _ = plum_db_events:notify(hashtree_build_finished, {ok, Partition}),
 
