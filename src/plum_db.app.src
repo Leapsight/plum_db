@@ -21,7 +21,9 @@
         gproc,
         key_value,
         maps_utils,
-        utils
+        utils,
+        memory,
+        resulto
         %% partisan is started manually
     ]},
     {env, []},
