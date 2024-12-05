@@ -529,16 +529,31 @@ should_insert(HKey, Opts, State) ->
 
 -spec update_snapshot(hashtree()) -> {hashtree(), hashtree()}.
 update_snapshot(State=#state{segments=NumSegments}) ->
-    State2 = flush_buffer(State),
-    SnapState = snapshot(State2),
-    State3 = SnapState#state{dirty_segments=bitarray_new(NumSegments)},
-    {SnapState, State3}.
+    try
+        State2 = flush_buffer(State),
+        SnapState = snapshot(State2),
+        State3 = SnapState#state{dirty_segments=bitarray_new(NumSegments)},
+        {SnapState, State3}
+    catch
+        Class:Reason:Stacktrace ->
+            erlang:raise(Class, Reason, Stacktrace)
+    after
+        close_iterator(State#state.itr)
+    end.
+
 
 -spec update_tree(hashtree()) -> hashtree().
 update_tree(State) ->
-    State2 = flush_buffer(State),
-    State3 = snapshot(State2),
-    update_perform(State3).
+    try
+        State2 = flush_buffer(State),
+        State3 = snapshot(State2),
+        update_perform(State3)
+    catch
+        Class:Reason:Stacktrace ->
+            erlang:raise(Class, Reason, Stacktrace)
+    after
+        close_iterator(State#state.itr)
+    end.
 
 -spec update_perform(hashtree()) -> hashtree().
 update_perform(State=#state{dirty_segments=Dirty, segments=NumSegments}) ->
@@ -626,10 +641,19 @@ update_tree(Segments, State=#state{next_rebuild=NextRebuild, width=Width,
     end.
 
 -spec rehash_tree(hashtree()) -> hashtree().
+
 rehash_tree(State) ->
-    State2 = flush_buffer(State),
-    State3 = snapshot(State2),
-    rehash_perform(State3).
+    try
+        State2 = flush_buffer(State),
+        State3 = snapshot(State2),
+        rehash_perform(State3)
+    catch
+        Class:Reason:Stacktrace ->
+            erlang:raise(Class, Reason, Stacktrace)
+    after
+        close_iterator(State#state.itr)
+    end.
+
 
 -spec rehash_perform(hashtree()) -> hashtree().
 rehash_perform(State) ->
