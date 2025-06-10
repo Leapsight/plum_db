@@ -56,7 +56,7 @@ name(Id) when is_integer(Id) ->
 
 
 init([Id, ServerOpts, HashtreeOpts]) ->
-    RestartStrategy = {one_for_all, 10, 60},
+    RestartStrategy = {one_for_all, 20, 60},
     Children = [
         #{
             id => plum_db_partition_server:name(Id),

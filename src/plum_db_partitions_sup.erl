@@ -60,7 +60,7 @@ add_partition(Id, ServerOpts, HashtreeOpts) ->
 
 
 init([]) ->
-    RestartStrategy = {one_for_all, 5, 60},
+    RestartStrategy = {one_for_all, 10, 60},
     Children = [
         #{
             id => plum_db_partition_manager,

@@ -104,7 +104,7 @@ init([]) ->
     Children = [
         ?CHILD(plum_db_exchange_statem, worker, [], temporary, 5000)
     ],
-    Specs = {{simple_one_for_one, 0, 1}, Children},
+    Specs = {{simple_one_for_one, 2, 10}, Children},
     {ok, Specs}.
 
 
