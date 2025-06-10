@@ -42,14 +42,17 @@ eqwalizer:
 
 
 node1:
+	CMAKE_POLICY_VERSION_MINIMUM=3.5 \
 	${REBAR} as node1 release
 	ERL_DIST_PORT=37781 _build/node1/rel/plum_db/bin/plum_db console
 
 node2:
+	CMAKE_POLICY_VERSION_MINIMUM=3.5 \
 	${REBAR} as node2 release
 	ERL_DIST_PORT=37782 _build/node2/rel/plum_db/bin/plum_db console
 
 node3:
+	CMAKE_POLICY_VERSION_MINIMUM=3.5 \
 	${REBAR} as node3 release
 	ERL_DIST_PORT=37783 _build/node3/rel/plum_db/bin/plum_db console
 
