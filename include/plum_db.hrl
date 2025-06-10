@@ -5,7 +5,7 @@
 -define(ERASED, '$erased').
 
 %% Options for term_to_binary
--define(EXT_OPTS, [{minor_version, 2}]).
+-define(EXT_OPTS, [deterministic ,{minor_version, 2}]).
 
 -define(DATA_CHANNEL, plum_db_data).
 

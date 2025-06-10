@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2.2.0
+* Fix erlang term serialization by using `deterministic` option. Due to maps encoding varying across nodes and version, pinning down `minor_version` is not enough. For hashes to be deterministic we need `deterministic` encoding.
+
+## 2.1.3
+* Upgrade RocksDB to latest
+
+## 2.1.2
+* Upgrade `utils` and added `resulto` and `memory` to app.src file
+* Make sure iterators are closed during exception in hashtree module
 ## 2.1.1
 * Fixes an issue by which a hashtree reset would shutdown the hashtree server
 

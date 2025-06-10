@@ -1,5 +1,7 @@
 -module(hashtree_utils).
 
+-include("plum_db.hrl").
+
 -export([hash/1]).
 -export([sha/1]).
 -export([md5/1]).
@@ -20,7 +22,7 @@ hash([]) ->
     empty;
 hash(X) ->
     %% erlang:phash2(X).
-    sha(term_to_binary(X)).
+    sha(term_to_binary(X, ?EXT_OPTS)).
 
 sha(Bin) ->
     Chunk = plum_db_config:get(aae_sha_chunk, 4096),
