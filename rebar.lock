@@ -1,6 +1,5 @@
 {"1.2.0",
-[{<<"acceptor_pool">>,{pkg,<<"acceptor_pool">>,<<"1.0.0">>},1},
- {<<"app_config">>,
+[{<<"app_config">>,
   {git,"https://github.com/leapsight/app_config.git",
        {ref,"01fa09bf6b7cac41b13a15552b6a9cc132acdaf4"}},
   0},
@@ -32,7 +31,7 @@
   2},
  {<<"partisan">>,
   {git,"http://github.com/lasp-lang/partisan.git",
-       {ref,"7fc89a6a790c36a6c94a080758b6571693e48636"}},
+       {ref,"8d4c79e98fe36aa763bbb60048a5453c06a42dd3"}},
   0},
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"2.0.7">>},2},
  {<<"recon">>,{pkg,<<"recon">>,<<"2.5.3">>},0},
@@ -48,7 +47,6 @@
  {<<"uuid">>,{pkg,<<"uuid_erl">>,<<"2.0.5">>},1}]}.
 [
 {pkg_hash,[
- {<<"acceptor_pool">>, <<"43C20D2ACAE35F0C2BCD64F9D2BDE267E459F0F3FD23DAB26485BF518C281B21">>},
  {<<"gproc">>, <<"853CCB7805E9ADA25D227A157BA966F7B34508F386A3E7E21992B1B484230699">>},
  {<<"observer_cli">>, <<"3C1BFB6D91BF68F6A3D15F46AE20DA0F7740D363EE5BC041191CE8722A6C4FAE">>},
  {<<"opentelemetry_api">>, <<"7B69ED4F40025C005DE0B74FCE8C0549625D59CB4DF12D15C32FE6DC5076FF42">>},
@@ -62,7 +60,6 @@
  {<<"types">>, <<"5782B67231E8C174FE2835395E71E669FE0121076779D2A09F1C0D58EE0E2F13">>},
  {<<"uuid">>, <<"60FAEEB7EDFD40847ED13CB0DD1044BAABE4E79A00C0CA9C4D13A073914B1016">>}]},
 {pkg_hash_ext,[
- {<<"acceptor_pool">>, <<"0CBCD83FDC8B9AD2EEE2067EF8B91A14858A5883CB7CD800E6FCD5803E158788">>},
  {<<"gproc">>, <<"587E8AF698CCD3504CF4BA8D90F893EDE2B0F58CABB8A916E2BF9321DE3CF10B">>},
  {<<"observer_cli">>, <<"50DE6D95D814F447458BD5D72666A74624EDDB0EF98BDCEE61A0153AAE0865FF">>},
  {<<"opentelemetry_api">>, <<"6D7A27B7CAD2AD69A09CABF6670514CAFCEC717C8441BEB5C96322BAC3D05350">>},

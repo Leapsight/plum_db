@@ -1,4 +1,6 @@
 # CHANGELOG
+## 2.2.1
+* Upgrade to latest Partisan v5.0.1
 
 ## 2.2.0
 * Fix erlang term serialization by using `deterministic` option. Due to maps encoding varying across nodes and version, pinning down `minor_version` is not enough. For hashes to be deterministic we need `deterministic` encoding.
