@@ -21,7 +21,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -module(plum_db_sup).
--behaviour(supervisor).
+-behaviour(partisan_gen_supervisor).
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -58,7 +58,7 @@ start_link() ->
     ok = plum_db_config:init(),
     {ok, _} = application:ensure_all_started(partisan),
 
-    case supervisor:start_link({local, ?MODULE}, ?MODULE, []) of
+    case partisan_gen_supervisor:start_link({local, ?MODULE}, ?MODULE, []) of
         {ok, _} = OK ->
             % ok = init_db_partitions(),
             % ok = init_db_hashtrees(),

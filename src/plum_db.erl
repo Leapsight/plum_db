@@ -1680,7 +1680,24 @@ merge(Node, {PKey, _Context}, Obj) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Determines if the given context (version vector) is causually newer than
+%% @doc
+%% Implementation of the `partisan_plumtree_backend` callback.
+%% When a peer broadcasts a message it does it to the nodes in its eager-push
+%% set only, but also simultaneously sends I_HAVE notifications to nodes in its
+%% lazy-push set instead of the entire message. This callback is the one that
+%% Plumtree calls when receiving an I_HAVE message.
+%%
+%% The main idea is: “I have seen a broadcast message with this root. If you
+%% need it, let me know.”
+%% This saves bandwidth, because instead of blindly sending every neighbor the
+%% full payload, the node sends just the root hash. The lazy neighbors can decide
+%% whether they need the full message or not.
+%%
+%% If function returns `true` then Plumtree will do nothing. However, if it
+%% returns `false` then Plumtree will `graft` the message from the peer and send
+%% it to us.
+%%
+%% Determines if the given context (version vector) is causually newer than
 %% an existing object. If the object missing or if the context does not represent
 %% an anscestor of the current key, false is returned. Otherwise, when the
 %% context does represent an ancestor of the existing object or the existing
@@ -1708,7 +1725,9 @@ is_stale({{_, _} = PKey, Context}) ->
                 context => Context,
                 reason => Reason
             }),
-            false
+            %% Returns as we do not know what happend,
+            %% we will fix any missing values via AAE
+            true
     end.
 
 
@@ -1736,6 +1755,7 @@ graft({{_, _} = PKey, Context}) ->
             %% this case.
             %% Catch it here b/c it would be much harder to detect
             {error, {not_found, PKey}};
+
          {ok, Obj} = OK ->
             case plum_db_object:equal_context(Context, Obj) of
                 false ->
@@ -1745,6 +1765,7 @@ graft({{_, _} = PKey, Context}) ->
                     %% update that contains this context's information in
                     %% addition to its own.  This graft is deemed stale
                     stale;
+
                 true ->
                     OK
             end

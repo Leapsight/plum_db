@@ -40,7 +40,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -module(plum_db_startup_coordinator).
--behaviour(gen_server).
+-behaviour(partisan_gen_server).
 -include_lib("kernel/include/logger.hrl").
 
 -record(state, {
@@ -91,7 +91,7 @@
 -spec start_link() -> {ok, pid()} | ignore | {error, term()}.
 
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    partisan_gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 
 %% -----------------------------------------------------------------------------
@@ -101,7 +101,7 @@ start_link() ->
 -spec stop() -> ok.
 
 stop() ->
-    gen_server:stop(?MODULE).
+    partisan_gen_server:stop(?MODULE).
 
 
 
@@ -127,7 +127,7 @@ wait_for_partitions() ->
 
 wait_for_partitions(Timeout)
 when (is_integer(Timeout) andalso Timeout > 0) orelse Timeout == infinity ->
-    {ok, Tag} = gen_server:call(?MODULE, wait_for_partitions),
+    {ok, Tag} = partisan_gen_server:call(?MODULE, wait_for_partitions),
 
     receive
         {plum_db_partitions_init_finished, Tag, Return} ->
@@ -161,7 +161,7 @@ wait_for_hashtrees() ->
 
 wait_for_hashtrees(Timeout)
 when (is_integer(Timeout) andalso Timeout > 0) orelse Timeout == infinity ->
-    {ok, Tag} = gen_server:call(?MODULE, wait_for_hashtrees),
+    {ok, Tag} = partisan_gen_server:call(?MODULE, wait_for_hashtrees),
 
     receive
         {plum_db_hashtrees_build_finished, Tag, Return} ->
@@ -198,7 +198,7 @@ wait_for_aae_exchange(Opts) ->
 
 wait_for_aae_exchange(Opts, Timeout)
 when (is_integer(Timeout) andalso Timeout > 0) orelse Timeout == infinity ->
-    {ok, Tag} = gen_server:call(?MODULE, {wait_for_aae_exchange, Opts}),
+    {ok, Tag} = partisan_gen_server:call(?MODULE, {wait_for_aae_exchange, Opts}),
 
     receive
         {plum_db_aae_exchange_finished, Tag, Return} ->

@@ -21,7 +21,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -module(plum_db_exchanges_sup).
--behaviour(supervisor).
+-behaviour(partisan_gen_supervisor).
 
 -define(CHILD(Id, Type, Args, Restart, Timeout), #{
     id => Id,
@@ -56,7 +56,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -spec start_exchange(node(), list() | map()) ->
-    supervisor:startchild_ret() | {error, Reason :: any()}.
+    partisan_gen_supervisor:startchild_ret() | {error, Reason :: any()}.
 
 start_exchange(Peer, Opts) ->
     case partisan:node() of
@@ -68,7 +68,7 @@ start_exchange(Peer, Opts) ->
 
             case plum_db_config:get(aae_concurrency) > Count of
                 true ->
-                    supervisor:start_child(?MODULE, [Peer, Opts]);
+                    partisan_gen_supervisor:start_child(?MODULE, [Peer, Opts]);
                 false ->
                     {error, concurrency_limit}
             end
@@ -80,7 +80,7 @@ start_exchange(Peer, Opts) ->
 %% @end
 %% -----------------------------------------------------------------------------
 stop_exchange(Pid) when is_pid(Pid)->
-    supervisor:terminate_child(?MODULE, Pid).
+    partisan_gen_supervisor:terminate_child(?MODULE, Pid).
 
 
 %% -----------------------------------------------------------------------------
@@ -90,7 +90,7 @@ stop_exchange(Pid) when is_pid(Pid)->
 -spec start_link() -> {ok, pid()} | ignore | {error, term()}.
 
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    partisan_gen_supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 
 
