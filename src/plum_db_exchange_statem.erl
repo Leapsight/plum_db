@@ -583,8 +583,12 @@ repair_full_prefix(Type, Peer, Iterator) ->
         true ->
             ok;
         false ->
-            {{FullPrefix, Key}, Obj} = plum_db:iterator_element(Iterator),
-            repair_other(Type, Peer, {FullPrefix, Key}, Obj),
+            case plum_db:iterator_element(Iterator) of
+                {{FullPrefix, Key}, Obj} ->
+                    repair_other(Type, Peer, {FullPrefix, Key}, Obj);
+                _ ->
+                    ok
+            end,
             repair_full_prefix(Type, Peer, plum_db:iterate(Iterator))
     end.
 
