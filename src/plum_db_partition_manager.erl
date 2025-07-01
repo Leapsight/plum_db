@@ -40,7 +40,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -module(plum_db_partition_manager).
--behaviour(gen_server).
+-behaviour(partisan_gen_server).
 -include_lib("kernel/include/logger.hrl").
 
 -record(state, {
@@ -82,7 +82,7 @@
 -spec start_link() -> {ok, pid()} | ignore | {error, term()}.
 
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    partisan_gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 
 %% -----------------------------------------------------------------------------
@@ -92,7 +92,7 @@ start_link() ->
 -spec stop() -> ok.
 
 stop() ->
-    gen_server:stop(?MODULE).
+    partisan_gen_server:stop(?MODULE).
 
 
 stats(Arg) ->

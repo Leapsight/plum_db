@@ -17,7 +17,7 @@
 %% =============================================================================
 
 -module(plum_db_partition_sup).
--behaviour(supervisor).
+-behaviour(partisan_gen_supervisor).
 
 
 -export([start_link/3]).

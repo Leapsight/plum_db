@@ -21,7 +21,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -module(plum_db_io).
--behaviour(gen_server).
+-behaviour(partisan_gen_server).
 -include_lib("kernel/include/logger.hrl").
 
 -define(EXPORT_SPEC, #{
@@ -121,7 +121,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    partisan_gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 
 %% -----------------------------------------------------------------------------

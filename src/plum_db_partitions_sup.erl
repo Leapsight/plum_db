@@ -17,7 +17,7 @@
 %% =============================================================================
 
 -module(plum_db_partitions_sup).
--behaviour(supervisor).
+-behaviour(partisan_gen_supervisor).
 
 -export([start_link/0]).
 -export([add_partition/3]).
@@ -34,7 +34,7 @@
 
 
 start_link() ->
-supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    partisan_gen_supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 
 add_partition(Id, ServerOpts, HashtreeOpts) ->
