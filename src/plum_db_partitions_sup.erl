@@ -50,7 +50,7 @@ add_partition(Id, ServerOpts, HashtreeOpts) ->
         type => supervisor,
         modules => [plum_db_partition_sup]
     },
-    supervisor:start_child(?MODULE, ChildSpec).
+    partisan_gen_supervisor:start_child(?MODULE, ChildSpec).
 
 
 %% =============================================================================
@@ -60,7 +60,7 @@ add_partition(Id, ServerOpts, HashtreeOpts) ->
 
 
 init([]) ->
-    RestartStrategy = {one_for_all, 10, 60},
+    RestartStrategy = {one_for_one, 10, 60},
     Children = [
         #{
             id => plum_db_partition_manager,
