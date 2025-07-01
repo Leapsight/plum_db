@@ -897,14 +897,20 @@ build(Partition, Iterator, Stats) ->
             ok;
 
         false ->
-            {{FullPrefix, Key}, Obj} = plum_db:iterator_element(Iterator),
-            Hash = plum_db_object:hash(Obj),
-            %% insert only if missing to not clash w/ newer writes during build
-            %% ?MODULE:insert(Partition, {FullPrefix, Key}, Hash, true),
-            %% replace it with a cast as we do not care about the result anyway
-            _ = partisan_gen_server:cast(
-                name(Partition), {insert, {FullPrefix, Key}, Hash, true}
-            ),
+            case plum_db:iterator_element(Iterator) of
+                {{FullPrefix, Key}, Obj} ->
+                    Hash = plum_db_object:hash(Obj),
+                    %% insert only if missing to not clash w/ newer writes
+                    %% during build
+                    %% ?MODULE:insert(Partition, {FullPrefix, Key}, Hash, true),
+                    %% replace it with a cast as we do not care about the result
+                    %% anyway
+                    partisan_gen_server:cast(
+                        name(Partition), {insert, {FullPrefix, Key}, Hash, true}
+                    );
+                _ ->
+                    ok
+            end,
             build(Partition, plum_db:iterate(Iterator), incr_count(Stats))
     end.
 
