@@ -1051,7 +1051,7 @@ terminate(_Reason, State) ->
 
     %% Close rocksdb
     Result = rocksdb:close(db_ref(State)),
-    resulto:then_error(Result, fun(Reason) ->
+    resulto:then_recover(Result, fun(Reason) ->
         ?LOG_CRITICAL(#{
             description => "Error while closing RocksDB database",
             reason => Reason,
@@ -1297,7 +1297,7 @@ init_ram_disk_prefixes_fun(State) ->
 
 rocksdb_iterator_close(State, DbIter) ->
     try
-        resulto:then_error(
+        resulto:then_recover(
             rocksdb:iterator_close(DbIter),
             fun(Reason) ->
                 ?LOG_CRITICAL(#{
