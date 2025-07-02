@@ -134,10 +134,10 @@
 -type partition()           ::  non_neg_integer().
 
 %% Put Option Types
--type put_opts()            :: [].
+-type put_opts()            :: [{broadcast, boolean()}].
 
 %% Delete Option types
--type delete_opts()         :: [].
+-type delete_opts()         :: [{broadcast, boolean()}].
 
 
 %% Erase Option types
@@ -1143,13 +1143,16 @@ when Obj =/= undefined ->
                 1 ->
                     Value = maybe_tombstone(plum_db_object:value(Obj), Default),
                     {Key, Value};
+
                 _ ->
                     {error, conflict}
             end;
+
         Resolver ->
             case maybe_resolve(PKey, Obj, Resolver, AllowPut) of
                 {ok, Resolved} ->
                     {Key, maybe_tombstone(Resolved, Default)};
+
                 {error, _} = Error ->
                     Error
             end
@@ -1390,8 +1393,8 @@ delete(FullPrefix, Key) ->
 -spec delete(plum_db_prefix(), plum_db_key(), delete_opts()) ->
     ok | {error, Reason :: any()}.
 
-delete(FullPrefix, Key, _Opts) ->
-    put(FullPrefix, Key, ?TOMBSTONE, []).
+delete(FullPrefix, Key, Opts) ->
+    put(FullPrefix, Key, ?TOMBSTONE, Opts).
 
 
 %% -----------------------------------------------------------------------------

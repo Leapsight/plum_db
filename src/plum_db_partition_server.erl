@@ -421,14 +421,13 @@ key_iterator(Name, FullPrefix, Opts) when is_atom(Name) andalso is_list(Opts) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-iterator_close(Id, Iter) when is_integer(Id) ->
+iterator_close(Id, #partition_iterator{} = Iter) when is_integer(Id) ->
     iterator_close(name(Id), Iter);
 
 iterator_close(Store, #partition_iterator{} = Iter) when is_atom(Store) ->
     Res = partisan_gen_server:call(Store, {iterator_close, Iter}, infinity),
     true = maybe_safe_fixtables(Iter, false),
     Res.
-
 
 
 %% -----------------------------------------------------------------------------
@@ -1031,7 +1030,7 @@ handle_info({'DOWN', Ref, process, _, _}, State0) ->
     State1 = close_iterator(Ref, State0),
     {noreply, State1};
 
-handle_info({'ETS-TRANSFER', _, _, []}, State) ->
+handle_info({'ETS-TRANSFER', _, _, _}, State) ->
     {noreply, State};
 
 handle_info(Event, State) ->
@@ -1051,8 +1050,15 @@ terminate(_Reason, State) ->
     ),
 
     %% Close rocksdb
-    catch rocksdb:close(db_ref(State)),
-    ok.
+    Result = rocksdb:close(db_ref(State)),
+    resulto:then_recover(Result, fun(Reason) ->
+        ?LOG_CRITICAL(#{
+            description => "Error while closing RocksDB database",
+            reason => Reason,
+            partition => State#state.partition,
+            data_root => State#state.data_root
+        })
+    end).
 
 
 code_change(_OldVsn, State, _Extra) ->
@@ -1137,13 +1143,12 @@ open_db(State, RetriesLeft, _) ->
     	{error, {db_open, OpenErr} = Reason} when is_list(OpenErr) ->
             %% Check specifically for lock error, this can be caused if
             %% a crashed vnode takes some time to flush leveldb information
-            %% out to disk.  The process is gone, but the NIF resource cleanup
+            %% out to disk. The process is gone, but the NIF resource cleanup
             %% may not have completed.
             case lists:prefix("IO error: lock ", OpenErr) of
                 true ->
                     SleepFor = plum_db_config:get(store_open_retries_delay),
-
-                    ?LOG_DEBUG(#{
+                    ?LOG_WARNING(#{
                         description => "Rocksdb backend retrying after error",
                         partition => State#state.partition,
                         node => partisan:node(),
@@ -1166,27 +1171,34 @@ open_db(State, RetriesLeft, _) ->
                                 data_root => State#state.data_root,
                                 reason => OpenErr
                             }),
-                            _ = rocksdb:repair(
-                                State#state.data_root, State#state.open_opts
-                            ),
-                            ?LOG_NOTICE(#{
-                                description =>
-                                    "Finished repair of corrupted RocksDB store",
-                                partition => State#state.partition,
-                                node => partisan:node(),
-                                data_root => State#state.data_root,
-                                reason => OpenErr
-                            }),
-                            open_db(State, 0, Reason);
+                            repair_and_open(State, OpenErr);
+
                         false ->
                             {error, Reason}
                     end
             end;
+
         {error, Reason} ->
             {error, Reason}
     end.
 
 
+
+repair_and_open(State, Reason) ->
+    Result = rocksdb:repair(State#state.data_root, State#state.open_opts),
+    resulto:then(
+        Result,
+        fun(undefined) ->
+            ?LOG_NOTICE(#{
+                description => "Finished repairing corrupted RocksDB instance",
+                partition => State#state.partition,
+                node => partisan:node(),
+                data_root => State#state.data_root,
+                reason => Reason
+            }),
+            open_db(State, 0, Reason)
+        end
+    ).
 
 %% @private
 get_db_info(ServerRef) ->
@@ -1230,6 +1242,7 @@ init_ram_disk_prefixes_fun(State) ->
             Fun = fun
                 F({Prefix, #{type := Type}}, Acc) ->
                     F({Prefix, Type}, Acc);
+
                 F({Prefix, ram_disk}, ok) ->
                     ?LOG_NOTICE(#{
                         description => "Loading data from disk to ram",
@@ -1244,6 +1257,7 @@ init_ram_disk_prefixes_fun(State) ->
                     init_prefix_iterate(
                         Next, DbIter, First, erlang:byte_size(First), Tab, State
                     );
+
                 F(_, ok) ->
                     ok
             end,
@@ -1275,10 +1289,35 @@ init_ram_disk_prefixes_fun(State) ->
                 erlang:raise(Class, Reason, Stacktrace)
 
         after
-
-            catch rocksdb:iterator_close(DbIter)
-
+            rocksdb_iterator_close(State, DbIter)
         end
+    end.
+
+
+
+rocksdb_iterator_close(State, DbIter) ->
+    try
+        resulto:then_recover(
+            rocksdb:iterator_close(DbIter),
+            fun(Reason) ->
+                ?LOG_CRITICAL(#{
+                    description => "Error while closing RocksDB iterator",
+                    reason => Reason,
+                    partition => State#state.partition,
+                    data_root => State#state.data_root
+                })
+            end
+        )
+    catch
+        Class:Reason:Stacktrace ->
+            ?LOG_CRITICAL(#{
+                description => "Exception while closing RocksDB iterator",
+                class => Class,
+                reason => Reason,
+                stacktrace => Stacktrace,
+                partition => State#state.partition,
+                data_root => State#state.data_root
+            })
     end.
 
 
@@ -1826,7 +1865,7 @@ close_iterator(Mref, State0) when is_reference(Mref) ->
 
         {#partition_iterator{disk = DbIter}, State1} ->
             _ = erlang:demonitor(Mref, [flush]),
-            _ = catch rocksdb:iterator_close(DbIter),
+            rocksdb_iterator_close(State1, DbIter),
             State1;
 
         error ->
@@ -1835,7 +1874,7 @@ close_iterator(Mref, State0) when is_reference(Mref) ->
 
 
 %% @private
-maybe_safe_fixtables(Iter, Flag) ->
+maybe_safe_fixtables(#partition_iterator{} = Iter, Flag) ->
     true = maybe_safe_fixtable(Iter#partition_iterator.ram_tab, Flag),
     maybe_safe_fixtable(Iter#partition_iterator.ram_disk_tab, Flag).
 
@@ -1843,6 +1882,7 @@ maybe_safe_fixtables(Iter, Flag) ->
 %% @private
 maybe_safe_fixtable(undefined, _) ->
     true;
+
 maybe_safe_fixtable(Tab, Flag) ->
     ets:safe_fixtable(Tab, Flag).
 
