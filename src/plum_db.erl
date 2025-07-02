@@ -134,10 +134,10 @@
 -type partition()           ::  non_neg_integer().
 
 %% Put Option Types
--type put_opts()            :: [].
+-type put_opts()            :: [{broadcast, boolean()}].
 
 %% Delete Option types
--type delete_opts()         :: [].
+-type delete_opts()         :: [{broadcast, boolean()}].
 
 
 %% Erase Option types
@@ -1393,8 +1393,8 @@ delete(FullPrefix, Key) ->
 -spec delete(plum_db_prefix(), plum_db_key(), delete_opts()) ->
     ok | {error, Reason :: any()}.
 
-delete(FullPrefix, Key, _Opts) ->
-    put(FullPrefix, Key, ?TOMBSTONE, []).
+delete(FullPrefix, Key, Opts) ->
+    put(FullPrefix, Key, ?TOMBSTONE, Opts).
 
 
 %% -----------------------------------------------------------------------------
