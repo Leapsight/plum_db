@@ -1143,13 +1143,16 @@ when Obj =/= undefined ->
                 1 ->
                     Value = maybe_tombstone(plum_db_object:value(Obj), Default),
                     {Key, Value};
+
                 _ ->
                     {error, conflict}
             end;
+
         Resolver ->
             case maybe_resolve(PKey, Obj, Resolver, AllowPut) of
                 {ok, Resolved} ->
                     {Key, maybe_tombstone(Resolved, Default)};
+
                 {error, _} = Error ->
                     Error
             end
