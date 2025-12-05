@@ -1,4 +1,7 @@
 # CHANGELOG
+## 2.3.6
+- Fix RocksDB configuration environment. Now the config must be pased as a PlumDB key e.g. `{plum_db, [{rocksdb, [{open, [...], {read, [...]}}]}]}`
+- The new default configuration reduces the number of threads and removes compression at the bottom levels
 
 ## 2.3.5
 * Fix invalid Cuttlefish Schema type introduced in 2.3.4
