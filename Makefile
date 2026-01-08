@@ -1,12 +1,13 @@
 
 REBAR = rebar3
 PDB_EQWALIZER = 0
-OTPVSN 			= $(shell erl -eval 'erlang:display(erlang:system_info(otp_release)), halt().' -noshell)
+OTPVSN = $(shell erl -eval 'erlang:display(erlang:system_info(otp_release)), halt().' -noshell)
 
 
 .PHONY: compile test xref dialyzer eqwalizer node1 node2 node3
 
-compile-no-deps:
+compile:
+	CMAKE_POLICY_VERSION_MINIMUM=3.5 \
 	${REBAR} compile
 
 docs: compile
