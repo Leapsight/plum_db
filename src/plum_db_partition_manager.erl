@@ -120,94 +120,109 @@ init([]) ->
 
 
 handle_continue(init_config, #state{} = State0) ->
-
     N = plum_db:partition_count(),
     Opts0 = plum_db_config:get([rocksdb, open]),
 
     ?LOG_INFO("Initialising RocksDB Config2 ~p", [Opts0]),
 
-    MaxWriteBufferNumber = key_value:get(max_write_buffer_number, Opts0),
+    MaxWriteBuffNumber = key_value:get(max_write_buffer_number, Opts0),
 
-    %% Create a shared cache
-    CacheSize = key_value:get(
-        [block_based_table_options, block_cache_size],
-        Opts0,
-        memory:gibibytes(2)
-    ),
+    %% Create a shared block cache (reads)
+    CacheSize =
+        key_value:get(
+            [block_based_table_options, block_cache_size],
+            Opts0,
+            memory:gibibytes(2)
+        ),
     ?LOG_INFO(
         "Configuring store shared block cache to ~s",
         [memory:format(CacheSize, binary)]
     ),
     {ok, BlockCache} = rocksdb:new_cache(lru, CacheSize),
 
-    %% Create a shared buffer for partition server instances
-    %% We multiply the value by the nuber of partitions
-    WriteBufferSize = key_value:get(
-        write_buffer_size,
-        Opts0
-    ) * N,
+    %% Shared write buffer managers (memtables) WITHOUT charging to BlockCache
+    %% This avoids "WriteBuffer" consuming/contending with the read cache.
+    WriteBuffSize = key_value:get(write_buffer_size, Opts0) * N,
     ?LOG_INFO(
         "Configuring db store shared write buffer to ~s",
-        [memory:format(WriteBufferSize, binary)]
+        [memory:format(WriteBuffSize, binary)]
     ),
 
-    {ok, ServerWriteBuffer} = rocksdb:new_write_buffer_manager(
-        WriteBufferSize,
-        BlockCache
-    ),
+    {ok, ServerWriteBuff} = rocksdb:new_write_buffer_manager(WriteBuffSize),
 
-    HashtreeWriteBufferSize = memory:mebibytes(10 * N),
+    HTWriteBuffSize = memory:mebibytes(10 * N),
     ?LOG_INFO(
         "Configuring hashtree store shared write buffer to ~s",
-        [memory:format(HashtreeWriteBufferSize, binary)]
+        [memory:format(HTWriteBuffSize, binary)]
     ),
 
     %% Create a shared buffer for partition hashtree instances
     %% This value is harcoded
-    {ok, HashtreeWriteBuffer} = rocksdb:new_write_buffer_manager(
-        HashtreeWriteBufferSize,
-        BlockCache
-    ),
+    {ok, HTWriteBuff} = rocksdb:new_write_buffer_manager(HTWriteBuffSize),
 
+    EnableStats = key_value:get([rocksdb, enable_statistics], Opts0, true),
     {ok, ServerStats} = rocksdb:new_statistics(),
-    {ok, HashtreeStats} = rocksdb:new_statistics(),
+    {ok, HTStats} = rocksdb:new_statistics(),
 
     State = State0#state{
         block_cache = BlockCache,
-        server_write_buffer = ServerWriteBuffer,
-        hashtree_write_buffer = HashtreeWriteBuffer,
+        server_write_buffer = ServerWriteBuff,
+        hashtree_write_buffer = HTWriteBuff,
         server_stats = ServerStats,
-        hashtree_stats = HashtreeStats
+        hashtree_stats = HTStats
     },
 
     Opts1 = key_value:put(create_if_missing, true, Opts0),
     Opts = key_value:put(create_missing_column_families, true, Opts1),
 
-    ServerOpts = [
-        {open, lists:foldl(
-            fun ({K, V}, Acc) -> key_value:put(K, V, Acc) end,
+    %% Common open opts for both DB types
+    CommonOpenOpts0 =
+        lists:foldl(
+            fun({K, V}, Acc) -> key_value:put(K, V, Acc) end,
             Opts,
             [
                 {[block_based_table_options, block_cache], BlockCache},
-                {write_buffer_manager, ServerWriteBuffer},
-                {max_write_buffer_number, MaxWriteBufferNumber},
-                {statistics, State#state.server_stats}
+                {max_write_buffer_number, MaxWriteBuffNumber}
             ]
-        )}
-    ],
+        ),
 
-    HashtreeOpts = [
-        {open, lists:foldl(
-            fun ({K, V}, Acc) -> key_value:put(K, V, Acc) end,
-            Opts,
+    %% Conditionally attach statistics
+    CommonOpenOpts =
+        case EnableStats of
+            true  ->
+                key_value:put(
+                    statistics, State#state.server_stats, CommonOpenOpts0
+                );
+            false ->
+                CommonOpenOpts0
+        end,
+
+    ServerOpenOpts =
+        lists:foldl(
+            fun({K, V}, Acc) -> key_value:put(K, V, Acc) end,
+            CommonOpenOpts,
             [
-                {[block_based_table_options, block_cache], BlockCache},
-                {write_buffer_manager, HashtreeWriteBuffer},
-                {max_write_buffer_number, MaxWriteBufferNumber},
-                {statistics, State#state.hashtree_stats}
+                {write_buffer_manager, ServerWriteBuff}
             ]
-        )}
-    ],
+        ),
+
+    HTOpenOpts0 =
+        case EnableStats of
+            true  -> key_value:put(statistics, State#state.hashtree_stats, CommonOpenOpts0);
+            false -> CommonOpenOpts0
+        end,
+
+    HTOpenOpts =
+        lists:foldl(
+            fun({K, V}, Acc) -> key_value:put(K, V, Acc) end,
+            HTOpenOpts0,
+            [
+                {write_buffer_manager, HTWriteBuff}
+            ]
+        ),
+
+    ServerOpts = [{open, ServerOpenOpts}],
+    HashtreeOpts = [{open, HTOpenOpts}],
 
     plum_db_config:set(hashtree_rocksdb, HashtreeOpts),
     {noreply, State, {continue, {start_partitions, ServerOpts, HashtreeOpts}}};
