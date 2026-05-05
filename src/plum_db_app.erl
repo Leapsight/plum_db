@@ -67,6 +67,8 @@
 -module(plum_db_app).
 -behaviour(application).
 
+-include_lib("kernel/include/logger.hrl").
+
 -export([start/2]).
 -export([prep_stop/1]).
 -export([stop/1]).
